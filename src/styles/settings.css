@@ -1,0 +1,127 @@
+.reasoning {
+	background-color: var(--background-secondary-alt);
+	padding: 10px;
+	border-radius: var(--radius-m);
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	margin-top: 10px;
+}
+
+/* Existing styles */
+.augmented-canvas-settings .setting-item {
+	padding: 18px 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.augmented-canvas-settings .setting-item:last-child {
+	border-bottom: none;
+}
+
+.augmented-canvas-settings .setting-item .setting-item-control {
+	min-width: 200px;
+}
+
+.augmented-canvas-settings .setting-item .setting-item-control button {
+	margin-right: 8px;
+	margin-bottom: 4px;
+}
+
+.augmented-canvas-settings .setting-item .setting-item-control .dropdown {
+	width: 100%;
+}
+
+/* New styles for model selection modal */
+.modal-button-container {
+	display: flex;
+	gap: 10px;
+	justify-content: flex-end;
+	margin-top: 20px;
+	padding-top: 20px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.modal-button-container button {
+	padding: 8px 16px;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	cursor: pointer;
+	transition: all 0.2s;
+}
+
+.modal-button-container button:hover {
+	background: var(--background-modifier-hover);
+}
+
+.modal-button-container button.mod-cta {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+
+.modal-button-container button.mod-cta:hover {
+	background: var(--interactive-accent-hover);
+}
+
+.mod-warning {
+	color: var(--text-warning);
+	font-style: italic;
+	margin: 10px 0;
+}
+
+/* Canvas menu improvements */
+.ai-menu-item {
+	margin-right: 4px;
+}
+
+.ai-menu-item[data-tooltip*="Select Model"] {
+	border: 1px solid var(--interactive-accent);
+	background: var(--background-primary-alt);
+}
+
+.ai-menu-item[data-tooltip*="Select Model"]:hover {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+/* AI Model Indicator */
+.ai-model-indicator {
+	position: absolute !important;
+	bottom: 4px !important;
+	right: 8px !important;
+	font-size: 24px !important;
+	color: var(--text-faint) !important;
+	opacity: 0.6 !important;
+	pointer-events: none !important;
+	background: var(--background-primary) !important;
+	padding: 2px 6px !important;
+	border-radius: 4px !important;
+	font-family: var(--font-monospace) !important;
+	z-index: 1 !important;
+	backdrop-filter: blur(2px) !important;
+	transition: opacity 0.2s ease !important;
+}
+
+/* Show indicator more clearly on hover */
+.canvas-node:hover .ai-model-indicator {
+	opacity: 0.8 !important;
+}
+
+/* Smooth transitions for note resizing */
+.canvas-node[data-node-type="text"] .canvas-node-content {
+	transition: width 0.1s ease-out, height 0.1s ease-out !important;
+}
+
+/* Ensure notes maintain proper 3:5 aspect ratio during resize */
+.canvas-node[data-node-type="text"] {
+	min-width: 300px !important;
+	min-height: 500px !important;
+}
+
+/* Better text wrapping for AI generated content */
+.canvas-node[data-node-type="text"] .canvas-node-content {
+	overflow-wrap: break-word !important;
+	word-break: break-word !important;
+	hyphens: auto !important;
+}

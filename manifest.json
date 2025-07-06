@@ -1,0 +1,10 @@
+{
+	"id": "obsidian-ai-canvas",
+	"name": "Obsidian AI Canvas",
+	"version": "0.1.16",
+	"minAppVersion": "1.1.0",
+	"description": "AI-powered Canvas for Obsidian with intelligent note interactions and content generation.",
+	"author": "testycool",
+	"authorUrl": "https://github.com/testy-cool/",
+	"isDesktopOnly": false
+}
