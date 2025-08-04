@@ -26,11 +26,9 @@ import {
 import SettingsTab from "./settings/SettingsTab";
 import { CustomQuestionModal } from "./Modals/CustomQuestionModal";
 import { CanvasNode } from "./obsidian/canvas-internal";
-import { handlePatchNoteMenu } from "./actions/menuPatches/noteMenuPatch";
 import { createCanvasGroup, getActiveCanvas, setupCanvasIndicatorPersistence } from "./utils";
 import SystemPromptsModal from "./Modals/SystemPromptsModal";
 
-import { createFlashcards } from "./actions/canvasNodeContextMenuActions/flashcards";
 import { getFilesContent } from "./obsidian/fileUtil";
 import { parseCsv } from "./utils/csvUtils";
 import { handleAddRelevantQuestions } from "./actions/commands/relevantQuestions";
@@ -219,7 +217,6 @@ export default class AugmentedCanvasPlugin extends Plugin {
 							// 	Array.from(this.canvas.selection)?.first()
 							// );
 
-							// if (!node?.unknownData.questions?.length) return;
 
 							// * Handles "Ask Question" button
 							// TODO: refactor (as above)
@@ -263,35 +260,6 @@ export default class AugmentedCanvasPlugin extends Plugin {
 							// * Handles "Ask Question with Model Selection" button
 							addAskQuestionWithModelButton(app, settings, this.menuEl);
 
-							// * Handles "AI Questions" button
-
-							const buttonEl_AIQuestions = createEl(
-								"button",
-								"clickable-icon ai-menu-item"
-							);
-							setTooltip(
-								buttonEl_AIQuestions,
-								"AI generated questions",
-								{
-									placement: "top",
-								}
-							);
-							setIcon(
-								buttonEl_AIQuestions,
-								"lucide-file-question"
-							);
-							this.menuEl.appendChild(buttonEl_AIQuestions);
-							buttonEl_AIQuestions.addEventListener("click", () =>
-								handlePatchNoteMenu(
-									buttonEl_AIQuestions,
-									this.menuEl,
-									{
-										app,
-										settings,
-										canvas: this.canvas,
-									}
-								)
-							);
 						}
 						return result;
 					},
@@ -341,13 +309,6 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on("canvas:node-menu", (menu) => {
 				menu.addSeparator();
-				menu.addItem((item) => {
-					item.setTitle("Create flashcards")
-						.setIcon("lucide-wallet-cards")
-						.onClick(() => {
-							createFlashcards(this.app, settings);
-						});
-				});
 				menu.addItem((item) => {
 					item.setTitle("Generate image")
 						.setIcon("lucide-image")

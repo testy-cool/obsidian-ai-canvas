@@ -2,17 +2,10 @@ import { App, setIcon, setTooltip, Notice } from "obsidian";
 import { getTokenLimit, noteGenerator } from "./noteGenerator";
 import { AugmentedCanvasSettings } from "../../settings/AugmentedCanvasSettings";
 import { CanvasNode } from "../../obsidian/canvas-internal";
-import { getResponse } from "../../utils/llm";
 import { getActiveCanvas, getActiveCanvasNodes } from "src/utils";
 import { ModelSelectionModal, ModelSelection } from "../../Modals/ModelSelectionModal";
 import { CustomQuestionModal } from "../../Modals/CustomQuestionModal";
 
-const SYSTEM_PROMPT_QUESTIONS = `
-You must respond in this JSON format: {
-	"questions": Follow up questions the user could ask based on the chat history, must be an array
-}
-The questions must be asked in the same language the user used, default to English.
-`.trim();
 
 export const addAskAIButton = async (
 	app: App,
@@ -55,40 +48,6 @@ export const handleCallAI_Question = async (
 	await generateNote(question);
 };
 
-export const handleCallAI_Questions = async (
-	app: App,
-	settings: AugmentedCanvasSettings,
-	node: CanvasNode
-) => {
-	// Get the current active provider and model for default behavior
-	const provider = settings.providers.find(p => p.id === settings.activeProvider);
-	const model = settings.models.find(m => m.id === settings.apiModel && m.providerId === provider?.id && m.enabled) || settings.models.find(m => m.providerId === provider?.id && m.enabled);
-
-	const { buildMessages } = noteGenerator(app, settings, undefined, undefined, provider, model);
-	const { messages, tokenCount } = await buildMessages(node, {
-		systemPrompt: SYSTEM_PROMPT_QUESTIONS,
-	});
-	if (messages.length <= 1) return;
-	if (!provider) {
-		new Notice("No active provider found. Please check your settings.");
-		return;
-	}
-
-	const aiResponse = await getResponse(
-		provider,
-		// settings.apiModel,
-		messages,
-		{
-			model: settings.apiModel,
-			max_tokens: settings.maxResponseTokens || undefined,
-			// max_tokens: getTokenLimit(settings) - tokenCount - 1,
-			temperature: settings.temperature,
-			isJSON: true,
-		}
-	);
-
-	return aiResponse.questions;
-};
 
 const handleRegenerateResponse = async (
 	app: App,

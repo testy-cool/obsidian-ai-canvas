@@ -18,9 +18,6 @@ This plugin adds three actions to the Menu of a note in the Canvas View.
 
 ![Augmented-Canvas-AskquestionswithAI](./assets/AugmentedCanvas-AskquestionwithAI.gif)
 
-3. Generate questions on a specific note using the AI. The generated questions help you easily dig further into the subject of the note.
-
-![Augmented-Canvas-AIgeneratedquestions](./assets/AugmentedCanvas-AIgeneratedquestions.gif)
 
 The links between notes are used to create the chat history sent to the AI.
 
@@ -38,7 +35,7 @@ The links between notes are used to create the chat history sent to the AI.
 
 ![Augmented-Canvas-Createflashcards](./assets/AugmentedCanvas-Createflashcards.gif)
 
-- The plugin adds a command named "Insert relevant questions". This command insert AI generated questions to the current canvas. The plugin reads and then sends your historical activity to the AI, reading the last X files modified (configurable in the settings).
+- The plugin adds a command named "Insert relevant questions". This command inserts AI generated questions to the current canvas. The plugin reads and then sends your historical activity to the AI, reading the last X files modified (configurable in the settings).
 
 - The plugin adds an action to the edge context menu to regenerate an AI response.
 
