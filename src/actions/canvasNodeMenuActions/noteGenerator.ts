@@ -10,6 +10,8 @@ import {
 	CanvasView,
 	calcHeight,
 	createNode,
+	DirectionBias,
+	getIncomingEdgeDirection,
 } from "../../obsidian/canvas-patches";
 import {
 	AugmentedCanvasSettings,
@@ -328,6 +330,9 @@ export function noteGenerator(
 				const initialText = `Calling AI (${model.model})...`;
 				const initialDimensions = calculateNoteDimensions(initialText, 300, 500);
 				
+				// Determine directional bias from the source node's incoming edges
+				const directionBias = getIncomingEdgeDirection(node);
+				
 				created = createNode(
 					canvas,
 					{
@@ -345,7 +350,8 @@ export function noteGenerator(
 						ai_model: model.model,
 						ai_provider: provider.type,
 					},
-					question
+					question,
+					directionBias
 				);
 			} else {
 				created = toNode;

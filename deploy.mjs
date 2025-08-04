@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 
-const pluginDir = "D:\\Workspaces\\Obsidian\\Dump\\.obsidian\\plugins\\augmented-canvs";
+const pluginDir = "/mnt/d/Workspaces/Obsidian/Dump/.obsidian/plugins/augmented-canvs";
 
 if (!fs.existsSync(pluginDir)) {
 	fs.mkdirSync(pluginDir, { recursive: true });

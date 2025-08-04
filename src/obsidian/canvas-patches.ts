@@ -49,6 +49,71 @@ const newNoteMarginWithLabel = 110;
 const minHeight = 60;
 
 /**
+ * Direction preference for new node placement
+ */
+export type DirectionBias = "up" | "down" | "left" | "right" | "none";
+
+/**
+ * Analyzes incoming edges to determine the directional bias for new node placement
+ * Based on which side arrows are coming FROM (opposite to where new nodes should be placed)
+ */
+export const getIncomingEdgeDirection = (node: CanvasNode): DirectionBias => {
+	const canvas = node.canvas;
+	if (!canvas) return "none";
+	
+	// Get all edges pointing TO this node
+	const incomingEdges = canvas.getEdgesForNode(node).filter(edge => edge.to.node.id === node.id);
+	
+	if (incomingEdges.length === 0) return "none";
+	
+	// Get the canvas data to access edge properties including toSide
+	const canvasData = canvas.getData();
+	if (!canvasData) return "none";
+	
+	// Count directions based on where arrows are coming FROM
+	const directionCounts = {
+		up: 0,    // arrows coming from above (toSide: "top") -> generate downward
+		down: 0,  // arrows coming from below (toSide: "bottom") -> generate upward
+		left: 0,  // arrows coming from left (toSide: "left") -> generate rightward
+		right: 0  // arrows coming from right (toSide: "right") -> generate leftward
+	};
+	
+	// Check each incoming edge's toSide property from canvas data
+	for (const edge of incomingEdges) {
+		const edgeData = canvasData.edges.find((e: any) => 
+			e.fromNode === edge.from.node.id && e.toNode === edge.to.node.id
+		);
+		
+		if (edgeData) {
+			const toSide = edgeData.toSide;
+			// toSide indicates where the arrow connects TO this node
+			// We want to place new nodes in the OPPOSITE direction of where arrows come from
+			if (toSide === "top") {
+				directionCounts.down++; // Arrow from above -> generate downward
+			} else if (toSide === "bottom") {
+				directionCounts.up++;   // Arrow from below -> generate upward
+			} else if (toSide === "left") {
+				directionCounts.right++; // Arrow from left -> generate rightward
+			} else if (toSide === "right") {
+				directionCounts.left++;  // Arrow from right -> generate leftward
+			}
+		}
+	}
+	
+	// Return the direction with the highest count
+	const maxCount = Math.max(...Object.values(directionCounts));
+	if (maxCount === 0) return "none";
+	
+	// Find the direction with the highest count (prefer up/down over left/right for ties)
+	if (directionCounts.up === maxCount) return "up";
+	if (directionCounts.down === maxCount) return "down";
+	if (directionCounts.left === maxCount) return "left";
+	if (directionCounts.right === maxCount) return "right";
+	
+	return "none";
+};
+
+/**
  * Choose height for generated note based on text length and parent height.
  * For notes beyond a few lines, the note will have scroll bar.
  * Not a precise science, just something that is not surprising.
@@ -75,7 +140,8 @@ export const createNode = (
 	nodeOptions: CreateNodeOptions,
 	parentNode?: CanvasNode,
 	nodeData?: Partial<AllCanvasNodeData>,
-	edgeLabel?: string
+	edgeLabel?: string,
+	directionBias?: DirectionBias
 ) => {
 	if (!canvas) {
 		throw new Error("Invalid arguments");
@@ -114,31 +180,88 @@ export const createNode = (
 				.filter((n) => n.from.node.id == parentNode.id)
 				.map((e) => e.to.node);
 
-		// Failsafe leftmost value.
-		const farLeft = parentNode.y - parentNode.width * 5;
-		const siblingsRight = siblings?.length
-			? siblings.reduce(
-					(right, sib) => Math.max(right, sib.x + sib.width),
-					farLeft
-			  )
-			: undefined;
-		const priorSibling = siblings[siblings.length - 1];
+		// Determine actual direction bias - if not provided, detect from parent's incoming edges
+		const actualDirectionBias = directionBias || getIncomingEdgeDirection(parentNode);
 
-		// Position left at right of prior sibling, otherwise aligned with parent
-		x =
-			siblingsRight != null
-				? siblingsRight + newNoteMargin
+		if (actualDirectionBias === "right") {
+			// Place nodes to the right of the parent or rightmost sibling
+			const siblingsRight = siblings?.length
+				? siblings.reduce(
+						(right, sib) => Math.max(right, sib.x + sib.width),
+						parentNode.x + parentNode.width
+				  )
+				: parentNode.x + parentNode.width;
+			
+			x = siblingsRight + newNoteMargin;
+			// Align vertically with parent center
+			y = parentNode.y + parentNode.height / 2 - height! / 2;
+			
+		} else if (actualDirectionBias === "left") {
+			// Place nodes to the left of the parent or leftmost sibling
+			const siblingsLeft = siblings?.length
+				? siblings.reduce(
+						(left, sib) => Math.min(left, sib.x),
+						parentNode.x
+				  )
 				: parentNode.x;
+			
+			x = siblingsLeft - width - newNoteMargin;
+			// Align vertically with parent center
+			y = parentNode.y + parentNode.height / 2 - height! / 2;
+			
+		} else if (actualDirectionBias === "down") {
+			// Place nodes below the parent or bottommost sibling
+			const siblingsBottom = siblings?.length
+				? siblings.reduce(
+						(bottom, sib) => Math.max(bottom, sib.y + sib.height),
+						parentNode.y + parentNode.height
+				  )
+				: parentNode.y + parentNode.height;
+			
+			y = siblingsBottom + (edgeLabel ? newNoteMarginWithLabel : newNoteMargin);
+			// Align horizontally with parent center
+			x = parentNode.x + parentNode.width / 2 - width / 2;
+			
+		} else if (actualDirectionBias === "up") {
+			// Place nodes above the parent or topmost sibling
+			const siblingsTop = siblings?.length
+				? siblings.reduce(
+						(top, sib) => Math.min(top, sib.y),
+						parentNode.y
+				  )
+				: parentNode.y;
+			
+			y = siblingsTop - height! - (edgeLabel ? newNoteMarginWithLabel : newNoteMargin);
+			// Align horizontally with parent center
+			x = parentNode.x + parentNode.width / 2 - width / 2;
+			
+		} else {
+			// Default behavior (original logic)
+			const farLeft = parentNode.y - parentNode.width * 5;
+			const siblingsRight = siblings?.length
+				? siblings.reduce(
+						(right, sib) => Math.max(right, sib.x + sib.width),
+						farLeft
+				  )
+				: undefined;
+			const priorSibling = siblings[siblings.length - 1];
 
-		// Position top at prior sibling top, otherwise offset below parent
-		y =
-			(priorSibling
-				? priorSibling.y
-				: parentNode.y +
-				  parentNode.height +
-				  (edgeLabel ? newNoteMarginWithLabel : newNoteMargin)) +
-			// Using position=left, y value is treated as vertical center
-			height! * 0.5;
+			// Position left at right of prior sibling, otherwise aligned with parent
+			x =
+				siblingsRight != null
+					? siblingsRight + newNoteMargin
+					: parentNode.x;
+
+			// Position top at prior sibling top, otherwise offset below parent
+			y =
+				(priorSibling
+					? priorSibling.y
+					: parentNode.y +
+					  parentNode.height +
+					  (edgeLabel ? newNoteMarginWithLabel : newNoteMargin)) +
+				// Using position=left, y value is treated as vertical center
+				height! * 0.5;
+		}
 	}
 
 	const newNode =
@@ -167,17 +290,43 @@ export const createNode = (
 	canvas.addNode(newNode);
 
 	if (parentNode) {
+		// Determine edge sides based on direction bias for straight arrows
+		const actualDirectionBias = directionBias || getIncomingEdgeDirection(parentNode);
+		let fromSide: string, toSide: string;
+		
+		if (actualDirectionBias === "right") {
+			// Rightward generation: parent right → new node left
+			fromSide = "right";
+			toSide = "left";
+		} else if (actualDirectionBias === "left") {
+			// Leftward generation: parent left → new node right
+			fromSide = "left";
+			toSide = "right";
+		} else if (actualDirectionBias === "down") {
+			// Downward generation: parent bottom → new node top
+			fromSide = "bottom";
+			toSide = "top";
+		} else if (actualDirectionBias === "up") {
+			// Upward generation: parent top → new node bottom
+			fromSide = "top";
+			toSide = "bottom";
+		} else {
+			// Default behavior: downward generation
+			fromSide = "bottom";
+			toSide = "top";
+		}
+		
 		addEdge(
 			canvas,
 			randomHexString(16),
 			{
 				fromOrTo: "from",
-				side: "bottom",
+				side: fromSide,
 				node: parentNode,
 			},
 			{
 				fromOrTo: "to",
-				side: "top",
+				side: toSide,
 				node: newNode,
 			},
 			edgeLabel,
