@@ -31,6 +31,9 @@ export class EditModelModal extends Modal {
             this.providerIdInput = model.providerId;
             this.modelInput = model.model;
             this.enabledInput = model.enabled;
+        } else {
+            // For new models, default to first available provider
+            this.providerIdInput = providers[0]?.id || "";
         }
     }
 
@@ -65,7 +68,7 @@ export class EditModelModal extends Modal {
                     dropdown.addOption(provider.id, provider.type);
                 });
                 
-                dropdown.setValue(this.providerIdInput || this.providers[0]?.id || "")
+                dropdown.setValue(this.providerIdInput)
                     .onChange((value) => {
                         this.providerIdInput = value;
                     });
@@ -115,6 +118,11 @@ export class EditModelModal extends Modal {
             
             if (!this.modelInput.trim()) {
                 // Show error if model name is empty
+                return;
+            }
+            
+            if (!this.providerIdInput) {
+                // Show error if no provider is selected
                 return;
             }
             
