@@ -1,6 +1,21 @@
-import { App, Modal, Notice, Setting } from "obsidian";
+import { App, Modal, Notice, Setting, TextComponent } from "obsidian";
 import AugmentedCanvasPlugin from "../AugmentedCanvasPlugin";
-import { LLMProvider } from "../settings/AugmentedCanvasSettings";
+import { GEMINI_BASE_URL, LLMProvider } from "../settings/AugmentedCanvasSettings";
+
+const PROVIDER_PRESETS = [
+    { id: "openai", type: "OpenAI", baseUrl: "https://api.openai.com/v1" },
+    { id: "anthropic", type: "Anthropic", baseUrl: "https://api.anthropic.com/v1" },
+    { id: "groq", type: "Groq", baseUrl: "https://api.groq.com/v1" },
+    { id: "openrouter", type: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
+    { id: "gemini", type: "Gemini", baseUrl: GEMINI_BASE_URL },
+    { id: "ollama", type: "Ollama", baseUrl: "http://localhost:11434/v1" }
+];
+
+const isGeminiProvider = (id: string, type: string) => {
+    const normalizedId = id.trim().toLowerCase();
+    const normalizedType = type.trim().toLowerCase();
+    return normalizedId === "gemini" || normalizedType === "gemini" || normalizedType === "google";
+};
 
 export class EditProviderModal extends Modal {
     plugin: AugmentedCanvasPlugin;
@@ -12,6 +27,9 @@ export class EditProviderModal extends Modal {
     apiKeyInput: string = "";
     enabledInput: boolean = true;
     contentEl: HTMLElement;
+    idInputEl?: TextComponent;
+    typeInputEl?: TextComponent;
+    baseUrlInputEl?: TextComponent;
 
     constructor(
         app: App, 
@@ -43,15 +61,60 @@ export class EditProviderModal extends Modal {
             text: this.provider ? "Edit Provider" : "Add New Provider" 
         });
 
+        let baseUrlSetting: Setting | null = null;
+        const updateBaseUrlState = () => {
+            const isGemini = isGeminiProvider(this.idInput, this.typeInput);
+            if (isGemini) {
+                this.baseUrlInput = GEMINI_BASE_URL;
+                this.baseUrlInputEl?.setValue(this.baseUrlInput);
+                this.baseUrlInputEl?.setDisabled(true);
+                baseUrlSetting?.setDesc("Gemini uses the Google SDK (endpoint is fixed).");
+            } else {
+                this.baseUrlInputEl?.setDisabled(false);
+                baseUrlSetting?.setDesc("OpenAI compatible API endpoint");
+            }
+        };
+
+        const applyPreset = (preset: { id: string; type: string; baseUrl: string }) => {
+            this.idInput = preset.id;
+            this.typeInput = preset.type;
+            this.baseUrlInput = preset.baseUrl;
+
+            this.idInputEl?.setValue(this.idInput);
+            this.typeInputEl?.setValue(this.typeInput);
+            this.baseUrlInputEl?.setValue(this.baseUrlInput);
+            updateBaseUrlState();
+        };
+
+        if (!this.provider) {
+            new Setting(this.contentEl)
+                .setName("Provider Preset")
+                .setDesc("Auto-fill ID, name, and base URL from a common provider.")
+                .addDropdown((dropdown) => {
+                    dropdown.addOption("", "Custom");
+                    PROVIDER_PRESETS.forEach((preset) => {
+                        dropdown.addOption(preset.id, preset.type);
+                    });
+                    dropdown.onChange((value) => {
+                        const preset = PROVIDER_PRESETS.find(p => p.id === value);
+                        if (preset) {
+                            applyPreset(preset);
+                        }
+                    });
+                });
+        }
+
         // Provider ID
         new Setting(this.contentEl)
             .setName("Provider ID")
             .setDesc("A unique identifier for this provider")
             .addText((text) => {
+                this.idInputEl = text;
                 text.setValue(this.idInput)
                     .setPlaceholder("e.g., anthropic, ollama")
                     .onChange((value) => {
                         this.idInput = value;
+                        updateBaseUrlState();
                     });
             });
 
@@ -60,24 +123,28 @@ export class EditProviderModal extends Modal {
             .setName("Provider Name")
             .setDesc("Display name for this provider")
             .addText((text) => {
+                this.typeInputEl = text;
                 text.setValue(this.typeInput)
                     .setPlaceholder("e.g., Anthropic, Ollama")
                     .onChange((value) => {
                         this.typeInput = value;
+                        updateBaseUrlState();
                     });
             });
 
         // Base URL
-        new Setting(this.contentEl)
+        baseUrlSetting = new Setting(this.contentEl)
             .setName("Base URL")
             .setDesc("OpenAI compatible API endpoint")
             .addText((text) => {
+                this.baseUrlInputEl = text;
                 text.setValue(this.baseUrlInput)
                     .setPlaceholder("https://api.example.com/v1")
                     .onChange((value) => {
                         this.baseUrlInput = value;
                     });
             });
+        updateBaseUrlState();
 
         // API Key
         new Setting(this.contentEl)
@@ -127,7 +194,8 @@ export class EditProviderModal extends Modal {
                 return;
             }
             
-            if (!this.baseUrlInput.trim()) {
+            const geminiProvider = isGeminiProvider(this.idInput, this.typeInput);
+            if (!geminiProvider && !this.baseUrlInput.trim()) {
                 new Notice("Base URL is required");
                 return;
             }
@@ -135,7 +203,7 @@ export class EditProviderModal extends Modal {
             const updatedProvider: LLMProvider = {
                 id: this.idInput,
                 type: this.typeInput,
-                baseUrl: this.baseUrlInput,
+                baseUrl: geminiProvider ? GEMINI_BASE_URL : this.baseUrlInput,
                 apiKey: this.apiKeyInput,
                 enabled: this.enabledInput
             };

@@ -30,6 +30,77 @@
 	width: 100%;
 }
 
+.provider-list {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	margin-top: 12px;
+}
+
+.provider-block {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 18px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	background: var(--background-secondary-alt);
+}
+
+.provider-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px 20px;
+	flex-wrap: wrap;
+	padding-bottom: 6px;
+}
+
+.provider-title {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1 1 220px;
+	min-width: 180px;
+}
+
+.provider-name {
+	font-size: var(--font-ui-medium);
+	font-weight: 600;
+}
+
+.provider-controls {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-left: auto;
+}
+
+.provider-toggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--font-ui-small);
+}
+
+.provider-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 20px;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	padding-bottom: 2px;
+}
+
+.provider-meta span {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	word-break: break-word;
+}
+
 /* New styles for model selection modal */
 .modal-button-container {
 	display: flex;
@@ -68,6 +139,182 @@
 	color: var(--text-warning);
 	font-style: italic;
 	margin: 10px 0;
+}
+
+.model-provider-section {
+	padding: 12px 0 4px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.model-provider-section:last-child {
+	border-bottom: none;
+}
+
+.provider-models {
+	margin-top: 4px;
+	padding-top: 14px;
+	border-top: 1px solid var(--background-modifier-border);
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.provider-models-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.provider-models-title {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.provider-models-desc {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.provider-models-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.provider-models-filter {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+}
+
+.provider-models-filter input {
+	min-width: 220px;
+	flex: 1 1 220px;
+}
+
+.provider-models-toggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--font-ui-small);
+}
+
+.provider-models-custom {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+
+.provider-models-custom input {
+	min-width: 220px;
+	flex: 1 1 220px;
+}
+
+.provider-model-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin: 0;
+	max-height: 220px;
+	overflow: auto;
+	padding: 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-secondary);
+}
+
+.provider-model-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 2px 0;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+}
+
+.model-fetch-actions {
+	display: flex;
+	gap: 8px;
+	margin: 8px 0;
+}
+
+.model-fetch-filter {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 8px;
+}
+
+.model-fetch-filter input {
+	min-width: 220px;
+	flex: 1 1 220px;
+}
+
+.model-fetch-status {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	margin-bottom: 8px;
+}
+
+.model-fetch-custom {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin-top: 10px;
+}
+
+.model-fetch-custom input {
+	min-width: 220px;
+	flex: 1 1 220px;
+}
+
+.model-fetch-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 8px 0 12px;
+	max-height: 260px;
+	overflow: auto;
+	padding: 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-secondary);
+}
+
+.model-fetch-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+}
+
+.model-selection-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 12px 0;
+	max-height: 220px;
+	overflow: auto;
+	padding: 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-secondary);
+}
+
+.model-selection-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
 }
 
 /* Canvas menu improvements */

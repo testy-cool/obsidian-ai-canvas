@@ -124,11 +124,46 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	
 		// Merge settings with defaults
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
+
+		const legacyDefaultIds = new Set([
+			"openai",
+			"anthropic",
+			"groq",
+			"openrouter",
+			"gemini",
+			"ollama",
+		]);
+		const hasCustomProviders = this.settings.providers.some(
+			provider => !legacyDefaultIds.has(provider.id)
+		);
+		const hasAnyProviderKey = this.settings.providers.some(
+			provider => provider.apiKey && provider.apiKey.trim().length > 0
+		);
+
+		if (
+			this.settings.providers.length > 1 &&
+			!hasCustomProviders &&
+			!hasAnyProviderKey
+		) {
+			this.settings.providers = DEFAULT_SETTINGS.providers.map(provider => ({ ...provider }));
+			this.settings.models = this.settings.models.filter(model => model.providerId === "gemini");
+			if (!this.settings.models.length) {
+				this.settings.models = DEFAULT_SETTINGS.models.map(model => ({ ...model }));
+			}
+			this.settings.activeProvider = DEFAULT_SETTINGS.activeProvider;
+			this.settings.apiModel = DEFAULT_SETTINGS.apiModel;
+		}
 	
-		// Ensure default providers are present
+		// Ensure default providers are present and have default base URLs
 		DEFAULT_SETTINGS.providers.forEach(defaultProvider => {
-			if (!this.settings.providers.find(p => p.id === defaultProvider.id)) {
-				this.settings.providers.push(defaultProvider);
+			const existing = this.settings.providers.find(p => p.id === defaultProvider.id);
+			if (!existing) {
+				this.settings.providers.push({ ...defaultProvider });
+				return;
+			}
+
+			if (!existing.baseUrl || existing.baseUrl.trim().length === 0) {
+				existing.baseUrl = defaultProvider.baseUrl;
 			}
 		});
 	

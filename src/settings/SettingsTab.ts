@@ -1,12 +1,13 @@
-import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent } from "obsidian";
+import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent, TextComponent, ToggleComponent } from "obsidian";
 import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
-import { DEFAULT_SETTINGS } from "./AugmentedCanvasSettings";
 import { EditProviderModal } from "src/Modals/EditProviderModal";
-import { EditModelModal } from "src/Modals/EditModelModal";
-import "../styles/settings.css";
+import { ModelFetchModal } from "src/Modals/ModelFetchModal";
+import { LLMModel, LLMProvider } from "./AugmentedCanvasSettings";
 
 export default class SettingsTab extends PluginSettingTab {
     plugin: AugmentedCanvasPlugin;
+    private modelFilters: Record<string, string> = {};
+    private modelEnabledOnly: Record<string, boolean> = {};
 
     constructor(app: App, plugin: AugmentedCanvasPlugin) {
         super(app, plugin);
@@ -20,7 +21,6 @@ export default class SettingsTab extends PluginSettingTab {
 
         this.renderGeneralSettings(containerEl);
         this.renderProviders(containerEl);
-        this.renderModels(containerEl);
         this.renderGenerationSettings(containerEl);
         this.renderPromptManagement(containerEl);
     }
@@ -55,7 +55,7 @@ export default class SettingsTab extends PluginSettingTab {
             .addDropdown((dropdown) => {
                 availableModels
                     .forEach((model) => {
-                        dropdown.addOption(model.id, model.id);
+                        dropdown.addOption(model.id, model.model);
                     });
                 dropdown
                     .setValue(this.plugin.settings.apiModel)
@@ -83,153 +83,243 @@ export default class SettingsTab extends PluginSettingTab {
                 }).open();
             }));
 
-        const cardsContainer = containerEl.createDiv("cards-container");
+        const cardsContainer = containerEl.createDiv("provider-list");
         this.plugin.settings.providers.forEach(provider => {
-            const card = new Setting(cardsContainer).setClass("setting-card");
-            card.setName(provider.type);
-            card.setDesc(`ID: ${provider.id} | URL: ${provider.baseUrl}`);
-            
-            card.addToggle(toggle => toggle
-                .setValue(provider.enabled)
-                .onChange(async value => {
-                    provider.enabled = value;
-                    await this.plugin.saveSettings();
-                })
-            );
+            const providerBlock = cardsContainer.createDiv("provider-block");
 
-            card.addButton(button => button
-                .setIcon("pencil")
-                .setTooltip("Edit")
-                .onClick(() => {
-                    new EditProviderModal(this.app, this.plugin, provider, async (updated) => {
-                        const index = this.plugin.settings.providers.findIndex(p => p.id === provider.id);
-                        if (index > -1) {
-                            this.plugin.settings.providers[index] = updated;
-                            await this.plugin.saveSettings();
-                            this.display();
-                        }
-                    }).open();
-                })
-            );
+            const headerRow = providerBlock.createDiv("provider-header");
+            const titleCol = headerRow.createDiv("provider-title");
+            titleCol.createEl("div", { text: provider.type, cls: "provider-name" });
 
-            // Allow deletion of all providers, but prevent deletion of the last provider
+            const controls = headerRow.createDiv("provider-controls");
+            const toggleWrap = controls.createDiv("provider-toggle");
+            toggleWrap.createEl("span", { text: "Enabled" });
+            const toggle = new ToggleComponent(toggleWrap);
+            toggle.setValue(provider.enabled);
+            toggle.onChange(async value => {
+                provider.enabled = value;
+                await this.plugin.saveSettings();
+            });
+
+            const editBtn = new ButtonComponent(controls);
+            editBtn.setButtonText("Edit");
+            editBtn.onClick(() => {
+                new EditProviderModal(this.app, this.plugin, provider, async (updated) => {
+                    const index = this.plugin.settings.providers.findIndex(p => p.id === provider.id);
+                    if (index > -1) {
+                        this.plugin.settings.providers[index] = updated;
+                        await this.plugin.saveSettings();
+                        this.display();
+                    }
+                }).open();
+            });
+
             const isLastProvider = this.plugin.settings.providers.length === 1;
-            card.addButton(button => button
-                .setIcon("trash")
-                .setTooltip(isLastProvider ? "Cannot delete the last provider" : "Delete")
-                .setDisabled(isLastProvider)
-                .onClick(async () => {
-                    if (isLastProvider) {
-                        new Notice("Cannot delete the last provider. Add another provider first.");
-                        return;
-                    }
-                    
-                    // If we're deleting the active provider, switch to another one
-                    if (this.plugin.settings.activeProvider === provider.id) {
-                        const remainingProviders = this.plugin.settings.providers.filter(p => p.id !== provider.id);
-                        if (remainingProviders.length > 0) {
-                            this.plugin.settings.activeProvider = remainingProviders[0].id;
-                            // Also update the default model to one from the new provider
-                            const modelsForNewProvider = this.plugin.settings.models.filter(m => m.providerId === remainingProviders[0].id && m.enabled);
-                            if (modelsForNewProvider.length > 0) {
-                                this.plugin.settings.apiModel = modelsForNewProvider[0].id;
-                            }
+            const deleteBtn = new ButtonComponent(controls);
+            deleteBtn.setButtonText("Delete");
+            deleteBtn.setDisabled(isLastProvider);
+            if (isLastProvider) {
+                deleteBtn.setTooltip("Cannot delete the last provider");
+            }
+            deleteBtn.onClick(async () => {
+                if (isLastProvider) {
+                    new Notice("Cannot delete the last provider. Add another provider first.");
+                    return;
+                }
+
+                if (this.plugin.settings.activeProvider === provider.id) {
+                    const remainingProviders = this.plugin.settings.providers.filter(p => p.id !== provider.id);
+                    if (remainingProviders.length > 0) {
+                        this.plugin.settings.activeProvider = remainingProviders[0].id;
+                        const modelsForNewProvider = this.plugin.settings.models.filter(
+                            m => m.providerId === remainingProviders[0].id && m.enabled
+                        );
+                        if (modelsForNewProvider.length > 0) {
+                            this.plugin.settings.apiModel = modelsForNewProvider[0].id;
                         }
                     }
-                    
-                    // Remove the provider
-                    this.plugin.settings.providers = this.plugin.settings.providers.filter(p => p.id !== provider.id);
-                    
-                    // Remove associated models
-                    this.plugin.settings.models = this.plugin.settings.models.filter(m => m.providerId !== provider.id);
-                    
-                    await this.plugin.saveSettings();
-                    this.display();
-                })
-            );
+                }
+
+                this.plugin.settings.providers = this.plugin.settings.providers.filter(p => p.id !== provider.id);
+                this.plugin.settings.models = this.plugin.settings.models.filter(m => m.providerId !== provider.id);
+
+                await this.plugin.saveSettings();
+                this.display();
+            });
+
+            const metaRow = providerBlock.createDiv("provider-meta");
+            metaRow.createEl("span", { text: `ID: ${provider.id}` });
+            if (this.isGeminiProvider(provider)) {
+                metaRow.createEl("span", { text: "Endpoint: Google SDK (fixed)" });
+            } else {
+                metaRow.createEl("span", { text: `URL: ${provider.baseUrl}` });
+            }
+            const hasKey = provider.apiKey && provider.apiKey.trim().length > 0;
+            metaRow.createEl("span", {
+                text: hasKey ? "API key: set" : "API key: missing",
+                cls: hasKey ? "" : "mod-warning",
+            });
+
+            this.renderProviderModels(provider, providerBlock);
         });
     }
 
-    private renderModels(containerEl: HTMLElement) {
-        const header = new Setting(containerEl).setHeading().setName("Models");
-        header.addButton(button => button
-            .setButtonText("Add New Model")
-            .setCta()
-            .onClick(() => {
-                new EditModelModal(this.app, this.plugin, null, this.plugin.settings.providers, async (newModel) => {
-                    if (this.plugin.settings.models.some(m => m.id === newModel.id)) {
-                        new Notice("A model with this ID already exists");
-                        return;
-                    }
-                    this.plugin.settings.models.push(newModel);
-                    await this.plugin.saveSettings();
-                    this.display();
-                }).open();
-            }));
+    private renderProviderModels(provider: LLMProvider, container: HTMLElement) {
+        const modelsWrapper = container.createDiv("provider-models");
+        const getProviderModels = () =>
+            this.plugin.settings.models.filter(m => m.providerId === provider.id);
 
-        const cardsContainer = containerEl.createDiv("cards-container");
-        this.plugin.settings.models.forEach(model => {
-            const card = new Setting(cardsContainer).setClass("setting-card");
-            card.setName(model.id);
-            card.setDesc(`Provider: ${model.providerId}`);
+        const header = modelsWrapper.createDiv("provider-models-header");
+        const title = header.createDiv("provider-models-title");
+        const titleText = title.createEl("span");
+        title.createEl("span", { text: "Use Add Model to fetch and enable models.", cls: "provider-models-desc" });
+        const actions = header.createDiv("provider-models-actions");
 
-            card.addToggle(toggle => toggle
-                .setValue(model.enabled)
-                .onChange(async value => {
-                    model.enabled = value;
-                    await this.plugin.saveSettings();
-                })
-            );
+        const updateHeader = () => {
+            const providerModels = getProviderModels();
+            const enabledCount = providerModels.filter(m => m.enabled).length;
+            titleText.setText(`Models (${enabledCount}/${providerModels.length})`);
+        };
 
-            card.addButton(button => button
-                .setIcon("pencil")
-                .setTooltip("Edit")
-                .onClick(() => {
-                    new EditModelModal(this.app, this.plugin, model, this.plugin.settings.providers, async (updated) => {
-                        const index = this.plugin.settings.models.findIndex(m => m.id === model.id);
-                        if (index > -1) {
-                            this.plugin.settings.models[index] = updated;
-                            await this.plugin.saveSettings();
-                            this.display();
-                        }
-                    }).open();
-                })
-            );
+        const addBtn = new ButtonComponent(actions);
+        addBtn.setButtonText("Add Model");
+        addBtn.setCta();
+        addBtn.onClick(() => {
+            const providerModels = getProviderModels();
+            const enabledIds = providerModels.filter(m => m.enabled).map(m => m.id);
 
-            // Allow deletion of all models, but prevent deletion of the last model
-            const isLastModel = this.plugin.settings.models.length === 1;
-            card.addButton(button => button
-                .setIcon("trash")
-                .setTooltip(isLastModel ? "Cannot delete the last model" : "Delete")
-                .setDisabled(isLastModel)
-                .onClick(async () => {
-                    if (isLastModel) {
-                        new Notice("Cannot delete the last model. Add another model first.");
-                        return;
-                    }
-                    
-                    // If we're deleting the currently selected model, switch to another one
-                    if (this.plugin.settings.apiModel === model.id) {
-                        const remainingModels = this.plugin.settings.models.filter(m => m.id !== model.id && m.enabled);
-                        if (remainingModels.length > 0) {
-                            this.plugin.settings.apiModel = remainingModels[0].id;
+            new ModelFetchModal(
+                this.app,
+                provider,
+                enabledIds,
+                async (selectedIds) => {
+                    const existing = new Map(
+                        getProviderModels().map(m => [m.id, m])
+                    );
+                    const additions: LLMModel[] = [];
+
+                    selectedIds.forEach(modelId => {
+                        const existingModel = existing.get(modelId);
+                        if (existingModel) {
+                            existingModel.enabled = true;
                         } else {
-                            // Fallback to any remaining model (even if disabled)
-                            const anyRemainingModel = this.plugin.settings.models.filter(m => m.id !== model.id)[0];
-                            if (anyRemainingModel) {
-                                this.plugin.settings.apiModel = anyRemainingModel.id;
-                            }
+                            additions.push({
+                                id: modelId,
+                                providerId: provider.id,
+                                model: modelId,
+                                enabled: true,
+                            });
                         }
+                    });
+
+                    if (additions.length) {
+                        this.plugin.settings.models.push(...additions);
                     }
-                    
-                    // Remove the model
-                    this.plugin.settings.models = this.plugin.settings.models.filter(m => m.id !== model.id);
-                    
+
+                    this.ensureActiveModelForProvider(this.plugin.settings.activeProvider);
                     await this.plugin.saveSettings();
-                    this.display();
-                })
-            );
+                    updateHeader();
+                    renderModelList();
+                    new Notice(`Enabled ${selectedIds.length} model(s) for ${provider.type}.`);
+                }
+            ).open();
         });
+
+        updateHeader();
+
+        let filterText = this.modelFilters[provider.id] || "";
+        let enabledOnly = this.modelEnabledOnly[provider.id] || false;
+
+        const filterRow = modelsWrapper.createDiv("provider-models-filter");
+        filterRow.createEl("span", { text: "Filter" });
+        const filterInput = new TextComponent(filterRow);
+        filterInput.setPlaceholder("Type to filter");
+        filterInput.inputEl.type = "search";
+        filterInput.setValue(filterText);
+        filterInput.onChange(value => {
+            filterText = value;
+            this.modelFilters[provider.id] = value;
+            renderModelList();
+        });
+
+        const enabledWrap = filterRow.createDiv("provider-models-toggle");
+        const enabledToggle = new ToggleComponent(enabledWrap);
+        enabledToggle.setValue(enabledOnly);
+        enabledToggle.onChange(value => {
+            enabledOnly = value;
+            this.modelEnabledOnly[provider.id] = value;
+            renderModelList();
+        });
+        enabledWrap.createEl("span", { text: "Enabled only" });
+
+        const listContainer = modelsWrapper.createDiv("provider-model-list");
+        const renderModelList = () => {
+            listContainer.empty();
+            const providerModels = getProviderModels();
+            const normalizedFilter = filterText.toLowerCase();
+
+            const filteredModels = providerModels
+                .filter(model => !enabledOnly || model.enabled)
+                .filter(model => {
+                    if (!normalizedFilter) return true;
+                    const label = `${model.model} ${model.id}`.toLowerCase();
+                    return label.includes(normalizedFilter);
+                })
+                .sort((a, b) => a.model.localeCompare(b.model));
+
+            if (!providerModels.length) {
+                listContainer.createDiv({ text: "No models yet. Use Add Model to fetch and enable.", cls: "mod-muted" });
+                return;
+            }
+
+            if (!filteredModels.length) {
+                listContainer.createDiv({ text: "No models match the current filter.", cls: "mod-muted" });
+                return;
+            }
+
+            filteredModels.forEach(model => {
+                const row = listContainer.createDiv("provider-model-row");
+                const checkbox = row.createEl("input", { type: "checkbox" });
+                checkbox.checked = model.enabled;
+                checkbox.addEventListener("change", async () => {
+                    model.enabled = checkbox.checked;
+                    this.ensureActiveModelForProvider(this.plugin.settings.activeProvider);
+                    await this.plugin.saveSettings();
+                    updateHeader();
+                    renderModelList();
+                });
+
+                const label = model.model === model.id
+                    ? model.model
+                    : `${model.model} (${model.id})`;
+                row.createEl("span", { text: label });
+            });
+        };
+
+        renderModelList();
+
+    }
+
+    private isGeminiProvider(provider: LLMProvider) {
+        const id = provider.id.trim().toLowerCase();
+        const type = provider.type.trim().toLowerCase();
+        return id === "gemini" || type === "gemini" || type === "google";
+    }
+
+    private ensureActiveModelForProvider(providerId?: string) {
+        if (!providerId) return;
+
+        const currentModelId = this.plugin.settings.apiModel;
+        const enabledModels = this.plugin.settings.models.filter(
+            model => model.providerId === providerId && model.enabled
+        );
+
+        if (!enabledModels.length) return;
+
+        const activeModelStillEnabled = enabledModels.some(model => model.id === currentModelId);
+        if (!activeModelStillEnabled) {
+            this.plugin.settings.apiModel = enabledModels[0].id;
+        }
     }
 
     private renderGenerationSettings(containerEl: HTMLElement) {

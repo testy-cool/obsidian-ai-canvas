@@ -44,6 +44,7 @@ export const NOTE_INCR_HEIGHT_STEP = 150;
 
 // TODO : remove
 const logDebug = (text: any) => null;
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * Calculate optimal note dimensions maintaining 3:5 aspect ratio
@@ -107,6 +108,20 @@ export function noteGenerator(
 	customModel?: any
 	// logDebug: Logger
 ) {
+	const resolveProvider = () =>
+		customProvider ||
+		settings.providers.find(provider => provider.id === settings.activeProvider);
+
+	const resolveModel = (provider?: any) =>
+		customModel ||
+		settings.models.find(
+			model =>
+				model.id === settings.apiModel &&
+				model.providerId === provider?.id &&
+				model.enabled
+		) ||
+		settings.models.find(model => model.providerId === provider?.id && model.enabled);
+
 	const canCallAI = () => {
 		// return true;
 		if (!settings.apiKey && !getActiveProviderApiKey()) {
@@ -119,9 +134,7 @@ export function noteGenerator(
 
 	const getActiveProviderApiKey = () => {
 		// Use custom provider if provided, otherwise use settings
-		const activeProvider = customProvider || settings.providers.find(provider => 
-			provider.id === settings.activeProvider
-		);
+		const activeProvider = resolveProvider();
 		
 		if (!activeProvider) return null;
 		
@@ -131,9 +144,7 @@ export function noteGenerator(
 	
 	const getActiveProviderBaseUrl = () => {
 		// Use custom provider if provided, otherwise use settings
-		const activeProvider = customProvider || settings.providers.find(provider => 
-			provider.id === settings.activeProvider
-		);
+		const activeProvider = resolveProvider();
 		
 		return activeProvider?.baseUrl || undefined;
 	};
@@ -178,11 +189,13 @@ export function noteGenerator(
 		const messages: any[] = [];
 		let tokenCount = 0;
 
-		const provider = customProvider || settings.providers.find(p => p.id === settings.activeProvider);
+		const provider = resolveProvider();
+		const model = resolveModel(provider);
 		const isGpt = provider?.type === "OpenAI";
+		const canCountTokens = isGpt && typeof encodingForModel === "function";
+		const modelName = model?.model || settings.apiModel;
 
-		if (isGpt) {
-			const modelName = customModel?.model || settings.apiModel;
+		if (canCountTokens) {
 			const encoding = encodingForModel(modelName as any);
 
 			// Note: We are not checking for system prompt longer than context window.
@@ -209,8 +222,7 @@ export function noteGenerator(
 			if (nodeText) {
 				if (isSystemPromptNode(nodeText)) return true;
 
-				if (isGpt) {
-					const modelName = customModel?.model || settings.apiModel;
+				if (canCountTokens) {
 					const encoding = encodingForModel(modelName as any);
 					let nodeTokens = encoding.encode(nodeText);
 					let keptNodeTokens: number;
@@ -278,13 +290,13 @@ export function noteGenerator(
 	};
 
 	const generateNote = async (question?: string) => {
-		const provider = customProvider || settings.providers.find(p => p.id === settings.activeProvider);
+		const provider = resolveProvider();
 		if (!provider) {
 			new Notice("No active provider found. Please check your settings.");
 			return;
 		}
 
-		const model = customModel || settings.models.find(m => m.id === settings.apiModel && m.providerId === provider.id && m.enabled) || settings.models.find(m => m.providerId === provider.id && m.enabled);
+		const model = resolveModel(provider);
 		if (!model) {
 			new Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
 			return;

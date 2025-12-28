@@ -1,17 +1,21 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText, generateText, CoreMessage } from "ai";
 import { logDebug } from "src/logDebug";
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
 
 const getLlm = (provider: LLMProvider) => {
 	switch (provider.type) {
+		case "Gemini":
+		case "Google":
+			return createGoogleGenerativeAI({
+				apiKey: provider.apiKey,
+			});
 		case "OpenAI":
 		case "OpenRouter":
 		case "Groq":
 		case "Anthropic":
 		case "Ollama":
-		case "Gemini":
-		case "Google":
 		case "Custom":
 		case "LiteLLM":
 		case "Azure":
@@ -60,7 +64,7 @@ export const streamResponse = async (
 	const llm = getLlm(provider);
 
 	const result = await streamText({
-		model: llm(model || "claude-3-sonnet-latest"),
+		model: llm(model || "gemini-3-flash-preview"),
 		messages,
 		maxTokens: max_tokens,
 		temperature,
@@ -109,7 +113,7 @@ export const getResponse = async (
 	const llm = getLlm(provider);
 
 	const { text } = await generateText({
-		model: llm(model || "claude-3-sonnet-latest"),
+		model: llm(model || "gemini-3-flash-preview"),
 		messages,
 		maxTokens: max_tokens,
 		temperature,

@@ -21,9 +21,25 @@ export const runPromptFolder = async (
 	const canvas = getActiveCanvas(app);
 	if (!canvas) return;
 
+	const provider = settings.providers.find(p => p.id === settings.activeProvider);
+	if (!provider) {
+		new Notice("No active provider found. Please check your settings.");
+		return;
+	}
+
+	const model =
+		settings.models.find(
+			m => m.id === settings.apiModel && m.providerId === provider.id && m.enabled
+		) || settings.models.find(m => m.providerId === provider.id && m.enabled);
+
+	if (!model) {
+		new Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
+		return;
+	}
+
 	const NODE_WIDTH = 800;
 	const NODE_HEIGHT = 300;
-	const text = '```Calling AI (' + settings.apiModel + ')...```';
+	const text = '```Calling AI (' + model.model + ')...```';
 	const created = createNode(canvas, {
 		pos: {
 			// @ts-expect-error
@@ -57,19 +73,13 @@ export const runPromptFolder = async (
 		},
 	];
 
-	const provider = settings.providers.find(p => p.id === settings.activeProvider);
-	if (!provider) {
-		new Notice("No active provider found. Please check your settings.");
-		return;
-	}
-
 	let firstDelta = true;
 	await streamResponse(
 		provider,
 		// settings.apiModel,
 		messages,
 		{
-			model: settings.apiModel,
+			model: model.model,
 			max_tokens: settings.maxResponseTokens || undefined,
 			// max_tokens: getTokenLimit(settings) - tokenCount - 1,
 		},

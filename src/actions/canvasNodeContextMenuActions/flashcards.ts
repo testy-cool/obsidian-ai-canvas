@@ -57,6 +57,16 @@ export const createFlashcards = async (
 		return;
 	}
 
+	const model =
+		settings.models.find(
+			m => m.id === settings.apiModel && m.providerId === provider.id && m.enabled
+		) || settings.models.find(m => m.providerId === provider.id && m.enabled);
+
+	if (!model) {
+		new Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
+		return;
+	}
+
 	const aiResponse = await getResponse(
 		provider,
 		[
@@ -72,7 +82,7 @@ ${settings.flashcardsSystemPrompt}`,
 			},
 		],
 		{
-			model: settings.apiModel,
+			model: model.model,
 			max_tokens: settings.maxResponseTokens || undefined,
 			temperature: settings.temperature,
 			isJSON: true,

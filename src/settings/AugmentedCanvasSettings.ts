@@ -178,82 +178,38 @@ These questions must be opened questions.
 Priories questions that connect different topics together.
 `.trim();
 
+export const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+
 // Default providers that come built-in
 const DEFAULT_PROVIDERS: LLMProvider[] = [
 	{
-		id: "openai",
-		type: "OpenAI",
-		baseUrl: "https://api.openai.com/v1",
+		id: "gemini",
+		type: "Gemini",
+		baseUrl: GEMINI_BASE_URL,
 		apiKey: "",
 		enabled: true
-	},
-	{
-		id: "anthropic",
-		type: "Anthropic",
-		baseUrl: "https://api.anthropic.com/v1",
-		apiKey: "",
-		enabled: true
-	},
-	{
-		id: "groq",
-		type: "Groq",
-		baseUrl: "https://api.groq.com/v1",
-		apiKey: "",
-		enabled: true
-	},
-	{
-		id: "openrouter",
-		type: "OpenRouter",
-		baseUrl: "https://openrouter.ai/api/v1",
-		apiKey: "",
-		enabled: true
-	},
-	{
-		id: "ollama",
-		type: "Ollama",
-		baseUrl: "http://localhost:11434/v1",
-		apiKey: "",
-		enabled: false
 	}
 ];
 
 // Default models that come built-in
 const DEFAULT_MODELS: LLMModel[] = [
 	{
-		id: "default",
-		providerId: "openai",
-		model: "default",
+		id: "gemini-3-flash-preview",
+		providerId: "gemini",
+		model: "gemini-3-flash-preview",
 		enabled: true
 	},
 	{
-		id: "default-mini",
-		providerId: "openai", 
-		model: "default-mini",
-		enabled: true
-	},
-	{
-		id: "claude-3-sonnet",
-		providerId: "anthropic",
-		model: "claude-3-sonnet-latest",
-		enabled: true
-	},
-	{
-		id: "claude-3-opus",
-		providerId: "anthropic",
-		model: "claude-3-opus-latest",
-		enabled: true
-	},
-	{
-		id: "gemini-pro",
-		providerId: "openrouter",
-		model: "google/gemini-pro",
+		id: "gemini-3-pro-preview",
+		providerId: "gemini",
+		model: "gemini-3-pro-preview",
 		enabled: true
 	}
 ];
 
 export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	apiKey: "",
-	apiModel: "default",
+	apiModel: "gemini-3-flash-preview",
 	temperature: 1,
 	systemPrompt: DEFAULT_SYSTEM_PROMPT,
 	debug: true,
@@ -269,7 +225,7 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	youtubeApiKey: "",
 	providers: DEFAULT_PROVIDERS,
 	models: DEFAULT_MODELS,
-	activeProvider: "openai"
+	activeProvider: "gemini"
 };
 
 

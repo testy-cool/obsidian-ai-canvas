@@ -115,3 +115,5 @@ The backend of the plugin is responsible for the following:
 - **Improved UI/UX:** The plugin's UI/UX could be improved to make it more user-friendly and intuitive.
 - **More robust error handling:** The plugin's error handling could be improved to make it more resilient to errors.
 - **More comprehensive test suite:** The plugin could be extended with a more comprehensive test suite to ensure that it is working as expected.
+- **Lightweight canvas alignment tools:** Add a button/command that gently aligns selected nodes without disrupting intentional layout.
+- **Auto-resize nodes with guardrails:** Resize note rectangles to fit text up to a reasonable limit (e.g., cap at ~100 lines, then allow manual resizing).
