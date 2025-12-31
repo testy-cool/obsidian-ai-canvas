@@ -45,9 +45,18 @@ const getNodeLabel = (node: CanvasNode) => {
 	return data?.label?.trim() || "";
 };
 
+const ensureCardTitleElement = (node: CanvasNode) => {
+	const container = node.containerEl;
+	if (!container) return null;
+	const existing = container.querySelector(".ai-card-title") as HTMLElement | null;
+	if (existing) return existing;
+	return container.createDiv("ai-card-title");
+};
+
 const applyCardLabelStyle = (node: CanvasNode) => {
-	if (!node.labelEl) return;
-	node.labelEl.style.cssText = `
+	const titleEl = ensureCardTitleElement(node);
+	if (!titleEl) return;
+	titleEl.style.cssText = `
 		position: absolute;
 		top: -20px;
 		left: 8px;
@@ -65,6 +74,9 @@ const applyCardLabelStyle = (node: CanvasNode) => {
 		overflow: hidden;
 		text-overflow: ellipsis;
 	`;
+	if (node.labelEl) {
+		node.labelEl.style.display = "none";
+	}
 };
 
 const applyNodeLabel = async (node: CanvasNode, label: string) => {
@@ -72,9 +84,13 @@ const applyNodeLabel = async (node: CanvasNode, label: string) => {
 	node.setData({ ...data, label });
 	if (node.labelEl) {
 		node.labelEl.setText(label);
-		const nodeType = node.getData().type;
-		if (nodeType === "text" || nodeType === "file") {
-			applyCardLabelStyle(node);
+	}
+	const nodeType = node.getData().type;
+	if (nodeType === "text" || nodeType === "file") {
+		applyCardLabelStyle(node);
+		const titleEl = ensureCardTitleElement(node);
+		if (titleEl) {
+			titleEl.setText(label);
 		}
 	}
 	if ("label" in node) {
@@ -145,19 +161,29 @@ const buildCardTitlePrompt = async (node: CanvasNode) => {
 
 const getGroupCardContents = async (groupNode: CanvasNode) => {
 	if (!groupNode.canvas) return [];
-	const canvasNodes = groupNode.canvas.nodes;
-	let nodes: CanvasNode[] = [];
 
-	if (Array.isArray(canvasNodes)) {
-		nodes = canvasNodes;
-	} else if (canvasNodes && typeof (canvasNodes as any).values === "function") {
-		nodes = Array.from((canvasNodes as any).values());
-	} else if (
-		canvasNodes &&
-		typeof (canvasNodes as any)[Symbol.iterator] === "function"
-	) {
-		nodes = Array.from(canvasNodes as Iterable<CanvasNode>);
-	}
+	const resolveCanvasNodes = (canvas: any) => {
+		const canvasNodes = canvas?.nodes;
+		if (!canvasNodes) return [];
+		if (Array.isArray(canvasNodes)) return canvasNodes as CanvasNode[];
+		if (canvasNodes instanceof Map || canvasNodes instanceof Set) {
+			return Array.from(canvasNodes.values());
+		}
+		if (typeof canvasNodes.values === "function") {
+			return Array.from(canvasNodes.values());
+		}
+		if (typeof canvasNodes.forEach === "function") {
+			const collected: CanvasNode[] = [];
+			canvasNodes.forEach((node: CanvasNode) => collected.push(node));
+			return collected;
+		}
+		if (typeof canvasNodes[Symbol.iterator] === "function") {
+			return Array.from(canvasNodes as Iterable<CanvasNode>);
+		}
+		return [];
+	};
+
+	const nodes = resolveCanvasNodes(groupNode.canvas);
 
 	const bounds = {
 		left: groupNode.x,
