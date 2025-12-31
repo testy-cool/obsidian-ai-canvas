@@ -151,6 +151,36 @@ export interface AugmentedCanvasSettings {
 	 * Currently active provider (empty string means default OpenAI)
 	 */
 	activeProvider: string;
+
+	/**
+	 * Enable AI card title generation.
+	 */
+	enableCardTitleGeneration: boolean;
+
+	/**
+	 * Provider used for AI card titles.
+	 */
+	cardTitleProviderId: string;
+
+	/**
+	 * Model used for AI card titles.
+	 */
+	cardTitleModelId: string;
+
+	/**
+	 * Enable AI group naming.
+	 */
+	enableGroupTitleGeneration: boolean;
+
+	/**
+	 * Provider used for AI group naming.
+	 */
+	groupTitleProviderId: string;
+
+	/**
+	 * Model used for AI group naming.
+	 */
+	groupTitleModelId: string;
 }
 
 const DEFAULT_SYSTEM_PROMPT = `
@@ -225,7 +255,13 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	youtubeApiKey: "",
 	providers: DEFAULT_PROVIDERS,
 	models: DEFAULT_MODELS,
-	activeProvider: "gemini"
+	activeProvider: "gemini",
+	enableCardTitleGeneration: true,
+	cardTitleProviderId: "gemini",
+	cardTitleModelId: "gemini-3-flash-preview",
+	enableGroupTitleGeneration: true,
+	groupTitleProviderId: "gemini",
+	groupTitleModelId: "gemini-3-flash-preview"
 };
 
 

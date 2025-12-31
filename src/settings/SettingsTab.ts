@@ -22,6 +22,7 @@ export default class SettingsTab extends PluginSettingTab {
         this.renderGeneralSettings(containerEl);
         this.renderProviders(containerEl);
         this.renderGenerationSettings(containerEl);
+		this.renderNamingSettings(containerEl);
         this.renderPromptManagement(containerEl);
     }
 
@@ -350,6 +351,142 @@ export default class SettingsTab extends PluginSettingTab {
                     }
                 }));
     }
+
+	private renderNamingSettings(containerEl: HTMLElement) {
+		new Setting(containerEl).setHeading().setName("Naming Settings");
+
+		new Setting(containerEl)
+			.setName("Enable AI card titles")
+			.setDesc("Auto-generate titles for new AI cards over 200 characters, plus manual regeneration.")
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableCardTitleGeneration)
+				.onChange(async value => {
+					this.plugin.settings.enableCardTitleGeneration = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName("Card title provider")
+			.setDesc("Provider used for AI card titles.")
+			.addDropdown(dropdown => {
+				this.plugin.settings.providers.forEach(provider => {
+					dropdown.addOption(provider.id, provider.type);
+				});
+				dropdown
+					.setValue(this.plugin.settings.cardTitleProviderId)
+					.onChange(async value => {
+						this.plugin.settings.cardTitleProviderId = value;
+						const models = this.plugin.settings.models.filter(
+							model => model.providerId === value && model.enabled
+						);
+						if (!models.some(model => model.id === this.plugin.settings.cardTitleModelId)) {
+							this.plugin.settings.cardTitleModelId = models[0]?.id || "";
+						}
+						await this.plugin.saveSettings();
+						this.display();
+					});
+			});
+
+		const cardModels = this.plugin.settings.models.filter(
+			model =>
+				model.providerId === this.plugin.settings.cardTitleProviderId &&
+				model.enabled
+		);
+		const cardModelValue =
+			cardModels.find(model => model.id === this.plugin.settings.cardTitleModelId)
+				?.id || cardModels[0]?.id || "";
+		if (cardModelValue && cardModelValue !== this.plugin.settings.cardTitleModelId) {
+			this.plugin.settings.cardTitleModelId = cardModelValue;
+			void this.plugin.saveSettings();
+		}
+
+		new Setting(containerEl)
+			.setName("Card title model")
+			.setDesc("Model used for AI card titles.")
+			.addDropdown(dropdown => {
+				if (!cardModels.length) {
+					dropdown.addOption("", "No enabled models");
+					dropdown.setValue("");
+					return;
+				}
+				cardModels.forEach(model => {
+					dropdown.addOption(model.id, model.model);
+				});
+				dropdown
+					.setValue(cardModelValue)
+					.onChange(async value => {
+						if (!value) return;
+						this.plugin.settings.cardTitleModelId = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("Enable AI group names")
+			.setDesc("Allow AI-generated names for groups on demand.")
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableGroupTitleGeneration)
+				.onChange(async value => {
+					this.plugin.settings.enableGroupTitleGeneration = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName("Group name provider")
+			.setDesc("Provider used for AI group naming.")
+			.addDropdown(dropdown => {
+				this.plugin.settings.providers.forEach(provider => {
+					dropdown.addOption(provider.id, provider.type);
+				});
+				dropdown
+					.setValue(this.plugin.settings.groupTitleProviderId)
+					.onChange(async value => {
+						this.plugin.settings.groupTitleProviderId = value;
+						const models = this.plugin.settings.models.filter(
+							model => model.providerId === value && model.enabled
+						);
+						if (!models.some(model => model.id === this.plugin.settings.groupTitleModelId)) {
+							this.plugin.settings.groupTitleModelId = models[0]?.id || "";
+						}
+						await this.plugin.saveSettings();
+						this.display();
+					});
+			});
+
+		const groupModels = this.plugin.settings.models.filter(
+			model =>
+				model.providerId === this.plugin.settings.groupTitleProviderId &&
+				model.enabled
+		);
+		const groupModelValue =
+			groupModels.find(model => model.id === this.plugin.settings.groupTitleModelId)
+				?.id || groupModels[0]?.id || "";
+		if (groupModelValue && groupModelValue !== this.plugin.settings.groupTitleModelId) {
+			this.plugin.settings.groupTitleModelId = groupModelValue;
+			void this.plugin.saveSettings();
+		}
+
+		new Setting(containerEl)
+			.setName("Group name model")
+			.setDesc("Model used for AI group naming.")
+			.addDropdown(dropdown => {
+				if (!groupModels.length) {
+					dropdown.addOption("", "No enabled models");
+					dropdown.setValue("");
+					return;
+				}
+				groupModels.forEach(model => {
+					dropdown.addOption(model.id, model.model);
+				});
+				dropdown
+					.setValue(groupModelValue)
+					.onChange(async value => {
+						if (!value) return;
+						this.plugin.settings.groupTitleModelId = value;
+						await this.plugin.saveSettings();
+					});
+			});
+	}
 
     private renderPromptManagement(containerEl: HTMLElement) {
         new Setting(containerEl).setHeading().setName("Prompt Management");

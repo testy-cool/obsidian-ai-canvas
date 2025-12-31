@@ -19,6 +19,10 @@ import {
 	addAskQuestionWithModelButton,
 } from "./actions/canvasNodeMenuActions/advancedCanvas";
 import {
+	addGenerateCardTitleButton,
+	addGenerateGroupNameButton,
+} from "./actions/canvasNodeMenuActions/titleGenerator";
+import {
 	AugmentedCanvasSettings,
 	DEFAULT_SETTINGS,
 	SystemPrompt,
@@ -178,6 +182,37 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		if (!this.settings.activeProvider) {
 			this.settings.activeProvider = DEFAULT_SETTINGS.activeProvider;
 		}
+
+		const ensureNamingModelSelection = (providerId: string, modelId: string) => {
+			const resolvedProviderId = this.settings.providers.some(
+				provider => provider.id === providerId
+			)
+				? providerId
+				: this.settings.activeProvider;
+
+			const enabledModels = this.settings.models.filter(
+				model => model.providerId === resolvedProviderId && model.enabled
+			);
+			const resolvedModelId = enabledModels.some(model => model.id === modelId)
+				? modelId
+				: enabledModels[0]?.id || this.settings.apiModel;
+
+			return { providerId: resolvedProviderId, modelId: resolvedModelId };
+		};
+
+		const cardSelection = ensureNamingModelSelection(
+			this.settings.cardTitleProviderId,
+			this.settings.cardTitleModelId
+		);
+		this.settings.cardTitleProviderId = cardSelection.providerId;
+		this.settings.cardTitleModelId = cardSelection.modelId;
+
+		const groupSelection = ensureNamingModelSelection(
+			this.settings.groupTitleProviderId,
+			this.settings.groupTitleModelId
+		);
+		this.settings.groupTitleProviderId = groupSelection.providerId;
+		this.settings.groupTitleModelId = groupSelection.modelId;
 	}
 
 	patchCanvasMenu() {
@@ -294,6 +329,13 @@ export default class AugmentedCanvasPlugin extends Plugin {
 
 							// * Handles "Ask Question with Model Selection" button
 							addAskQuestionWithModelButton(app, settings, this.menuEl);
+
+							// * Handles AI naming buttons
+							if (selectedNode.unknownData.type === "group") {
+								addGenerateGroupNameButton(app, settings, this.menuEl);
+							} else {
+								addGenerateCardTitleButton(app, settings, this.menuEl);
+							}
 
 						}
 						return result;

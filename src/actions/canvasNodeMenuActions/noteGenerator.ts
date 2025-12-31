@@ -22,6 +22,7 @@ import { visitNodeAndAncestors } from "../../obsidian/canvasUtil";
 import { readNodeContent } from "../../obsidian/fileUtil";
 import { getResponse, streamResponse } from "../../utils/llm";
 import { addModelIndicator } from "../../utils";
+import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 
 /**
  * Color for assistant notes: 6 == purple
@@ -337,6 +338,7 @@ export function noteGenerator(
 			if (!messages.length) return;
 
 			let created: CanvasNode;
+			const isNewNode = !toNode;
 			if (!toNode) {
 				// Calculate initial dimensions for placeholder text
 				const initialText = `Calling AI (${model.model})...`;
@@ -458,6 +460,10 @@ export function noteGenerator(
 						}
 					}
 				);
+
+				if (isNewNode) {
+					await maybeAutoGenerateCardTitle(app, settings, created);
+				}
 
 				// if (generated == null) {
 				// 	new Notice(`Empty or unreadable response from the AI`);
