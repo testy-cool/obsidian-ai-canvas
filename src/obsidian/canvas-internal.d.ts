@@ -17,6 +17,7 @@ export interface CanvasNode {
 	isEditing: boolean;
 	nodeEl: HTMLElement;
 	placeholderEl: HTMLElement;
+	labelEl: HTMLElement;
 	renderedZIndex: number;
 	resizeDirty: boolean;
 	text: string;
