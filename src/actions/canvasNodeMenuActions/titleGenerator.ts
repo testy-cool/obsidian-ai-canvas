@@ -6,14 +6,14 @@ import { AugmentedCanvasSettings } from "../../settings/AugmentedCanvasSettings"
 import { getActiveCanvasNodes } from "../../utils";
 import { getResponse } from "../../utils/llm";
 
-const CARD_TITLE_SYSTEM_PROMPT = `
+const CARD_TITLE_SYSTEM_PROMPT_FALLBACK = `
 You are naming a canvas card.
 Return a short, descriptive title in the same language as the content.
 Keep it under 8 words.
 Return only the title text with no quotes or markdown.
 `.trim();
 
-const GROUP_TITLE_SYSTEM_PROMPT = `
+const GROUP_TITLE_SYSTEM_PROMPT_FALLBACK = `
 You are naming a canvas group.
 Return a short, descriptive name in the same language as the content.
 Keep it under 6 words.
@@ -46,34 +46,28 @@ const getNodeLabel = (node: CanvasNode) => {
 };
 
 const ensureCardTitleElement = (node: CanvasNode) => {
-	const container = node.containerEl;
-	if (!container) return null;
-	const existing = container.querySelector(".ai-card-title") as HTMLElement | null;
+	const host = node.nodeEl || node.containerEl || node.contentEl;
+	if (!host) return null;
+	const existing = host.querySelector(".ai-card-title") as HTMLElement | null;
 	if (existing) return existing;
-	return container.createDiv("ai-card-title");
+	const titleEl = document.createElement("div");
+	titleEl.className = "ai-card-title";
+	host.appendChild(titleEl);
+	return titleEl;
 };
 
 const applyCardLabelStyle = (node: CanvasNode) => {
 	const titleEl = ensureCardTitleElement(node);
 	if (!titleEl) return;
-	titleEl.style.cssText = `
-		position: absolute;
-		top: -20px;
-		left: 8px;
-		right: auto;
-		max-width: calc(100% - 16px);
-		padding: 2px 6px;
-		border-radius: 6px;
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--text-normal);
-		background: var(--background-primary);
-		box-shadow: var(--shadow-s);
-		pointer-events: none;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	`;
+	const host = node.nodeEl || node.containerEl || node.contentEl;
+	if (host && host instanceof HTMLElement) {
+		if (!host.style.position) {
+			host.style.position = "relative";
+		}
+		if (!host.style.overflow || host.style.overflow === "hidden") {
+			host.style.overflow = "visible";
+		}
+	}
 	if (node.labelEl) {
 		node.labelEl.style.display = "none";
 	}
@@ -283,10 +277,11 @@ export const generateCardTitle = async (
 		if (showNotices) {
 			new Notice("Generating card title...");
 		}
+		const cardPrompt = settings.cardTitleSystemPrompt?.trim() || CARD_TITLE_SYSTEM_PROMPT_FALLBACK;
 		const response = await getResponse(
 			resolved.provider,
 			[
-				{ role: "system", content: CARD_TITLE_SYSTEM_PROMPT },
+				{ role: "system", content: cardPrompt },
 				{ role: "user", content: prompt },
 			],
 			{
@@ -348,10 +343,11 @@ export const generateGroupName = async (
 
 	try {
 		new Notice("Generating group name...");
+		const groupPrompt = settings.groupTitleSystemPrompt?.trim() || GROUP_TITLE_SYSTEM_PROMPT_FALLBACK;
 		const response = await getResponse(
 			resolved.provider,
 			[
-				{ role: "system", content: GROUP_TITLE_SYSTEM_PROMPT },
+				{ role: "system", content: groupPrompt },
 				{ role: "user", content: buildGroupNamePrompt(groupCards) },
 			],
 			{

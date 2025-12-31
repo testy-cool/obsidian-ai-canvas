@@ -422,6 +422,18 @@ export default class SettingsTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
+			.setName("Card title prompt")
+			.setDesc("System prompt used to generate card titles.")
+			.addTextArea(text => {
+				text.inputEl.rows = 4;
+				text.setValue(this.plugin.settings.cardTitleSystemPrompt)
+					.onChange(async value => {
+						this.plugin.settings.cardTitleSystemPrompt = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
 			.setName("Enable AI group names")
 			.setDesc("Allow AI-generated names for groups on demand.")
 			.addToggle(toggle => toggle
@@ -483,6 +495,18 @@ export default class SettingsTab extends PluginSettingTab {
 					.onChange(async value => {
 						if (!value) return;
 						this.plugin.settings.groupTitleModelId = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("Group name prompt")
+			.setDesc("System prompt used to generate group names.")
+			.addTextArea(text => {
+				text.inputEl.rows = 4;
+				text.setValue(this.plugin.settings.groupTitleSystemPrompt)
+					.onChange(async value => {
+						this.plugin.settings.groupTitleSystemPrompt = value;
 						await this.plugin.saveSettings();
 					});
 			});

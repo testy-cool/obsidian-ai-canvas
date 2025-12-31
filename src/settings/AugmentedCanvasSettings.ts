@@ -168,6 +168,11 @@ export interface AugmentedCanvasSettings {
 	cardTitleModelId: string;
 
 	/**
+	 * System prompt used to generate card titles.
+	 */
+	cardTitleSystemPrompt: string;
+
+	/**
 	 * Enable AI group naming.
 	 */
 	enableGroupTitleGeneration: boolean;
@@ -181,6 +186,11 @@ export interface AugmentedCanvasSettings {
 	 * Model used for AI group naming.
 	 */
 	groupTitleModelId: string;
+
+	/**
+	 * System prompt used to generate group names.
+	 */
+	groupTitleSystemPrompt: string;
 }
 
 const DEFAULT_SYSTEM_PROMPT = `
@@ -206,6 +216,20 @@ You will ask relevant questions based on the user input.
 These questions must be opened questions.
 
 Priories questions that connect different topics together.
+`.trim();
+
+const DEFAULT_CARD_TITLE_PROMPT = `
+You are naming a canvas card.
+Return a short, descriptive title in the same language as the content.
+Keep it under 8 words.
+Return only the title text with no quotes or markdown.
+`.trim();
+
+const DEFAULT_GROUP_TITLE_PROMPT = `
+You are naming a canvas group.
+Return a short, descriptive name in the same language as the content.
+Keep it under 6 words.
+Return only the name text with no quotes or markdown.
 `.trim();
 
 export const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
@@ -259,9 +283,11 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	enableCardTitleGeneration: true,
 	cardTitleProviderId: "gemini",
 	cardTitleModelId: "gemini-3-flash-preview",
+	cardTitleSystemPrompt: DEFAULT_CARD_TITLE_PROMPT,
 	enableGroupTitleGeneration: true,
 	groupTitleProviderId: "gemini",
-	groupTitleModelId: "gemini-3-flash-preview"
+	groupTitleModelId: "gemini-3-flash-preview",
+	groupTitleSystemPrompt: DEFAULT_GROUP_TITLE_PROMPT
 };
 
 
