@@ -45,11 +45,37 @@ const getNodeLabel = (node: CanvasNode) => {
 	return data?.label?.trim() || "";
 };
 
+const applyCardLabelStyle = (node: CanvasNode) => {
+	if (!node.labelEl) return;
+	node.labelEl.style.cssText = `
+		position: absolute;
+		top: -20px;
+		left: 8px;
+		right: auto;
+		max-width: calc(100% - 16px);
+		padding: 2px 6px;
+		border-radius: 6px;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text-normal);
+		background: var(--background-primary);
+		box-shadow: var(--shadow-s);
+		pointer-events: none;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	`;
+};
+
 const applyNodeLabel = async (node: CanvasNode, label: string) => {
 	const data = node.getData() as { label?: string };
 	node.setData({ ...data, label });
 	if (node.labelEl) {
 		node.labelEl.setText(label);
+		const nodeType = node.getData().type;
+		if (nodeType === "text" || nodeType === "file") {
+			applyCardLabelStyle(node);
+		}
 	}
 	if ("label" in node) {
 		// @ts-expect-error - group nodes expose label directly
@@ -119,6 +145,19 @@ const buildCardTitlePrompt = async (node: CanvasNode) => {
 
 const getGroupCardContents = async (groupNode: CanvasNode) => {
 	if (!groupNode.canvas) return [];
+	const canvasNodes = groupNode.canvas.nodes;
+	let nodes: CanvasNode[] = [];
+
+	if (Array.isArray(canvasNodes)) {
+		nodes = canvasNodes;
+	} else if (canvasNodes && typeof (canvasNodes as any).values === "function") {
+		nodes = Array.from((canvasNodes as any).values());
+	} else if (
+		canvasNodes &&
+		typeof (canvasNodes as any)[Symbol.iterator] === "function"
+	) {
+		nodes = Array.from(canvasNodes as Iterable<CanvasNode>);
+	}
 
 	const bounds = {
 		left: groupNode.x,
@@ -128,7 +167,7 @@ const getGroupCardContents = async (groupNode: CanvasNode) => {
 	};
 	const margin = 8;
 
-	const nodesInGroup = groupNode.canvas.nodes
+	const nodesInGroup = nodes
 		.filter(node => node.id !== groupNode.id)
 		.filter(node => {
 			const nodeType = node.getData().type;
