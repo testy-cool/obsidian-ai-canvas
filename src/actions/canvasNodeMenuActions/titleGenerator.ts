@@ -99,7 +99,8 @@ const buildCardTitlePrompt = async (node: CanvasNode) => {
 	await visitNodeAndAncestors(node, async (current, depth) => {
 		if (depth === 0) return true;
 		const canvasNode = current as CanvasNode;
-		if (canvasNode.getData().type !== "text") return true;
+		const nodeType = canvasNode.getData().type;
+		if (nodeType !== "text" && nodeType !== "file") return true;
 		const text = (await readNodeContent(canvasNode))?.trim() || "";
 		if (!text) return true;
 		context.push(truncateText(text, MAX_CONTEXT_CHARS));
@@ -129,7 +130,10 @@ const getGroupCardContents = async (groupNode: CanvasNode) => {
 
 	const nodesInGroup = groupNode.canvas.nodes
 		.filter(node => node.id !== groupNode.id)
-		.filter(node => node.getData().type === "text")
+		.filter(node => {
+			const nodeType = node.getData().type;
+			return nodeType === "text" || nodeType === "file";
+		})
 		.filter(node => {
 			const left = node.x;
 			const top = node.y;
@@ -179,9 +183,10 @@ export const generateCardTitle = async (
 		return;
 	}
 
-	if (node.getData().type !== "text") {
+	const nodeType = node.getData().type;
+	if (nodeType !== "text" && nodeType !== "file") {
 		if (showNotices) {
-			new Notice("Please select a card node.");
+			new Notice("Please select a card.");
 		}
 		return;
 	}
@@ -210,6 +215,9 @@ export const generateCardTitle = async (
 	if (!resolved) return;
 
 	try {
+		if (showNotices) {
+			new Notice("Generating card title...");
+		}
 		const response = await getResponse(
 			resolved.provider,
 			[
@@ -227,6 +235,9 @@ export const generateCardTitle = async (
 		if (!title) return;
 
 		await applyNodeLabel(node, title);
+		if (showNotices) {
+			new Notice(`Card title set: ${title}`);
+		}
 	} catch (error) {
 		if (showNotices) {
 			new Notice(`Error generating card title: ${error.message || error}`);
@@ -271,6 +282,7 @@ export const generateGroupName = async (
 	if (!resolved) return;
 
 	try {
+		new Notice("Generating group name...");
 		const response = await getResponse(
 			resolved.provider,
 			[
@@ -288,6 +300,7 @@ export const generateGroupName = async (
 		if (!title) return;
 
 		await applyNodeLabel(node, title);
+		new Notice(`Group name set: ${title}`);
 	} catch (error) {
 		new Notice(`Error generating group name: ${error.message || error}`);
 	}

@@ -262,8 +262,9 @@ export default class AugmentedCanvasPlugin extends Plugin {
 						// // * If group
 						// if (node.unknownData.type === "group") return result;
 
-						if (this.menuEl.querySelector(".ai-menu-item"))
-							return result;
+						this.menuEl
+							.querySelectorAll(".ai-menu-item")
+							.forEach((el: Element) => el.remove());
 
 						// * If Edge
 						const selectedNode = Array.from(
@@ -330,8 +331,13 @@ export default class AugmentedCanvasPlugin extends Plugin {
 							// * Handles "Ask Question with Model Selection" button
 							addAskQuestionWithModelButton(app, settings, this.menuEl);
 
+							const nodeType =
+								// @ts-expect-error
+								selectedNode?.getData?.()?.type ||
+								selectedNode?.unknownData?.type;
+
 							// * Handles AI naming buttons
-							if (selectedNode.unknownData.type === "group") {
+							if (nodeType === "group") {
 								addGenerateGroupNameButton(app, settings, this.menuEl);
 							} else {
 								addGenerateCardTitleButton(app, settings, this.menuEl);
