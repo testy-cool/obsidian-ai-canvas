@@ -40,9 +40,9 @@ const sanitizeTitle = (value: string) => {
 	return cleaned;
 };
 
-const getNodeLabel = (node: CanvasNode) => {
-	const data = node.getData() as { label?: string };
-	return data?.label?.trim() || "";
+const getCardTitle = (node: CanvasNode) => {
+	const data = node.getData() as { ai_card_title?: string };
+	return data?.ai_card_title?.trim() || "";
 };
 
 const ensureCardTitleElement = (node: CanvasNode) => {
@@ -56,36 +56,31 @@ const ensureCardTitleElement = (node: CanvasNode) => {
 	return titleEl;
 };
 
-const applyCardLabelStyle = (node: CanvasNode) => {
-	const titleEl = ensureCardTitleElement(node);
-	if (!titleEl) return;
-	const host = node.nodeEl || node.containerEl || node.contentEl;
-	if (host && host instanceof HTMLElement) {
-		if (!host.style.position) {
-			host.style.position = "relative";
-		}
-		if (!host.style.overflow || host.style.overflow === "hidden") {
-			host.style.overflow = "visible";
-		}
+const applyCardTitle = async (node: CanvasNode, title: string) => {
+	const data = node.getData() as { label?: string; ai_card_title?: string };
+	const { label: _label, ...rest } = data;
+	node.setData({ ...rest, ai_card_title: title });
+	if (node.nodeEl) {
+		node.nodeEl.classList.add("ai-card-title-host");
 	}
 	if (node.labelEl) {
+		node.labelEl.setText("");
 		node.labelEl.style.display = "none";
+	}
+	const titleEl = ensureCardTitleElement(node);
+	if (titleEl) {
+		titleEl.setText(title);
+	}
+	if (node.canvas) {
+		await node.canvas.requestSave();
 	}
 };
 
-const applyNodeLabel = async (node: CanvasNode, label: string) => {
+const applyGroupLabel = async (node: CanvasNode, label: string) => {
 	const data = node.getData() as { label?: string };
 	node.setData({ ...data, label });
 	if (node.labelEl) {
 		node.labelEl.setText(label);
-	}
-	const nodeType = node.getData().type;
-	if (nodeType === "text" || nodeType === "file") {
-		applyCardLabelStyle(node);
-		const titleEl = ensureCardTitleElement(node);
-		if (titleEl) {
-			titleEl.setText(label);
-		}
 	}
 	if ("label" in node) {
 		// @ts-expect-error - group nodes expose label directly
@@ -250,8 +245,8 @@ export const generateCardTitle = async (
 		return;
 	}
 
-	const existingLabel = getNodeLabel(node);
-	if (existingLabel && !force) {
+	const existingTitle = getCardTitle(node);
+	if (existingTitle && !force) {
 		return;
 	}
 
@@ -294,7 +289,7 @@ export const generateCardTitle = async (
 		const title = sanitizeTitle(String(response || ""));
 		if (!title) return;
 
-		await applyNodeLabel(node, title);
+		await applyCardTitle(node, title);
 		if (showNotices) {
 			new Notice(`Card title set: ${title}`);
 		}
@@ -360,7 +355,7 @@ export const generateGroupName = async (
 		const title = sanitizeTitle(String(response || ""));
 		if (!title) return;
 
-		await applyNodeLabel(node, title);
+		await applyGroupLabel(node, title);
 		new Notice(`Group name set: ${title}`);
 	} catch (error) {
 		new Notice(`Error generating group name: ${error.message || error}`);

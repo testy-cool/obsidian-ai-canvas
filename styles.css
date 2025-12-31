@@ -422,6 +422,11 @@
 	z-index: 2;
 }
 
+.ai-card-title-host {
+	position: relative !important;
+	overflow: visible !important;
+}
+
 .canvas-node:hover .ai-model-indicator {
 	opacity: 0.8 !important;
 }
