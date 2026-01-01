@@ -236,6 +236,7 @@ export const restoreModelIndicators = (canvas: any) => {
 
 	// Iterate through all nodes in the canvas
 	canvas.nodes.forEach((node: any) => {
+		if (!node?.contentEl) return;
 		const nodeData = node.getData();
 		
 		// Check if this node has AI model information

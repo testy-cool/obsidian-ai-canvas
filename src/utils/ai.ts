@@ -1,8 +1,80 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { GoogleGenerativeAILanguageModel } from "@ai-sdk/google/internal";
 import { streamText, generateText, CoreMessage } from "ai";
 import { logDebug } from "src/logDebug";
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
+
+const isSupportedGoogleFileUrl = (url: URL) =>
+	url.toString().startsWith("https://generativelanguage.googleapis.com/v1beta/files/");
+
+const isSupportedYouTubeUrl = (url: URL) => {
+	const value = url.toString();
+	return (
+		value.startsWith("https://www.youtube.com/") ||
+		value.startsWith("https://youtube.com/") ||
+		value.startsWith("https://youtu.be/")
+	);
+};
+
+const generateId = (size = 16) => {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+	let result = "";
+	for (let i = 0; i < size; i += 1) {
+		result += chars[Math.floor(Math.random() * chars.length)];
+	}
+	return result;
+};
+
+const withoutTrailingSlash = (value?: string) =>
+	value ? value.replace(/\/+$/, "") : value;
+
+const loadApiKey = (apiKey?: string) => {
+	if (!apiKey) {
+		throw new Error("Google Generative AI API key is missing.");
+	}
+	return apiKey;
+};
+
+const createGoogleGenerativeAI = (options: {
+	apiKey?: string;
+	baseURL?: string;
+	headers?: Record<string, string | undefined>;
+	generateId?: () => string;
+	fetch?: typeof fetch;
+} = {}) => {
+	const baseURL =
+		withoutTrailingSlash(options.baseURL) ??
+		"https://generativelanguage.googleapis.com/v1beta";
+	const getHeaders = () => ({
+		"x-goog-api-key": loadApiKey(options.apiKey),
+		...options.headers,
+	});
+	const createChatModel = (modelId: string, settings: Record<string, any> = {}) =>
+		new GoogleGenerativeAILanguageModel(modelId as any, settings, {
+			provider: "google.generative-ai",
+			baseURL,
+			headers: getHeaders,
+			generateId: options.generateId ?? generateId,
+			isSupportedUrl: (url: URL) =>
+				isSupportedGoogleFileUrl(url) || isSupportedYouTubeUrl(url),
+			fetch: options.fetch,
+		});
+
+	const provider = function (modelId: string, settings?: Record<string, any>) {
+		if (new.target) {
+			throw new Error(
+				"The Google Generative AI model function cannot be called with the new keyword."
+			);
+		}
+		return createChatModel(modelId, settings);
+	} as any;
+
+	provider.languageModel = createChatModel;
+	provider.chat = createChatModel;
+	provider.generativeAI = createChatModel;
+
+	return provider;
+};
 
 const getLlm = (provider: LLMProvider) => {
 	switch (provider.type) {
@@ -42,6 +114,9 @@ const getLlm = (provider: LLMProvider) => {
 const isGoogleProvider = (provider: LLMProvider) =>
 	provider.type === "Gemini" || provider.type === "Google";
 
+const supportsSearchGrounding = (modelId: string) =>
+	/^(?:models\/)?gemini-2\.5-/.test(modelId);
+
 export const streamResponse = async (
 	provider: LLMProvider,
 	messages: CoreMessage[],
@@ -66,16 +141,26 @@ export const streamResponse = async (
 
 	const llm = getLlm(provider) as any;
 	const modelId = model || "gemini-3-flash-preview";
-	const modelInstance = isGoogleProvider(provider)
-		? llm(modelId, { useSearchGrounding: true })
-		: llm(modelId);
+	const canUseSearch = isGoogleProvider(provider) && supportsSearchGrounding(modelId);
 
-	const result = await streamText({
-		model: modelInstance,
-		messages,
-		maxTokens: max_tokens,
-		temperature,
-	});
+	const runStream = (useSearchGrounding: boolean) =>
+		streamText({
+			model: useSearchGrounding ? llm(modelId, { useSearchGrounding: true }) : llm(modelId),
+			messages,
+			maxTokens: max_tokens,
+			temperature,
+		});
+
+	let result;
+	try {
+		result = await runStream(canUseSearch);
+	} catch (error) {
+		if (!canUseSearch) {
+			throw error;
+		}
+		logDebug("Search grounding failed, retrying without it.", { error });
+		result = await runStream(false);
+	}
 
 	for await (const part of result.fullStream) {
 		switch (part.type) {
@@ -119,17 +204,29 @@ export const getResponse = async (
 
 	const llm = getLlm(provider) as any;
 	const modelId = model || "gemini-3-flash-preview";
-	const modelInstance = isGoogleProvider(provider)
-		? llm(modelId, { useSearchGrounding: true })
-		: llm(modelId);
+	const canUseSearch = isGoogleProvider(provider) && supportsSearchGrounding(modelId);
 
-	const { text } = await generateText({
-		model: modelInstance,
-		messages,
-		maxTokens: max_tokens,
-		temperature,
-		// TODO: Add JSON mode with schema for better type safety
-	});
+	const runGenerate = (useSearchGrounding: boolean) =>
+		generateText({
+			model: useSearchGrounding ? llm(modelId, { useSearchGrounding: true }) : llm(modelId),
+			messages,
+			maxTokens: max_tokens,
+			temperature,
+			// TODO: Add JSON mode with schema for better type safety
+		});
+
+	let textResult;
+	try {
+		textResult = await runGenerate(canUseSearch);
+	} catch (error) {
+		if (!canUseSearch) {
+			throw error;
+		}
+		logDebug("Search grounding failed, retrying without it.", { error });
+		textResult = await runGenerate(false);
+	}
+
+	const { text } = textResult;
 
 	logDebug("AI response", { text });
 	if (isJSON) {
