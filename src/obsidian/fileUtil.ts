@@ -9,6 +9,21 @@ import {
 import { Canvas, CanvasNode, CreateNodeOptions } from "./canvas-internal";
 import { AugmentedCanvasSettings } from "src/settings/AugmentedCanvasSettings";
 
+const IMAGE_MIME_TYPES: Record<string, string> = {
+	png: "image/png",
+	jpg: "image/jpeg",
+	jpeg: "image/jpeg",
+	webp: "image/webp",
+	gif: "image/gif",
+	bmp: "image/bmp",
+	tif: "image/tiff",
+	tiff: "image/tiff",
+	svg: "image/svg+xml",
+};
+
+const getImageMimeType = (extension: string) =>
+	IMAGE_MIME_TYPES[extension.toLowerCase()] || null;
+
 export async function readFileContent(
 	app: App,
 	file: TFile,
@@ -119,6 +134,25 @@ export async function readNodeContent(node: CanvasNode) {
 				console.debug("Cannot read from file type", file);
 			}
 	}
+}
+
+export async function readNodeImageData(node: CanvasNode) {
+	const nodeData = node.getData() as { type?: string; file?: string };
+	if (nodeData?.type !== "file" && nodeData?.type !== "image") return null;
+	if (!nodeData.file) return null;
+
+	const file = node.app.vault.getAbstractFileByPath(nodeData.file);
+	if (!(file instanceof TFile)) return null;
+
+	const mimeType = getImageMimeType(file.extension);
+	if (!mimeType) return null;
+
+	const buffer = await node.app.vault.readBinary(file);
+	return {
+		data: new Uint8Array(buffer),
+		mimeType,
+		filename: file.basename,
+	};
 }
 
 export const getFilesContent = async (app: App, files: TFile[]) => {

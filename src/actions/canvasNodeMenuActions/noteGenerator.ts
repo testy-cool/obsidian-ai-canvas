@@ -19,7 +19,7 @@ import {
 } from "../../settings/AugmentedCanvasSettings";
 // import { Logger } from "./util/logging";
 import { visitNodeAndAncestors } from "../../obsidian/canvasUtil";
-import { readNodeContent } from "../../obsidian/fileUtil";
+import { readNodeContent, readNodeImageData } from "../../obsidian/fileUtil";
 import { getResponse, streamResponse } from "../../utils/llm";
 import { addModelIndicator } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
@@ -193,6 +193,8 @@ export function noteGenerator(
 		const provider = resolveProvider();
 		const model = resolveModel(provider);
 		const isGpt = provider?.type === "OpenAI";
+		const supportsVisionInput =
+			provider?.type === "Gemini" || provider?.type === "Google";
 		const canCountTokens = isGpt && typeof encodingForModel === "function";
 		const modelName = model?.model || settings.apiModel;
 
@@ -216,6 +218,9 @@ export function noteGenerator(
 
 			const nodeData = node.getData();
 			let nodeText = (await readNodeContent(node))?.trim() || "";
+			const nodeImage = supportsVisionInput
+				? await readNodeImageData(node)
+				: null;
 			const inputLimit = getTokenLimit(settings);
 
 			let shouldContinue = true;
@@ -253,16 +258,38 @@ export function noteGenerator(
 
 					tokenCount += keptNodeTokens;
 				}
+			}
 
-				const role: any =
-					nodeData.chat_role === "assistant" ? "assistant" : "user";
+			const role: any =
+				nodeData.chat_role === "assistant" ? "assistant" : "user";
 
-				if (edgeLabel) {
-					messages.unshift({
-						content: edgeLabel,
-						role: "user",
+			if (edgeLabel) {
+				messages.unshift({
+					content: edgeLabel,
+					role: "user",
+				});
+			}
+
+			if (nodeImage) {
+				const parts: any[] = [];
+				if (nodeText) {
+					parts.push({ type: "text", text: nodeText });
+				} else if (nodeImage.filename) {
+					parts.push({
+						type: "text",
+						text: `Image: ${nodeImage.filename}`,
 					});
 				}
+				parts.push({
+					type: "image",
+					image: nodeImage.data,
+					mimeType: nodeImage.mimeType,
+				});
+				messages.unshift({
+					content: parts,
+					role: role === "assistant" ? "user" : role,
+				});
+			} else if (nodeText) {
 				messages.unshift({
 					content: nodeText,
 					role,
