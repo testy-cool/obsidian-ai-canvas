@@ -19,9 +19,9 @@ import {
 } from "../../settings/AugmentedCanvasSettings";
 // import { Logger } from "./util/logging";
 import { visitNodeAndAncestors } from "../../obsidian/canvasUtil";
-import { readNodeContent, readNodeImageData } from "../../obsidian/fileUtil";
+import { readNodeContent, readNodeMediaData } from "../../obsidian/fileUtil";
 import { getResponse, streamResponse } from "../../utils/llm";
-import { addModelIndicator } from "../../utils";
+import { addModelIndicator, getYouTubeVideoId } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 
 /**
@@ -42,6 +42,10 @@ const emptyNoteHeight = 100;
 const NOTE_MAX_WIDTH = 400;
 export const NOTE_MIN_HEIGHT = 400;
 export const NOTE_INCR_HEIGHT_STEP = 150;
+
+const YOUTUBE_URL_PATTERN =
+	/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtube\.com\/shorts\/|youtu\.be\/)[^\s)]+/gi;
+const MAX_YOUTUBE_URLS = 10;
 
 // TODO : remove
 const logDebug = (text: any) => null;
@@ -85,6 +89,20 @@ const calculateNoteDimensions = (text: string, minWidth = 300, maxWidth = 800, p
 		width: Math.round(idealWidth),
 		height: Math.round(idealHeight)
 	};
+};
+
+const extractYouTubeUrls = (text: string) => {
+	if (!text) return [];
+	const urls = new Set<string>();
+	const matcher = new RegExp(YOUTUBE_URL_PATTERN.source, "gi");
+	for (const match of text.matchAll(matcher)) {
+		const rawUrl = match[0];
+		const videoId = getYouTubeVideoId(rawUrl);
+		if (!videoId) continue;
+		urls.add(`https://www.youtube.com/watch?v=${videoId}`);
+		if (urls.size >= MAX_YOUTUBE_URLS) break;
+	}
+	return Array.from(urls);
 };
 
 // const SYSTEM_PROMPT2 = `
@@ -218,8 +236,12 @@ export function noteGenerator(
 
 			const nodeData = node.getData();
 			let nodeText = (await readNodeContent(node))?.trim() || "";
-			const nodeImage = supportsVisionInput
-				? await readNodeImageData(node)
+			const nodeLinkUrl =
+				typeof (nodeData as { url?: string }).url === "string"
+					? (nodeData as { url?: string }).url!
+					: "";
+			let nodeMedia = supportsVisionInput
+				? await readNodeMediaData(node)
 				: null;
 			const inputLimit = getTokenLimit(settings);
 
@@ -270,28 +292,94 @@ export function noteGenerator(
 				});
 			}
 
-			if (nodeImage) {
+			const youtubeUrls =
+				supportsVisionInput && !nodeMedia
+					? extractYouTubeUrls(`${nodeLinkUrl}\n${nodeText}`)
+					: [];
+
+			if (nodeMedia?.kind === "too-large") {
+				const sizeMb = (nodeMedia.size / (1024 * 1024)).toFixed(1);
+				const limitMb = (nodeMedia.limit / (1024 * 1024)).toFixed(1);
+				new Notice(
+					`Skipping ${nodeMedia.filename || "media"} (${sizeMb} MB). Limit is ${limitMb} MB.`
+				);
+				nodeMedia = null;
+			}
+
+			if (nodeMedia?.kind === "image") {
 				const parts: any[] = [];
 				if (nodeText) {
 					parts.push({ type: "text", text: nodeText });
-				} else if (nodeImage.filename) {
+				} else if (nodeMedia.filename) {
 					parts.push({
 						type: "text",
-						text: `Image: ${nodeImage.filename}`,
+						text: `Image: ${nodeMedia.filename}`,
 					});
 				}
 				parts.push({
 					type: "image",
-					image: nodeImage.data,
-					mimeType: nodeImage.mimeType,
+					image: nodeMedia.data,
+					mimeType: nodeMedia.mimeType,
 				});
 				messages.unshift({
 					content: parts,
 					role: role === "assistant" ? "user" : role,
 				});
+			} else if (nodeMedia?.kind === "file") {
+				const parts: any[] = [];
+				parts.push({
+					type: "file",
+					data: nodeMedia.data,
+					mimeType: nodeMedia.mimeType,
+					filename: nodeMedia.filename,
+				});
+				if (nodeText) {
+					parts.push({ type: "text", text: nodeText });
+				} else if (nodeMedia.filename) {
+					parts.push({
+						type: "text",
+						text: `File: ${nodeMedia.filename}`,
+					});
+				}
+				messages.unshift({
+					content: parts,
+					role: role === "assistant" ? "user" : role,
+				});
+			} else if (youtubeUrls.length) {
+				const parts: any[] = [];
+				for (const url of youtubeUrls) {
+					try {
+						parts.push({
+							type: "file",
+							data: new URL(url),
+							mimeType: "video/mp4",
+						});
+					} catch {
+						continue;
+					}
+				}
+				if (nodeText) {
+					parts.push({ type: "text", text: nodeText });
+				}
+				if (parts.length) {
+					messages.unshift({
+						content: parts,
+						role: role === "assistant" ? "user" : role,
+					});
+				} else if (nodeText) {
+					messages.unshift({
+						content: nodeText,
+						role,
+					});
+				}
 			} else if (nodeText) {
 				messages.unshift({
 					content: nodeText,
+					role,
+				});
+			} else if (nodeLinkUrl) {
+				messages.unshift({
+					content: nodeLinkUrl,
 					role,
 				});
 			}

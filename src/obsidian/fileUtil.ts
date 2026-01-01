@@ -21,8 +21,46 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 	svg: "image/svg+xml",
 };
 
+const MEDIA_MIME_TYPES: Record<string, string> = {
+	...IMAGE_MIME_TYPES,
+	mp4: "video/mp4",
+	m4v: "video/x-m4v",
+	mov: "video/quicktime",
+	mkv: "video/x-matroska",
+	webm: "video/webm",
+	ogv: "video/ogg",
+	mpeg: "video/mpeg",
+	mpg: "video/mpeg",
+	avi: "video/x-msvideo",
+	flv: "video/x-flv",
+	wmv: "video/x-ms-wmv",
+	"3gp": "video/3gpp",
+	mp3: "audio/mpeg",
+	wav: "audio/wav",
+	m4a: "audio/mp4",
+	aac: "audio/aac",
+	flac: "audio/flac",
+	oga: "audio/ogg",
+	ogg: "audio/ogg",
+	opus: "audio/opus",
+};
+
+const MAX_INLINE_MEDIA_BYTES = 20 * 1024 * 1024;
+
 const getImageMimeType = (extension: string) =>
 	IMAGE_MIME_TYPES[extension.toLowerCase()] || null;
+const getMediaMimeType = (extension: string) =>
+	MEDIA_MIME_TYPES[extension.toLowerCase()] || null;
+
+const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
+	const bytes = new Uint8Array(buffer);
+	const chunkSize = 0x8000;
+	let binary = "";
+	for (let i = 0; i < bytes.length; i += chunkSize) {
+		binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+	}
+	return btoa(binary);
+};
 
 export async function readFileContent(
 	app: App,
@@ -152,6 +190,69 @@ export async function readNodeImageData(node: CanvasNode) {
 		data: new Uint8Array(buffer),
 		mimeType,
 		filename: file.basename,
+	};
+}
+
+export type NodeMediaData =
+	| {
+			kind: "image";
+			data: Uint8Array;
+			mimeType: string;
+			filename?: string;
+		}
+	| {
+			kind: "file";
+			data: string;
+			mimeType: string;
+			filename?: string;
+			size: number;
+		}
+	| {
+			kind: "too-large";
+			filename?: string;
+			size: number;
+			limit: number;
+	  };
+
+export async function readNodeMediaData(
+	node: CanvasNode
+): Promise<NodeMediaData | null> {
+	const nodeData = node.getData() as { type?: string; file?: string };
+	if (nodeData?.type !== "file" && nodeData?.type !== "image") return null;
+	if (!nodeData.file) return null;
+
+	const file = node.app.vault.getAbstractFileByPath(nodeData.file);
+	if (!(file instanceof TFile)) return null;
+
+	const mimeType = getMediaMimeType(file.extension);
+	if (!mimeType) return null;
+
+	if (mimeType.startsWith("image/")) {
+		const buffer = await node.app.vault.readBinary(file);
+		return {
+			kind: "image",
+			data: new Uint8Array(buffer),
+			mimeType,
+			filename: file.basename,
+		};
+	}
+
+	if (file.stat?.size && file.stat.size > MAX_INLINE_MEDIA_BYTES) {
+		return {
+			kind: "too-large",
+			filename: file.basename,
+			size: file.stat.size,
+			limit: MAX_INLINE_MEDIA_BYTES,
+		};
+	}
+
+	const buffer = await node.app.vault.readBinary(file);
+	return {
+		kind: "file",
+		data: arrayBufferToBase64(buffer),
+		mimeType,
+		filename: file.basename,
+		size: file.stat?.size || buffer.byteLength,
 	};
 }
 

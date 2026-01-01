@@ -39,6 +39,9 @@ const getLlm = (provider: LLMProvider) => {
 	}
 };
 
+const isGoogleProvider = (provider: LLMProvider) =>
+	provider.type === "Gemini" || provider.type === "Google";
+
 export const streamResponse = async (
 	provider: LLMProvider,
 	messages: CoreMessage[],
@@ -61,10 +64,14 @@ export const streamResponse = async (
 		provider,
 	});
 
-	const llm = getLlm(provider);
+	const llm = getLlm(provider) as any;
+	const modelId = model || "gemini-3-flash-preview";
+	const modelInstance = isGoogleProvider(provider)
+		? llm(modelId, { useSearchGrounding: true })
+		: llm(modelId);
 
 	const result = await streamText({
-		model: llm(model || "gemini-3-flash-preview"),
+		model: modelInstance,
 		messages,
 		maxTokens: max_tokens,
 		temperature,
@@ -110,10 +117,14 @@ export const getResponse = async (
 		provider,
 	});
 
-	const llm = getLlm(provider);
+	const llm = getLlm(provider) as any;
+	const modelId = model || "gemini-3-flash-preview";
+	const modelInstance = isGoogleProvider(provider)
+		? llm(modelId, { useSearchGrounding: true })
+		: llm(modelId);
 
 	const { text } = await generateText({
-		model: llm(model || "gemini-3-flash-preview"),
+		model: modelInstance,
 		messages,
 		maxTokens: max_tokens,
 		temperature,
