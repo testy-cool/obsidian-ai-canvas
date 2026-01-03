@@ -25,3 +25,7 @@ data.json
 .cursor
 .archive
 repomix-output.xml
+
+# local env and docs
+.env
+bigdocs/

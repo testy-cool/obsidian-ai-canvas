@@ -73,6 +73,7 @@ const applyCardTitle = async (node: CanvasNode, title: string) => {
 	}
 	if (node.canvas) {
 		await node.canvas.requestSave();
+		await node.canvas.requestFrame();
 	}
 };
 
@@ -88,6 +89,7 @@ const applyGroupLabel = async (node: CanvasNode, label: string) => {
 	}
 	if (node.canvas) {
 		await node.canvas.requestSave();
+		await node.canvas.requestFrame();
 	}
 };
 
