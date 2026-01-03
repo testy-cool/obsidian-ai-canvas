@@ -33,11 +33,24 @@ const truncateText = (text: string, maxLength: number) => {
 };
 
 const sanitizeTitle = (value: string) => {
-	const firstLine = value.split(/\r?\n/).find(line => line.trim().length > 0) || "";
-	let cleaned = firstLine.trim();
-	cleaned = cleaned.replace(/^["'`]+|["'`]+$/g, "");
-	cleaned = cleaned.replace(/\s+/g, " ");
-	return cleaned;
+	const lines = value
+		.split(/\r?\n/)
+		.map(line => line.trim())
+		.map(line => line.replace(/^["'`]+|["'`]+$/g, ""))
+		.map(line => line.replace(/^(?:[-*]|\d+[.)])\s+/, ""))
+		.filter(line => line.length > 0);
+
+	if (!lines.length) return "";
+
+	const countWords = (text: string) => text.split(/\s+/).filter(Boolean).length;
+
+	let combined = lines[0];
+	for (let i = 1; i < lines.length && countWords(combined) < 3; i += 1) {
+		combined = `${combined} ${lines[i]}`.trim();
+	}
+
+	combined = combined.replace(/\s+/g, " ");
+	return combined;
 };
 
 const getCardTitle = (node: CanvasNode) => {
