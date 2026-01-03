@@ -557,6 +557,7 @@ export function noteGenerator(
 									x: created.x, 
 									y: created.y 
 								});
+								void created.canvas?.requestFrame?.();
 							}
 						}
 
@@ -569,6 +570,7 @@ export function noteGenerator(
 								x: created.x, 
 								y: created.y 
 							});
+							void created.canvas?.requestFrame?.();
 							
 							// Add subtle model indicator to the note
 							addModelIndicator(created, provider.type, model.model);
