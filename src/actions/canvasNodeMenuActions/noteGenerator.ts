@@ -117,6 +117,104 @@ const isImageModel = (providerType: string, modelId: string) => {
 	);
 };
 
+const extractTextFromContent = (content: any) => {
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return content
+		.map((part: any) => {
+			if (typeof part === "string") return part;
+			if (part?.type === "text" && typeof part.text === "string") {
+				return part.text;
+			}
+			return "";
+		})
+		.filter(Boolean)
+		.join("\n");
+};
+
+const buildImagePromptFromMessages = (messages: any[]) =>
+	messages
+		.filter((message) => message?.role !== "system")
+		.map((message) => {
+			const text = extractTextFromContent(message?.content);
+			if (!text) return "";
+			const roleLabel =
+				typeof message?.role === "string" && message.role.length > 0
+					? `${message.role.toUpperCase()}: `
+					: "";
+			return `${roleLabel}${text}`;
+		})
+		.filter(Boolean)
+		.join("\n\n");
+
+const toBase64 = (value: unknown) => {
+	if (typeof value === "string") return value;
+	let bytes: Uint8Array | null = null;
+	if (value instanceof Uint8Array) {
+		bytes = value;
+	} else if (value instanceof ArrayBuffer) {
+		bytes = new Uint8Array(value);
+	} else if (typeof Buffer !== "undefined" && value instanceof Buffer) {
+		bytes = new Uint8Array(value);
+	}
+	if (!bytes) return "";
+
+	const chunkSize = 0x8000;
+	let binary = "";
+	for (let i = 0; i < bytes.length; i += chunkSize) {
+		binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+	}
+	return btoa(binary);
+};
+
+const buildGeminiImagePartsFromMessages = (messages: any[]) => {
+	const parts: { text?: string; inlineData?: { data: string; mimeType: string } }[] = [];
+
+	for (const message of messages) {
+		if (message?.role === "system") continue;
+		const roleLabel =
+			typeof message?.role === "string" && message.role.length > 0
+				? message.role.toUpperCase()
+				: "USER";
+		const content = message?.content;
+
+		if (typeof content === "string") {
+			const text = content.trim();
+			if (text) {
+				parts.push({ text: `${roleLabel}: ${text}` });
+			}
+			continue;
+		}
+
+		if (!Array.isArray(content)) continue;
+		let hasRolePrefix = false;
+
+		for (const part of content) {
+			if (part?.type === "text" && typeof part.text === "string") {
+				const text = part.text.trim();
+				if (!text) continue;
+				const prefix = hasRolePrefix ? "" : `${roleLabel}: `;
+				parts.push({ text: `${prefix}${text}` });
+				hasRolePrefix = true;
+				continue;
+			}
+
+			if (part?.type === "image" && part.image) {
+				const base64 = toBase64(part.image);
+				if (!base64) continue;
+				parts.push({
+					inlineData: {
+						data: base64,
+						mimeType: part.mimeType || "image/png",
+					},
+				});
+			}
+		}
+	}
+
+	return parts;
+};
+
 // const SYSTEM_PROMPT2 = `
 // You must respond in this JSON format: {
 // 	"response": Your response, must be in markdown,
@@ -458,20 +556,21 @@ export function noteGenerator(
 			await canvas.requestSave();
 			await sleep(200);
 
-			if (isImageModel(provider.type, model.model)) {
-				const promptOverride =
-					question || (await readNodeContent(node)) || node.text;
-				await handleGenerateImage(app, settings, node, {
-					provider,
-					model: model.model,
-					prompt: promptOverride,
-				});
-				return;
-			}
-
 			const { messages, tokenCount } = await buildMessages(node, {
 				prompt: question,
 			});
+
+			if (isImageModel(provider.type, model.model)) {
+				const promptOverride = buildImagePromptFromMessages(messages);
+				const parts = buildGeminiImagePartsFromMessages(messages);
+				await handleGenerateImage(app, settings, node, {
+					provider,
+					model: model.model,
+					prompt: promptOverride || node.text,
+					parts: parts.length ? parts : undefined,
+				});
+				return;
+			}
 			// console.log({ messages });
 			if (!messages.length) return;
 

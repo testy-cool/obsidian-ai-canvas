@@ -116,9 +116,11 @@ export const createGeminiImage = async (
 	{
 		model,
 		baseUrl,
+		parts,
 	}: {
 		model?: string;
 		baseUrl?: string;
+		parts?: { text?: string; inlineData?: { data: string; mimeType: string } }[];
 	} = {}
 ): Promise<ImageGenerationOutput> => {
 	if (!apiKey) {
@@ -133,11 +135,16 @@ export const createGeminiImage = async (
 	const geminiBaseUrl = normalizeGeminiBaseUrl(baseUrl);
 	const url = `${geminiBaseUrl}/models/${modelId}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
+	const contentParts =
+		Array.isArray(parts) && parts.length > 0
+			? parts
+			: [{ text: prompt }];
+
 	const body = {
 		contents: [
 			{
 				role: "user",
-				parts: [{ text: prompt }],
+				parts: contentParts,
 			},
 		],
 		generationConfig: {

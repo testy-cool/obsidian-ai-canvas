@@ -45,6 +45,7 @@ import { runPromptFolder } from "./actions/commands/runPromptFolder";
 import { InputModal } from "./Modals/InputModal";
 import { runYoutubeCaptions } from "./actions/commands/youtubeCaptions";
 import { insertWebsiteContent } from "./actions/commands/websiteContent";
+import { noteGenerator } from "./actions/canvasNodeMenuActions/noteGenerator";
 
 // @ts-expect-error
 import promptsCsvText from "./data/prompts.csv.txt";
@@ -238,6 +239,18 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	patchCanvasMenu() {
 		const app = this.app;
 		const settings = this.settings;
+		const resolveGeminiProvider = () =>
+			settings.providers.find((provider) => {
+				const id = provider.id?.toLowerCase() || "";
+				const type = provider.type?.toLowerCase() || "";
+				return id === "gemini" || id === "google" || type === "gemini" || type === "google";
+			});
+		const createNanoBananaModel = (providerId: string) => ({
+			id: "nano-banana-pro-preview",
+			providerId: providerId,
+			model: "nano-banana-pro-preview",
+			enabled: true,
+		});
 
 		const patchMenu = () => {
 			const canvasView = this.app.workspace
@@ -351,6 +364,33 @@ export default class AugmentedCanvasPlugin extends Plugin {
 							// * Handles "Ask Question with Model Selection" button
 							addAskQuestionWithModelButton(app, settings, this.menuEl);
 
+							const buttonEl_GenerateImage = createEl(
+								"button",
+								"clickable-icon ai-menu-item"
+							);
+							setTooltip(buttonEl_GenerateImage, "Generate image (NanoBanana)", {
+								placement: "top",
+							});
+							setIcon(buttonEl_GenerateImage, "lucide-image");
+							this.menuEl.appendChild(buttonEl_GenerateImage);
+							buttonEl_GenerateImage.addEventListener("click", () => {
+								const geminiProvider = resolveGeminiProvider();
+								if (!geminiProvider) {
+									new Notice("No Gemini provider configured for NanoBanana.");
+									return;
+								}
+								const nanoModel = createNanoBananaModel(geminiProvider.id);
+								const { generateNote } = noteGenerator(
+									app,
+									settings,
+									selectedNode as unknown as CanvasNode,
+									undefined,
+									geminiProvider,
+									nanoModel
+								);
+								void generateNote();
+							});
+
 							const nodeType =
 								// @ts-expect-error
 								selectedNode?.getData?.()?.type ||
@@ -408,6 +448,18 @@ export default class AugmentedCanvasPlugin extends Plugin {
 
 	patchNoteContextMenu() {
 		const settings = this.settings;
+		const resolveGeminiProvider = () =>
+			settings.providers.find((provider) => {
+				const id = provider.id?.toLowerCase() || "";
+				const type = provider.type?.toLowerCase() || "";
+				return id === "gemini" || id === "google" || type === "gemini" || type === "google";
+			});
+		const createNanoBananaModel = (providerId: string) => ({
+			id: "nano-banana-pro-preview",
+			providerId: providerId,
+			model: "nano-banana-pro-preview",
+			enabled: true,
+		});
 		// * no event name to add to Canvas context menu ("canvas-menu" does not exist)
 		this.registerEvent(
 			this.app.workspace.on("canvas:node-menu", (menu) => {
@@ -417,6 +469,27 @@ export default class AugmentedCanvasPlugin extends Plugin {
 						.setIcon("lucide-image")
 						.onClick(() => {
 							handleGenerateImage(this.app, settings);
+						});
+				});
+				menu.addItem((item) => {
+					item.setTitle("Generate image (NanoBanana)")
+						.setIcon("lucide-image")
+						.onClick(() => {
+							const geminiProvider = resolveGeminiProvider();
+							if (!geminiProvider) {
+								new Notice("No Gemini provider configured for NanoBanana.");
+								return;
+							}
+							const nanoModel = createNanoBananaModel(geminiProvider.id);
+							const { generateNote } = noteGenerator(
+								this.app,
+								settings,
+								undefined,
+								undefined,
+								geminiProvider,
+								nanoModel
+							);
+							void generateNote();
 						});
 				});
 			})

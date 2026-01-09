@@ -38,6 +38,7 @@ export async function handleGenerateImage(
 		provider?: LLMProvider;
 		model?: string;
 		prompt?: string;
+		parts?: { text?: string; inlineData?: { data: string; mimeType: string } }[];
 	}
 ) {
 	const imageProviderId = settings.imageProviderId || settings.activeProvider;
@@ -93,6 +94,7 @@ export async function handleGenerateImage(
 			? await createGeminiImage(apiKey, nodeContent, {
 					model: model,
 					baseUrl: imageProvider?.baseUrl,
+					parts: options?.parts,
 			  })
 			: await createImage(
 					apiKey,

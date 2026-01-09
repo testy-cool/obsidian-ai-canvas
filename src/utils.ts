@@ -8,7 +8,7 @@ import {
 	TFile,
 	CanvasGroupNode,
 } from "obsidian";
-import { CanvasView, createNode } from "./obsidian/canvas-patches";
+import { CanvasView, addEdge, getIncomingEdgeDirection } from "./obsidian/canvas-patches";
 import { readFileContent, readNodeContent } from "./obsidian/fileUtil";
 import { CanvasNode } from "./obsidian/canvas-internal";
 import { AugmentedCanvasSettings } from "./settings/AugmentedCanvasSettings";
@@ -129,6 +129,24 @@ export function addImageNode(
 	const IMAGE_WIDTH = parentNode.width || 300;
 	const IMAGE_HEIGHT = IMAGE_WIDTH * (1024 / 1792) + 20;
 	
+	const directionBias = getIncomingEdgeDirection(parentNode);
+	const edgeFromSide =
+		directionBias === "left"
+			? "left"
+			: directionBias === "right"
+				? "right"
+				: directionBias === "up"
+					? "top"
+					: "bottom";
+	const edgeToSide =
+		directionBias === "left"
+			? "right"
+			: directionBias === "right"
+				? "left"
+				: directionBias === "up"
+					? "bottom"
+					: "top";
+
 	if (filePathOrFile) {
 		const file =
 			typeof filePathOrFile === "string"
@@ -152,6 +170,24 @@ export function addImageNode(
 		});
 		
 		canvas.addNode(node);
+		addEdge(
+			canvas,
+			randomHexString(16),
+			{
+				fromOrTo: "from",
+				side: edgeFromSide,
+				node: parentNode,
+			},
+			{
+				fromOrTo: "to",
+				side: edgeToSide,
+				node: node,
+			},
+			undefined,
+			{
+				isGenerated: true,
+			}
+		);
 		return node;
 	} else if (buffer) {
 		const blob = new Blob([buffer], { type: mimeType || "image/png" });
@@ -172,6 +208,24 @@ export function addImageNode(
 		});
 		
 		canvas.addNode(node);
+		addEdge(
+			canvas,
+			randomHexString(16),
+			{
+				fromOrTo: "from",
+				side: edgeFromSide,
+				node: parentNode,
+			},
+			{
+				fromOrTo: "to",
+				side: edgeToSide,
+				node: node,
+			},
+			undefined,
+			{
+				isGenerated: true,
+			}
+		);
 		return node;
 	}
 	
