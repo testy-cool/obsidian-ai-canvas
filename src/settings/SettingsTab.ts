@@ -22,6 +22,7 @@ export default class SettingsTab extends PluginSettingTab {
         this.renderGeneralSettings(containerEl);
         this.renderProviders(containerEl);
         this.renderGenerationSettings(containerEl);
+		this.renderImageSettings(containerEl);
 		this.renderNamingSettings(containerEl);
         this.renderPromptManagement(containerEl);
     }
@@ -341,16 +342,76 @@ export default class SettingsTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName("Max Response Tokens")
             .setDesc("The maximum number of tokens to generate. (0 for unlimited)")
-            .addText(text => text
-                .setValue(this.plugin.settings.maxResponseTokens.toString())
-                .onChange(async (value) => {
-                    const parsed = parseInt(value);
-                    if (!isNaN(parsed)) {
-                        this.plugin.settings.maxResponseTokens = parsed;
-                        await this.plugin.saveSettings();
-                    }
-                }));
+                .addText(text => text
+                    .setValue(this.plugin.settings.maxResponseTokens.toString())
+                    .onChange(async (value) => {
+                        const parsed = parseInt(value);
+                        if (!isNaN(parsed)) {
+                            this.plugin.settings.maxResponseTokens = parsed;
+                            await this.plugin.saveSettings();
+                        }
+                    }));
     }
+
+	private renderImageSettings(containerEl: HTMLElement) {
+		new Setting(containerEl).setHeading().setName("Image Generation");
+
+		new Setting(containerEl)
+			.setName("Image provider")
+			.setDesc("Provider used for image generation.")
+			.addDropdown(dropdown => {
+				dropdown.addOption("", "Default (active provider)");
+				this.plugin.settings.providers.forEach(provider => {
+					dropdown.addOption(provider.id, provider.type);
+				});
+				dropdown
+					.setValue(this.plugin.settings.imageProviderId || "")
+					.onChange(async value => {
+						this.plugin.settings.imageProviderId = value;
+						const providerId = value || this.plugin.settings.activeProvider;
+						const models = this.plugin.settings.models.filter(
+							model => model.providerId === providerId && model.enabled
+						);
+						if (
+							this.plugin.settings.imageModelId &&
+							!models.some(model => model.id === this.plugin.settings.imageModelId)
+						) {
+							this.plugin.settings.imageModelId = models[0]?.id || "";
+						}
+						await this.plugin.saveSettings();
+						this.display();
+					});
+			});
+
+		const imageProviderId =
+			this.plugin.settings.imageProviderId || this.plugin.settings.activeProvider;
+		const imageModels = this.plugin.settings.models.filter(
+			model => model.providerId === imageProviderId && model.enabled
+		);
+		const imageModelValue =
+			imageModels.find(model => model.id === this.plugin.settings.imageModelId)
+				?.id || "";
+		if (imageModelValue !== this.plugin.settings.imageModelId) {
+			this.plugin.settings.imageModelId = imageModelValue;
+			void this.plugin.saveSettings();
+		}
+
+		new Setting(containerEl)
+			.setName("Image model")
+			.setDesc("Model used for image generation (e.g., Gemini NanoBanana).")
+			.addDropdown(dropdown => {
+				dropdown.addOption("", "Default (dall-e-3)");
+				imageModels.forEach(model => {
+					dropdown.addOption(model.id, model.model);
+				});
+				dropdown
+					.setValue(imageModelValue)
+					.onChange(async value => {
+						this.plugin.settings.imageModelId = value;
+						await this.plugin.saveSettings();
+					});
+			});
+	}
 
 	private renderNamingSettings(containerEl: HTMLElement) {
 		new Setting(containerEl).setHeading().setName("Naming Settings");

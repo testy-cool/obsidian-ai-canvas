@@ -143,6 +143,16 @@ export interface AugmentedCanvasSettings {
 	imagesPath?: string;
 
 	/**
+	 * Provider used for image generation (empty means default provider).
+	 */
+	imageProviderId: string;
+
+	/**
+	 * Model used for image generation (empty means default image model).
+	 */
+	imageModelId: string;
+
+	/**
 	 * The Youtube API Key
 	 */
 	youtubeApiKey: string;
@@ -276,6 +286,8 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	insertRelevantQuestionsFilesCount: 10,
 	relevantQuestionsSystemPrompt: RELEVANT_QUESTION_SYSTEM_PROMPT,
 	imagesPath: undefined,
+	imageProviderId: "",
+	imageModelId: "",
 	youtubeApiKey: "",
 	providers: DEFAULT_PROVIDERS,
 	models: DEFAULT_MODELS,

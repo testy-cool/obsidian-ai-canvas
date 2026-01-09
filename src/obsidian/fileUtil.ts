@@ -21,6 +21,17 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 	svg: "image/svg+xml",
 };
 
+const IMAGE_EXTENSIONS_BY_MIME: Record<string, string> = {
+	"image/png": "png",
+	"image/jpeg": "jpg",
+	"image/jpg": "jpg",
+	"image/webp": "webp",
+	"image/gif": "gif",
+	"image/bmp": "bmp",
+	"image/tiff": "tiff",
+	"image/svg+xml": "svg",
+};
+
 const MEDIA_MIME_TYPES: Record<string, string> = {
 	...IMAGE_MIME_TYPES,
 	mp4: "video/mp4",
@@ -51,6 +62,28 @@ const getImageMimeType = (extension: string) =>
 	IMAGE_MIME_TYPES[extension.toLowerCase()] || null;
 const getMediaMimeType = (extension: string) =>
 	MEDIA_MIME_TYPES[extension.toLowerCase()] || null;
+const getImageExtensionForMime = (mimeType?: string) =>
+	IMAGE_EXTENSIONS_BY_MIME[mimeType?.toLowerCase() || ""] || "png";
+
+const normalizeFileToken = (value: string) =>
+	value
+		.toLowerCase()
+		.replace(/[^a-z0-9_-]+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^[-_]+|[-_]+$/g, "");
+
+export const buildImageFileName = (prefix: string, mimeType?: string) => {
+	const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+	const extension = getImageExtensionForMime(mimeType);
+	const safePrefix = normalizeFileToken(prefix) || "image";
+	return `${safePrefix}-generated-${timestamp}.${extension}`;
+};
+
+export const buildResponseFileName = (prefix: string) => {
+	const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+	const safePrefix = normalizeFileToken(prefix) || "response";
+	return `${safePrefix}-generated-${timestamp}.json`;
+};
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
 	const bytes = new Uint8Array(buffer);
@@ -363,7 +396,8 @@ ${await cachedReadFile(app, fileOrFolder)}
  * Converts a base64 string to an ArrayBuffer
  */
 export function getImageBuffer(base64String: string): ArrayBuffer {
-	const byteCharacters = atob(base64String);
+	const sanitized = base64String.replace(/\s/g, "");
+	const byteCharacters = atob(sanitized);
 	const byteNumbers = new Array(byteCharacters.length);
 	
 	for (let i = 0; i < byteCharacters.length; i++) {
@@ -376,24 +410,85 @@ export function getImageBuffer(base64String: string): ArrayBuffer {
 /**
  * Saves an image buffer to a file in the specified folder
  */
-export async function saveImageToFile(app: App, buffer: ArrayBuffer, folderPath: string): Promise<TFile | null> {
-	try {
+export async function saveImageToFile(
+	app: App,
+	buffer: ArrayBuffer,
+	folderPath: string,
+	mimeType?: string,
+	fileNameOverride?: string
+): Promise<TFile | null> {
+	const normalizedFolderPath = folderPath.replace(/\/+$/, "");
+	if (normalizedFolderPath) {
 		// Create folder if it doesn't exist
-		const folderExists = app.vault.getAbstractFileByPath(folderPath) instanceof TFolder;
+		const folderExists = app.vault.getAbstractFileByPath(normalizedFolderPath) instanceof TFolder;
 		if (!folderExists) {
-			await app.vault.createFolder(folderPath);
+			await app.vault.createFolder(normalizedFolderPath);
 		}
-		
-		// Generate a filename with timestamp
-		const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-		const fileName = `image-${timestamp}.png`;
-		const filePath = `${folderPath}/${fileName}`;
-		
-		// Create the file
-		const file = await app.vault.createBinary(filePath, buffer);
-		return file;
-	} catch (error) {
-		console.error("Error saving image to file:", error);
-		return null;
 	}
+
+	const fileName = fileNameOverride || buildImageFileName("image", mimeType);
+	const filePath = normalizedFolderPath
+		? `${normalizedFolderPath}/${fileName}`
+		: fileName;
+
+	// Create the file
+	const file = await app.vault.createBinary(filePath, buffer);
+	return file;
+}
+
+export async function saveImageToAttachment(
+	app: App,
+	buffer: ArrayBuffer,
+	mimeType?: string,
+	sourcePath?: string,
+	fileNameOverride?: string,
+	filePathOverride?: string
+): Promise<TFile | null> {
+	const fileName = fileNameOverride || buildImageFileName("image", mimeType);
+	const filePath =
+		filePathOverride ||
+		(await app.fileManager.getAvailablePathForAttachment(
+			fileName,
+			sourcePath
+	));
+	return await app.vault.createBinary(filePath, buffer);
+}
+
+export async function saveTextToFile(
+	app: App,
+	text: string,
+	folderPath: string,
+	fileNameOverride?: string
+): Promise<TFile | null> {
+	const normalizedFolderPath = folderPath.replace(/\/+$/, "");
+	if (normalizedFolderPath) {
+		const folderExists = app.vault.getAbstractFileByPath(normalizedFolderPath) instanceof TFolder;
+		if (!folderExists) {
+			await app.vault.createFolder(normalizedFolderPath);
+		}
+	}
+
+	const fileName = fileNameOverride || buildResponseFileName("response");
+	const filePath = normalizedFolderPath
+		? `${normalizedFolderPath}/${fileName}`
+		: fileName;
+
+	return await app.vault.create(filePath, text);
+}
+
+export async function saveTextToAttachment(
+	app: App,
+	text: string,
+	sourcePath?: string,
+	fileNameOverride?: string,
+	filePathOverride?: string
+): Promise<TFile | null> {
+	const fileName = fileNameOverride || buildResponseFileName("response");
+	const filePath =
+		filePathOverride ||
+		(await app.fileManager.getAvailablePathForAttachment(
+			fileName,
+			sourcePath
+		));
+	return await app.vault.create(filePath, text);
 }

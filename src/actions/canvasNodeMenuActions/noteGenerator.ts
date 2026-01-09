@@ -20,6 +20,7 @@ import {
 // import { Logger } from "./util/logging";
 import { visitNodeAndAncestors } from "../../obsidian/canvasUtil";
 import { readNodeContent, readNodeMediaData } from "../../obsidian/fileUtil";
+import { handleGenerateImage } from "../canvasNodeContextMenuActions/generateImage";
 import { getResponse, streamResponse } from "../../utils/llm";
 import { addModelIndicator, getYouTubeVideoId } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
@@ -103,6 +104,17 @@ const extractYouTubeUrls = (text: string) => {
 		if (urls.size >= MAX_YOUTUBE_URLS) break;
 	}
 	return Array.from(urls);
+};
+
+const isImageModel = (providerType: string, modelId: string) => {
+	const normalizedType = providerType.toLowerCase();
+	if (normalizedType !== "gemini" && normalizedType !== "google") return false;
+	const normalizedModel = modelId.toLowerCase();
+	return (
+		normalizedModel.includes("nano-banana") ||
+		normalizedModel.includes("imagen") ||
+		normalizedModel.includes("image")
+	);
 };
 
 // const SYSTEM_PROMPT2 = `
@@ -445,6 +457,17 @@ export function noteGenerator(
 			// Last typed characters might not be applied to note yet
 			await canvas.requestSave();
 			await sleep(200);
+
+			if (isImageModel(provider.type, model.model)) {
+				const promptOverride =
+					question || (await readNodeContent(node)) || node.text;
+				await handleGenerateImage(app, settings, node, {
+					provider,
+					model: model.model,
+					prompt: promptOverride,
+				});
+				return;
+			}
 
 			const { messages, tokenCount } = await buildMessages(node, {
 				prompt: question,

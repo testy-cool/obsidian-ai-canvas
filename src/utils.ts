@@ -118,14 +118,29 @@ export const getCanvasActiveNoteText = (app: App) => {
 /**
  * Adds an image node to the canvas
  */
-export function addImageNode(app: App, canvas: any, buffer: ArrayBuffer | null, filePath: string, parentNode: any) {
+export function addImageNode(
+	app: App,
+	canvas: any,
+	buffer: ArrayBuffer | null,
+	filePathOrFile: string | TFile,
+	parentNode: any,
+	mimeType?: string
+) {
 	const IMAGE_WIDTH = parentNode.width || 300;
 	const IMAGE_HEIGHT = IMAGE_WIDTH * (1024 / 1792) + 20;
 	
-	if (filePath) {
+	if (filePathOrFile) {
+		const file =
+			typeof filePathOrFile === "string"
+				? app.vault.getAbstractFileByPath(filePathOrFile)
+				: filePathOrFile;
+		if (!(file instanceof TFile)) {
+			return null;
+		}
+
 		// Create a file node with the saved image
 		const node = canvas.createFileNode({
-			file: app.vault.getAbstractFileByPath(filePath),
+			file,
 			pos: {
 				x: parentNode.x,
 				y: parentNode.y + parentNode.height + 30
@@ -136,11 +151,16 @@ export function addImageNode(app: App, canvas: any, buffer: ArrayBuffer | null, 
 			}
 		});
 		
+		canvas.addNode(node);
 		return node;
 	} else if (buffer) {
+		const blob = new Blob([buffer], { type: mimeType || "image/png" });
+		const url = URL.createObjectURL(blob);
+		const markdown = `![Generated Image](${url})`;
+
 		// Create a text node with embedded image
 		const node = canvas.createTextNode({
-			text: "Image",
+			text: markdown,
 			pos: {
 				x: parentNode.x,
 				y: parentNode.y + parentNode.height + 30
@@ -151,14 +171,7 @@ export function addImageNode(app: App, canvas: any, buffer: ArrayBuffer | null, 
 			}
 		});
 		
-		// Add the image data to the node
-		// This is a simplified version, you might need to adapt this to how your canvas handles embedded images
-		const blob = new Blob([buffer], { type: "image/png" });
-		const url = URL.createObjectURL(blob);
-		
-		// Update the node text to show the image (using markdown image syntax)
-		node.setText(`![Generated Image](${url})`);
-		
+		canvas.addNode(node);
 		return node;
 	}
 	

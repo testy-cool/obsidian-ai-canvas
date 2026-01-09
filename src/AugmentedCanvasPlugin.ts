@@ -213,6 +213,26 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		);
 		this.settings.groupTitleProviderId = groupSelection.providerId;
 		this.settings.groupTitleModelId = groupSelection.modelId;
+
+		if (
+			this.settings.imageProviderId &&
+			!this.settings.providers.some(
+				provider => provider.id === this.settings.imageProviderId
+			)
+		) {
+			this.settings.imageProviderId = "";
+		}
+
+		if (this.settings.imageModelId) {
+			const resolvedProviderId =
+				this.settings.imageProviderId || this.settings.activeProvider;
+			const enabledImageModels = this.settings.models.filter(
+				model => model.providerId === resolvedProviderId && model.enabled
+			);
+			if (!enabledImageModels.some(model => model.id === this.settings.imageModelId)) {
+				this.settings.imageModelId = "";
+			}
+		}
 	}
 
 	patchCanvasMenu() {
