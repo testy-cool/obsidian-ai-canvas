@@ -124,10 +124,17 @@ export function addImageNode(
 	buffer: ArrayBuffer | null,
 	filePathOrFile: string | TFile,
 	parentNode: any,
-	mimeType?: string
+	mimeType?: string,
+	edgeLabel?: string,
+	placementNode?: CanvasNode
 ) {
-	const IMAGE_WIDTH = parentNode.width || 300;
-	const IMAGE_HEIGHT = IMAGE_WIDTH * (1024 / 1792) + 20;
+	const referenceNode = placementNode || parentNode;
+	const IMAGE_WIDTH = referenceNode?.width || parentNode.width || 300;
+	const IMAGE_HEIGHT = referenceNode?.height || IMAGE_WIDTH * (1024 / 1792) + 20;
+	const placementX = placementNode ? placementNode.x : parentNode.x;
+	const placementY = placementNode
+		? placementNode.y
+		: parentNode.y + parentNode.height + 30;
 	
 	const directionBias = getIncomingEdgeDirection(parentNode);
 	const edgeFromSide =
@@ -160,8 +167,8 @@ export function addImageNode(
 		const node = canvas.createFileNode({
 			file,
 			pos: {
-				x: parentNode.x,
-				y: parentNode.y + parentNode.height + 30
+				x: placementX,
+				y: placementY
 			},
 			size: {
 				width: IMAGE_WIDTH,
@@ -183,7 +190,7 @@ export function addImageNode(
 				side: edgeToSide,
 				node: node,
 			},
-			undefined,
+			edgeLabel,
 			{
 				isGenerated: true,
 			}
@@ -198,8 +205,8 @@ export function addImageNode(
 		const node = canvas.createTextNode({
 			text: markdown,
 			pos: {
-				x: parentNode.x,
-				y: parentNode.y + parentNode.height + 30
+				x: placementX,
+				y: placementY
 			},
 			size: {
 				width: IMAGE_WIDTH,
@@ -221,7 +228,7 @@ export function addImageNode(
 				side: edgeToSide,
 				node: node,
 			},
-			undefined,
+			edgeLabel,
 			{
 				isGenerated: true,
 			}

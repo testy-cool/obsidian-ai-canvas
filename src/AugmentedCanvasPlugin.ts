@@ -72,6 +72,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 			this.patchCanvasMenu();
 			this.addCommands();
 			this.patchNoteContextMenu();
+			this.patchCanvasSelectionMenu();
 
 			// Set up persistent model indicators
 			this.cleanupIndicatorPersistence = setupCanvasIndicatorPersistence(this.app);
@@ -490,6 +491,56 @@ export default class AugmentedCanvasPlugin extends Plugin {
 								nanoModel
 							);
 							void generateNote();
+						});
+				});
+			})
+		);
+	}
+
+	patchCanvasSelectionMenu() {
+		const app = this.app;
+		const settings = this.settings;
+		const resolveSourceNode = (canvas: Canvas) => {
+			const selection = Array.from(canvas.selection.values());
+			if (selection.length === 1) {
+				const selected = selection[0] as any;
+				if (selected?.from?.node) {
+					return selected.from.node as CanvasNode;
+				}
+				return selected as CanvasNode;
+			}
+			const target = canvas.nodeInteractionLayer?.target as CanvasNode | null;
+			return target ?? null;
+		};
+
+		this.registerEvent(
+			this.app.workspace.on("canvas:selection-menu", (menu, canvas) => {
+				menu.addSeparator();
+				menu.addItem((item) => {
+					item.setTitle("Generate image")
+						.setIcon("lucide-image")
+						.onClick(() => {
+							const sourceNode = resolveSourceNode(canvas);
+							if (!sourceNode) {
+								new Notice("Select a card to generate an image from.");
+								return;
+							}
+
+							const modal = new InputModal(
+								app,
+								{
+									label: "Image prompt (optional)",
+									buttonLabel: "Generate image",
+								},
+								(prompt: string) => {
+									const trimmedPrompt = prompt.trim();
+									void handleGenerateImage(app, settings, sourceNode, {
+										prompt: trimmedPrompt || undefined,
+										edgeLabel: trimmedPrompt || undefined,
+									});
+								}
+							);
+							modal.open();
 						});
 				});
 			})

@@ -556,6 +556,7 @@ export function noteGenerator(
 			await canvas.requestSave();
 			await sleep(200);
 
+			const trimmedQuestion = question?.trim();
 			const { messages, tokenCount } = await buildMessages(node, {
 				prompt: question,
 			});
@@ -567,6 +568,7 @@ export function noteGenerator(
 					provider,
 					model: model.model,
 					prompt: promptOverride || node.text,
+					edgeLabel: trimmedQuestion || undefined,
 					parts: parts.length ? parts : undefined,
 				});
 				return;

@@ -2,7 +2,8 @@ import { App, ItemView, Notice, TFile, TFolder } from "obsidian";
 import { AugmentedCanvasSettings, LLMProvider } from "src/settings/AugmentedCanvasSettings";
 import { createGeminiImage, createImage } from "src/utils/llm";
 import { Canvas, CanvasNode } from "src/obsidian/canvas-internal";
-import { addImageNode } from "src/utils";
+import { addEdge, getIncomingEdgeDirection } from "src/obsidian/canvas-patches";
+import { addImageNode, randomHexString } from "src/utils";
 import {
 	buildImageFileName,
 	buildResponseFileName,
@@ -30,6 +31,76 @@ const getImageBaseUrl = (provider?: LLMProvider) => {
 	return baseUrl.endsWith("/openai") ? baseUrl : `${baseUrl}/openai`;
 };
 
+const IMAGE_ASPECT_RATIO = 1024 / 1792;
+
+const getImageNodeDimensions = (parentNode: CanvasNode) => {
+	const width = parentNode?.width || 300;
+	const height = width * IMAGE_ASPECT_RATIO + 20;
+	return { width, height };
+};
+
+const getEdgeSidesForDirection = (
+	directionBias: ReturnType<typeof getIncomingEdgeDirection>
+) => {
+	if (directionBias === "left") {
+		return { fromSide: "left", toSide: "right" };
+	}
+	if (directionBias === "right") {
+		return { fromSide: "right", toSide: "left" };
+	}
+	if (directionBias === "up") {
+		return { fromSide: "top", toSide: "bottom" };
+	}
+	return { fromSide: "bottom", toSide: "top" };
+};
+
+const createImagePlaceholderNode = (
+	canvas: Canvas,
+	parentNode: CanvasNode,
+	label: string,
+	edgeLabel?: string
+) => {
+	const { width, height } = getImageNodeDimensions(parentNode);
+	const placeholder = canvas.createTextNode({
+		text: label,
+		pos: {
+			x: parentNode.x,
+			y: parentNode.y + parentNode.height + 30,
+		},
+		size: {
+			width: width,
+			height: height,
+		},
+		focus: false,
+	});
+	canvas.addNode(placeholder);
+	placeholder.nodeEl?.classList?.add("ai-image-placeholder");
+
+	const directionBias = getIncomingEdgeDirection(parentNode);
+	const { fromSide, toSide } = getEdgeSidesForDirection(directionBias);
+
+	addEdge(
+		canvas,
+		randomHexString(16),
+		{
+			fromOrTo: "from",
+			side: fromSide,
+			node: parentNode,
+		},
+		{
+			fromOrTo: "to",
+			side: toSide,
+			node: placeholder,
+		},
+		edgeLabel,
+		{
+			isGenerated: true,
+		}
+	);
+
+	return placeholder;
+};
+
 export async function handleGenerateImage(
 	app: App,
 	settings: AugmentedCanvasSettings,
@@ -38,6 +109,7 @@ export async function handleGenerateImage(
 		provider?: LLMProvider;
 		model?: string;
 		prompt?: string;
+		edgeLabel?: string;
 		parts?: { text?: string; inlineData?: { data: string; mimeType: string } }[];
 	}
 ) {
@@ -80,15 +152,34 @@ export async function handleGenerateImage(
 
 	// Get the text from the selected node
 	const nodeContent = options?.prompt || node.text;
+	const trimmedEdgeLabel = options?.edgeLabel?.trim();
+	const edgeLabel = trimmedEdgeLabel ? trimmedEdgeLabel : undefined;
 	// console.log({ canvasView, nodeContent });
 
 	// Generate image from the selected node
 	new Notice("Generating image...");
+	let placeholderNode: CanvasNode | null = null;
+	const clearPlaceholder = () => {
+		if (!placeholderNode) return;
+		activeItem.removeNode(placeholderNode);
+		placeholderNode = null;
+	};
 	try {
 		if (isGeminiProvider(imageProvider) && !model) {
 			new Notice("Select an image model for Gemini in the Image Generation settings.");
 			return;
 		}
+
+		const placeholderLabel = model
+			? `Generating image (${model.replace(/^models\//i, "")})...`
+			: "Generating image...";
+		placeholderNode = createImagePlaceholderNode(
+			activeItem,
+			node,
+			placeholderLabel,
+			edgeLabel
+		);
+		void activeItem.requestFrame?.();
 
 		const imageOutput = isGeminiProvider(imageProvider)
 			? await createGeminiImage(apiKey, nodeContent, {
@@ -160,6 +251,7 @@ export async function handleGenerateImage(
 
 		const imageResult = imageOutput.image;
 		if (!imageResult?.base64) {
+			clearPlaceholder();
 			new Notice("Failed to generate image");
 			return;
 		}
@@ -171,6 +263,7 @@ export async function handleGenerateImage(
 
 		let imageFile: TFile | null = null;
 		let plannedPath: string | null = null;
+		const placementNode = placeholderNode ?? undefined;
 
 		try {
 			if (settings.imagesPath) {
@@ -211,13 +304,34 @@ export async function handleGenerateImage(
 		if (imageFile) {
 			logDebug("Saved image file", { path: imageFile.path });
 			new Notice(`Saved image to ${imageFile.path}`);
-			addImageNode(app, activeItem, null, imageFile, node);
+			addImageNode(
+				app,
+				activeItem,
+				null,
+				imageFile,
+				node,
+				undefined,
+				edgeLabel,
+				placementNode
+			);
+			clearPlaceholder();
 			return;
 		}
 
 		// Fallback to embedding when file save fails.
-		addImageNode(app, activeItem, buffer, "", node, mimeType);
+		addImageNode(
+			app,
+			activeItem,
+			buffer,
+			"",
+			node,
+			mimeType,
+			edgeLabel,
+			placementNode
+		);
+		clearPlaceholder();
 	} catch (error) {
+		clearPlaceholder();
 		console.error("Error generating image:", error);
 		const apiError = error as { status?: number; error?: { message?: string } };
 		const fallback =

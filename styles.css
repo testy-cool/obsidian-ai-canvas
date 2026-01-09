@@ -449,3 +449,30 @@
 	word-break: break-word !important;
 	hyphens: auto !important;
 }
+
+.canvas-node.ai-image-placeholder[data-node-type="text"] {
+	min-height: 0 !important;
+	min-width: 0 !important;
+}
+
+.canvas-node.ai-image-placeholder .canvas-node-content {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-faint);
+	font-style: italic;
+	letter-spacing: 0.02em;
+	animation: ai-image-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ai-image-pulse {
+	0% {
+		opacity: 0.45;
+	}
+	50% {
+		opacity: 0.9;
+	}
+	100% {
+		opacity: 0.45;
+	}
+}
