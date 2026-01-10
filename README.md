@@ -66,10 +66,18 @@ The content that is send to the AI can be viewed by toggling on the "Debug outpu
 
 ## Installation
 
-- Not ready for market yet
+### From Obsidian Community Plugins
+
+1. Open Settings → Community Plugins → Browse
+2. Search for "Obsidian AI Canvas"
+3. Click Install, then Enable
+
+### Via BRAT (for testing pre-release versions)
+
 - Can be installed via the [Brat](https://github.com/TfTHacker/obsidian42-brat) plugin
     You can see how to do so in this Ric Raftis article: <https://ricraftis.au/obsidian/installing-the-brat-plugin-in-obsidian-a-step-by-step-guide/>
-- Manual installation
+
+### Manual installation
 
 1. Find the release page on this github page and click
 2. Download the latest release zip file
