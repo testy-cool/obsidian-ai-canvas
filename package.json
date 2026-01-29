@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-ai-canvas",
-	"version": "0.1.27",
+	"version": "0.1.28",
 	"description": "AI-powered Canvas for Obsidian with intelligent note interactions and content generation.",
 	"main": "main.js",
 	"scripts": {
