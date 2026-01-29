@@ -248,7 +248,7 @@ export const streamResponse = async (
 		model,
 		temperature,
 		tools: mcpTools,
-		maxSteps = 1,
+		maxSteps = 10,
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ) => {
@@ -335,11 +335,13 @@ export const streamResponse = async (
 
 	try {
 		for await (const part of result.fullStream) {
+			console.log("[AI Canvas] Stream event:", part.type, part.type === 'text-delta' ? (part as any).textDelta?.substring(0, 50) : '');
 			switch (part.type) {
 				case 'text-delta':
 					cb((part as any).text || (part as any).textDelta, null, null, null);
 					break;
 				case 'tool-call':
+					console.log("[AI Canvas] Tool call:", (part as any).toolName, (part as any).args);
 					cb(null, null, {
 						type: 'tool-call',
 						toolName: (part as any).toolName,
@@ -348,6 +350,7 @@ export const streamResponse = async (
 					}, null);
 					break;
 				case 'tool-result':
+					console.log("[AI Canvas] Tool result:", (part as any).toolName, "length:", String((part as any).result)?.length);
 					cb(null, null, {
 						type: 'tool-result',
 						toolName: (part as any).toolName,
@@ -359,11 +362,15 @@ export const streamResponse = async (
 					logDebug("Stream error part:", part);
 					throw (part as any).error || new Error("Stream error");
 				default:
-					// Ignore other parts for now
+					// Log other event types for debugging
+					console.log("[AI Canvas] Other event:", part.type);
 					break;
 			}
 		}
-		cb(null, await result, null, null);
+		const finalResult = await result;
+		const finalText = await finalResult.text;
+		console.log("[AI Canvas] Final result text length:", finalText?.length);
+		cb(null, finalResult, null, null);
 	} catch (streamError: any) {
 		logDebug("Error during streaming:", {
 			message: streamError?.message,
