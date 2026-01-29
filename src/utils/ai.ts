@@ -1,6 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI, google } from "@ai-sdk/google";
-import { streamText, generateText } from "ai";
+import { streamText, generateText, stepCountIs } from "ai";
 import { ModelMessage } from "@ai-sdk/provider-utils";
 import { logDebug } from "src/logDebug";
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
@@ -308,7 +308,7 @@ export const streamResponse = async (
 
 		if (hasTools) {
 			streamConfig.tools = tools;
-			streamConfig.maxSteps = maxSteps;
+			streamConfig.stopWhen = stepCountIs(maxSteps);  // Use stopWhen instead of deprecated maxSteps
 			console.log("[AI Canvas] Adding tools to request, first tool:", Object.keys(tools!)[0], tools![Object.keys(tools!)[0]]);
 		}
 
