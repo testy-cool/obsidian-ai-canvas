@@ -1,27 +1,20 @@
 import OpenAI from "openai";
 import { requestUrl } from "obsidian";
 import { logDebug } from "src/logDebug";
-import { getResponse as getResponseFromAI, streamResponse as streamResponseFromAI } from "./ai";
+import { getResponse as getResponseFromAI, streamResponse as streamResponseFromAI, StreamOptions, ToolEvent } from "./ai";
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
 import { ModelMessage } from "@ai-sdk/provider-utils";
 
 export type Message = ModelMessage;
+export type { StreamOptions, ToolEvent };
 
 export const streamResponse = async (
 	provider: LLMProvider,
 	messages: Message[],
-	{
-		max_tokens,
-		model,
-		temperature,
-	}: {
-		max_tokens?: number;
-		model?: string;
-		temperature?: number;
-	} = {},
-	cb: (chunk: string | null, final: any, tool: any, reasoningDelta: any) => void
+	options: StreamOptions = {},
+	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ) => {
-	return streamResponseFromAI(provider, messages, { max_tokens, model, temperature }, cb);
+	return streamResponseFromAI(provider, messages, options, cb);
 };
 
 export const getResponse = async (

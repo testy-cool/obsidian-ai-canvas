@@ -21,9 +21,10 @@ import {
 import { visitNodeAndAncestors } from "../../obsidian/canvasUtil";
 import { readNodeContent, readNodeMediaData } from "../../obsidian/fileUtil";
 import { handleGenerateImage } from "../canvasNodeContextMenuActions/generateImage";
-import { getResponse, streamResponse } from "../../utils/llm";
+import { getResponse, streamResponse, ToolEvent } from "../../utils/llm";
 import { addModelIndicator, getYouTubeVideoId } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
+import { getAllMCPTools } from "../../utils/mcpClient";
 
 /**
  * Color for assistant notes: 6 == purple
@@ -639,22 +640,48 @@ export function noteGenerator(
 			try {
 				// logDebug("messages", messages);
 
-				let reasoning = "";
+				// Get MCP tools if enabled
+				let mcpTools: Record<string, any> | undefined;
+				if (settings.mcpEnabled && settings.mcpServers.length > 0) {
+					try {
+						mcpTools = await getAllMCPTools(settings.mcpServers);
+						if (Object.keys(mcpTools).length > 0) {
+							logDebug(`Loaded ${Object.keys(mcpTools).length} MCP tools`);
+						}
+					} catch (error) {
+						logDebug(`Failed to load MCP tools: ${error}`);
+					}
+				}
+
 				let reasoningEl: HTMLElement;
+				let toolsContainer: HTMLElement;
 				let firstDelta = true;
+				const toolRefs = new Map<string, HTMLElement>();
+
+				const truncateText = (text: string, maxLen = 100) => {
+					if (!text) return "";
+					const str = typeof text === "string" ? text : JSON.stringify(text);
+					return str.length > maxLen ? str.slice(0, maxLen) + "..." : str;
+				};
+
 				await streamResponse(
 					provider,
 					messages,
 					{
 						model: model.model,
 						max_tokens: settings.maxResponseTokens || undefined,
+						tools: mcpTools,
+						maxSteps: settings.mcpMaxSteps || 5,
 					},
-					(delta: string | null, final: any, tool: any, reasoningDelta: any) => {
+					(delta: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => {
 						if (firstDelta) {
 							created.setText("");
 							const details = created.contentEl.createEl("details");
 							details.createEl("summary", { text: "Reasoning" });
 							reasoningEl = details.createEl("div", { cls: "reasoning" });
+
+							// Create tools container for MCP tool calls
+							toolsContainer = created.contentEl.createEl("div", { cls: "mcp-tools-container" });
 							firstDelta = false;
 						}
 
@@ -662,24 +689,58 @@ export function noteGenerator(
 							reasoningEl.setText(reasoningEl.getText() + reasoningDelta);
 						}
 
+						// Handle MCP tool events
+						if (tool) {
+							switch (tool.type) {
+								case 'tool-call': {
+									const toolEl = toolsContainer.createEl("details", { cls: "mcp-tool-call" });
+									toolEl.setAttribute("open", "");
+									const summary = toolEl.createEl("summary");
+									summary.createEl("span", { text: `🔧 ${tool.toolName}`, cls: "mcp-tool-name" });
+									const argsText = truncateText(JSON.stringify(tool.args), 50);
+									summary.createEl("span", { text: `(${argsText})`, cls: "mcp-tool-args" });
+									const statusEl = toolEl.createEl("div", { text: "⏳ Running...", cls: "mcp-tool-status" });
+									if (tool.toolCallId) {
+										toolRefs.set(tool.toolCallId, toolEl);
+									}
+									break;
+								}
+								case 'tool-result': {
+									const toolEl = tool.toolCallId ? toolRefs.get(tool.toolCallId) : null;
+									if (toolEl) {
+										const statusEl = toolEl.querySelector(".mcp-tool-status");
+										if (statusEl) {
+											const resultText = truncateText(
+												typeof tool.result === "string" ? tool.result : JSON.stringify(tool.result),
+												200
+											);
+											statusEl.setText(`✓ ${resultText}`);
+											statusEl.addClass("mcp-tool-success");
+										}
+									}
+									break;
+								}
+							}
+						}
+
 						if (delta) {
 							created.setText(created.text + delta);
-							
+
 							// Calculate optimal dimensions maintaining 3:5 aspect ratio
 							const dimensions = calculateNoteDimensions(created.text);
-							
+
 							// Only resize if dimensions have changed significantly (avoid constant tiny adjustments)
 							const currentWidth = created.width;
 							const currentHeight = created.height;
 							const widthDiff = Math.abs(dimensions.width - currentWidth);
 							const heightDiff = Math.abs(dimensions.height - currentHeight);
-							
+
 							if (widthDiff > 20 || heightDiff > 15) {
-								created.moveAndResize({ 
-									height: dimensions.height, 
-									width: dimensions.width, 
-									x: created.x, 
-									y: created.y 
+								created.moveAndResize({
+									height: dimensions.height,
+									width: dimensions.width,
+									x: created.x,
+									y: created.y
 								});
 								void created.canvas?.requestFrame?.();
 							}
@@ -688,14 +749,14 @@ export function noteGenerator(
 						if (final) {
 							// Final resize to ensure optimal dimensions
 							const finalDimensions = calculateNoteDimensions(created.text);
-							created.moveAndResize({ 
-								height: finalDimensions.height, 
-								width: finalDimensions.width, 
-								x: created.x, 
-								y: created.y 
+							created.moveAndResize({
+								height: finalDimensions.height,
+								width: finalDimensions.width,
+								x: created.x,
+								y: created.y
 							});
 							void created.canvas?.requestFrame?.();
-							
+
 							// Add subtle model indicator to the note
 							addModelIndicator(created, provider.type, model.model);
 						}

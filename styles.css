@@ -476,3 +476,160 @@
 		opacity: 0.45;
 	}
 }
+
+/* MCP Server Settings */
+.mcp-server-list {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	margin-top: 12px;
+}
+
+.mcp-server-block {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+}
+
+.mcp-server-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.mcp-server-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.mcp-server-name {
+	font-weight: 600;
+	font-size: var(--font-ui-medium);
+}
+
+.mcp-server-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.mcp-server-toggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--font-ui-small);
+	margin-right: 8px;
+}
+
+.mcp-server-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.mcp-tool-count {
+	color: var(--text-accent);
+	font-weight: 500;
+}
+
+.mcp-settings-row {
+	margin-top: 8px;
+}
+
+.mcp-settings-row .setting-item {
+	padding: 8px 0;
+}
+
+/* MCP Server Modal */
+.mcp-server-modal {
+	max-width: 500px;
+}
+
+.mcp-server-modal h2 {
+	margin-bottom: 16px;
+}
+
+.modal-button-row {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 16px;
+	padding-top: 16px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* MCP Tool Display in Canvas Notes */
+.mcp-tools-container {
+	margin: 8px 0;
+	font-size: var(--font-ui-small);
+}
+
+.mcp-tool-call {
+	margin: 6px 0;
+	padding: 8px;
+	background: var(--background-secondary-alt);
+	border-radius: var(--radius-s);
+	border-left: 3px solid var(--interactive-accent);
+}
+
+.mcp-tool-call summary {
+	cursor: pointer;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.mcp-tool-name {
+	font-weight: 600;
+	color: var(--text-accent);
+}
+
+.mcp-tool-args {
+	color: var(--text-muted);
+	font-family: var(--font-monospace);
+	font-size: 0.9em;
+}
+
+.mcp-tool-status {
+	margin-top: 6px;
+	padding: 4px 8px;
+	border-radius: var(--radius-s);
+	background: var(--background-primary);
+	color: var(--text-muted);
+	font-family: var(--font-monospace);
+	font-size: 0.85em;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.mcp-tool-status.mcp-tool-success {
+	color: var(--text-success);
+	border-left: 2px solid var(--text-success);
+}
+
+.mcp-tool-status.mcp-tool-error {
+	color: var(--text-error);
+	border-left: 2px solid var(--text-error);
+}
+
+.mcp-step-indicator {
+	padding: 4px 8px;
+	margin: 8px 0;
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	color: var(--text-faint);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
