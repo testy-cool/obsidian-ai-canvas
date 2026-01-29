@@ -203,14 +203,13 @@ export const streamResponse = async (
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ) => {
-	logDebug("Calling AI (stream):", {
-		messages,
+	const mcpToolCount = mcpTools ? Object.keys(mcpTools).length : 0;
+	console.log("[AI Canvas] Stream request:", {
 		model,
-		max_tokens,
-		temperature,
-		provider,
-		hasMcpTools: !!mcpTools && Object.keys(mcpTools).length > 0,
+		provider: provider.type,
+		mcpToolCount,
 		maxSteps,
+		toolNames: mcpTools ? Object.keys(mcpTools).slice(0, 5) : [],
 	});
 
 	const llm = getLlm(provider) as any;
@@ -234,6 +233,16 @@ export const streamResponse = async (
 	const runStream = (useSearchGrounding: boolean, useUrlContext: boolean) => {
 		const tools = buildTools(useUrlContext);
 		const hasTools = tools && Object.keys(tools).length > 0;
+
+		console.log("[AI Canvas] Calling streamText:", {
+			modelId,
+			useSearchGrounding,
+			useUrlContext,
+			hasTools,
+			toolCount: tools ? Object.keys(tools).length : 0,
+			toolNames: tools ? Object.keys(tools).slice(0, 10) : [],
+			maxSteps,
+		});
 
 		return streamText({
 			model: useSearchGrounding ? llm(modelId, { useSearchGrounding: true }) : llm(modelId),
