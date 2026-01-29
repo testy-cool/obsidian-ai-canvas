@@ -34,6 +34,50 @@ export interface LLMModel {
 	enabled: boolean;
 }
 
+export type MCPTransportType = 'http' | 'sse' | 'websocket';
+
+export interface MCPServer {
+	/**
+	 * Unique identifier for the server
+	 */
+	id: string;
+
+	/**
+	 * Display name for the server
+	 */
+	name: string;
+
+	/**
+	 * Server URL endpoint
+	 */
+	url: string;
+
+	/**
+	 * Transport type (http, sse, websocket)
+	 */
+	transport: MCPTransportType;
+
+	/**
+	 * Optional API key for authentication
+	 */
+	apiKey?: string;
+
+	/**
+	 * Optional custom headers
+	 */
+	headers?: Record<string, string>;
+
+	/**
+	 * Whether this server is enabled
+	 */
+	enabled: boolean;
+
+	/**
+	 * Cached tool count (updated on test/connect)
+	 */
+	toolCount?: number;
+}
+
 export interface LLMProvider {
 	/**
 	 * Unique identifier for the provider
@@ -216,6 +260,26 @@ export interface AugmentedCanvasSettings {
 	 * System prompt used to generate group names.
 	 */
 	groupTitleSystemPrompt: string;
+
+	/**
+	 * List of configured MCP servers
+	 */
+	mcpServers: MCPServer[];
+
+	/**
+	 * Whether MCP tools are enabled globally
+	 */
+	mcpEnabled: boolean;
+
+	/**
+	 * Maximum number of agentic steps (tool call iterations)
+	 */
+	mcpMaxSteps: number;
+
+	/**
+	 * Whether to require approval before executing MCP tools
+	 */
+	mcpRequireApproval: boolean;
 }
 
 const DEFAULT_SYSTEM_PROMPT = `
@@ -323,7 +387,11 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	enableGroupTitleGeneration: true,
 	groupTitleProviderId: "gemini",
 	groupTitleModelId: "gemini-3-flash-preview",
-	groupTitleSystemPrompt: DEFAULT_GROUP_TITLE_PROMPT
+	groupTitleSystemPrompt: DEFAULT_GROUP_TITLE_PROMPT,
+	mcpServers: [],
+	mcpEnabled: true,
+	mcpMaxSteps: 5,
+	mcpRequireApproval: false
 };
 
 

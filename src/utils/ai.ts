@@ -175,6 +175,22 @@ const supportsSearchGrounding = (modelId: string) =>
 const supportsUrlContext = (modelId: string) =>
 	/^(?:models\/)?gemini-(?:2\.5|3)-/.test(modelId);
 
+export interface StreamOptions {
+	max_tokens?: number;
+	model?: string;
+	temperature?: number;
+	tools?: Record<string, any>;
+	maxSteps?: number;
+}
+
+export type ToolEvent = {
+	type: 'tool-call' | 'tool-result';
+	toolName?: string;
+	toolCallId?: string;
+	args?: any;
+	result?: any;
+};
+
 export const streamResponse = async (
 	provider: LLMProvider,
 	messages: ModelMessage[],
@@ -182,12 +198,10 @@ export const streamResponse = async (
 		max_tokens,
 		model,
 		temperature,
-	}: {
-		max_tokens?: number;
-		model?: string;
-		temperature?: number;
-	} = {},
-	cb: (chunk: string | null, final: any, tool: any, reasoningDelta: any) => void
+		tools: mcpTools,
+		maxSteps = 1,
+	}: StreamOptions = {},
+	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ) => {
 	logDebug("Calling AI (stream):", {
 		messages,
@@ -195,6 +209,8 @@ export const streamResponse = async (
 		max_tokens,
 		temperature,
 		provider,
+		hasMcpTools: !!mcpTools && Object.keys(mcpTools).length > 0,
+		maxSteps,
 	});
 
 	const llm = getLlm(provider) as any;
@@ -203,16 +219,33 @@ export const streamResponse = async (
 	const canUseSearch = useGoogle && supportsSearchGrounding(modelId);
 	const canUseUrlContext = useGoogle && supportsUrlContext(modelId);
 
-	const runStream = (useSearchGrounding: boolean, useUrlContext: boolean) =>
-		streamText({
+	// Merge MCP tools with Google's url_context if available
+	const buildTools = (useUrlContext: boolean) => {
+		const allTools: Record<string, any> = {};
+		if (useUrlContext) {
+			allTools.url_context = google.tools.urlContext({});
+		}
+		if (mcpTools) {
+			Object.assign(allTools, mcpTools);
+		}
+		return Object.keys(allTools).length > 0 ? allTools : undefined;
+	};
+
+	const runStream = (useSearchGrounding: boolean, useUrlContext: boolean) => {
+		const tools = buildTools(useUrlContext);
+		const hasTools = tools && Object.keys(tools).length > 0;
+
+		return streamText({
 			model: useSearchGrounding ? llm(modelId, { useSearchGrounding: true }) : llm(modelId),
 			messages,
 			maxOutputTokens: max_tokens,
 			temperature,
-			...(useUrlContext && { tools: { url_context: google.tools.urlContext({}) } }),
+			...(hasTools && { tools, maxSteps }),
 		});
+	};
 
 	let result;
+
 	try {
 		result = await runStream(canUseSearch, canUseUrlContext);
 	} catch (error: any) {
@@ -237,7 +270,20 @@ export const streamResponse = async (
 					cb((part as any).text || (part as any).textDelta, null, null, null);
 					break;
 				case 'tool-call':
-					cb(null, null, part, null);
+					cb(null, null, {
+						type: 'tool-call',
+						toolName: (part as any).toolName,
+						toolCallId: (part as any).toolCallId,
+						args: (part as any).args,
+					}, null);
+					break;
+				case 'tool-result':
+					cb(null, null, {
+						type: 'tool-result',
+						toolName: (part as any).toolName,
+						toolCallId: (part as any).toolCallId,
+						result: (part as any).result,
+					}, null);
 					break;
 				case 'error':
 					logDebug("Stream error part:", part);

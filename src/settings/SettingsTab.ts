@@ -1,8 +1,9 @@
-import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent, TextComponent, ToggleComponent } from "obsidian";
+import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent, TextComponent, ToggleComponent, Modal } from "obsidian";
 import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
 import { EditProviderModal } from "src/Modals/EditProviderModal";
 import { ModelFetchModal } from "src/Modals/ModelFetchModal";
-import { LLMModel, LLMProvider } from "./AugmentedCanvasSettings";
+import { LLMModel, LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
+import { testMCPServer } from "src/utils/mcpClient";
 
 export default class SettingsTab extends PluginSettingTab {
     plugin: AugmentedCanvasPlugin;
@@ -21,6 +22,7 @@ export default class SettingsTab extends PluginSettingTab {
 
         this.renderGeneralSettings(containerEl);
         this.renderProviders(containerEl);
+        this.renderMCPServers(containerEl);
         this.renderGenerationSettings(containerEl);
 		this.renderImageSettings(containerEl);
 		this.renderNamingSettings(containerEl);
@@ -313,6 +315,134 @@ export default class SettingsTab extends PluginSettingTab {
 
         renderModelList();
 
+    }
+
+    private renderMCPServers(containerEl: HTMLElement) {
+        const header = new Setting(containerEl).setHeading().setName("MCP Servers");
+        header.setDesc("Connect to Model Context Protocol servers to add tools for the AI.");
+
+        header.addToggle(toggle => toggle
+            .setValue(this.plugin.settings.mcpEnabled)
+            .setTooltip("Enable MCP tools globally")
+            .onChange(async value => {
+                this.plugin.settings.mcpEnabled = value;
+                await this.plugin.saveSettings();
+            }));
+
+        header.addButton(button => button
+            .setButtonText("Add Server")
+            .setCta()
+            .onClick(() => {
+                this.openMCPServerModal(null, async (server) => {
+                    if (this.plugin.settings.mcpServers.some(s => s.id === server.id)) {
+                        new Notice("A server with this ID already exists");
+                        return;
+                    }
+                    this.plugin.settings.mcpServers.push(server);
+                    await this.plugin.saveSettings();
+                    this.display();
+                });
+            }));
+
+        // MCP Settings
+        const settingsRow = containerEl.createDiv("mcp-settings-row");
+
+        new Setting(settingsRow)
+            .setName("Max agent steps")
+            .setDesc("Maximum tool call iterations before stopping.")
+            .addText(text => text
+                .setValue(this.plugin.settings.mcpMaxSteps.toString())
+                .onChange(async value => {
+                    const parsed = parseInt(value);
+                    if (!isNaN(parsed) && parsed > 0 && parsed <= 20) {
+                        this.plugin.settings.mcpMaxSteps = parsed;
+                        await this.plugin.saveSettings();
+                    }
+                }));
+
+        // Server list
+        const serversContainer = containerEl.createDiv("mcp-server-list");
+
+        if (!this.plugin.settings.mcpServers.length) {
+            serversContainer.createDiv({
+                text: "No MCP servers configured. Add a server to enable AI tools.",
+                cls: "mod-muted"
+            });
+            return;
+        }
+
+        this.plugin.settings.mcpServers.forEach(server => {
+            const serverBlock = serversContainer.createDiv("mcp-server-block");
+
+            const headerRow = serverBlock.createDiv("mcp-server-header");
+            const titleCol = headerRow.createDiv("mcp-server-title");
+            titleCol.createEl("div", { text: server.name, cls: "mcp-server-name" });
+
+            const controls = headerRow.createDiv("mcp-server-controls");
+
+            const toggleWrap = controls.createDiv("mcp-server-toggle");
+            toggleWrap.createEl("span", { text: "Enabled" });
+            const toggle = new ToggleComponent(toggleWrap);
+            toggle.setValue(server.enabled);
+            toggle.onChange(async value => {
+                server.enabled = value;
+                await this.plugin.saveSettings();
+            });
+
+            const testBtn = new ButtonComponent(controls);
+            testBtn.setButtonText("Test");
+            testBtn.onClick(async () => {
+                testBtn.setButtonText("Testing...");
+                testBtn.setDisabled(true);
+                const result = await testMCPServer(server);
+                if (result.success) {
+                    server.toolCount = result.toolCount;
+                    await this.plugin.saveSettings();
+                    new Notice(`Connected! Found ${result.toolCount} tools.`);
+                    this.display();
+                } else {
+                    new Notice(`Failed: ${result.error}`, 5000);
+                }
+                testBtn.setButtonText("Test");
+                testBtn.setDisabled(false);
+            });
+
+            const editBtn = new ButtonComponent(controls);
+            editBtn.setButtonText("Edit");
+            editBtn.onClick(() => {
+                this.openMCPServerModal(server, async (updated) => {
+                    const index = this.plugin.settings.mcpServers.findIndex(s => s.id === server.id);
+                    if (index > -1) {
+                        this.plugin.settings.mcpServers[index] = updated;
+                        await this.plugin.saveSettings();
+                        this.display();
+                    }
+                });
+            });
+
+            const deleteBtn = new ButtonComponent(controls);
+            deleteBtn.setButtonText("Delete");
+            deleteBtn.onClick(async () => {
+                this.plugin.settings.mcpServers = this.plugin.settings.mcpServers.filter(s => s.id !== server.id);
+                await this.plugin.saveSettings();
+                this.display();
+            });
+
+            const metaRow = serverBlock.createDiv("mcp-server-meta");
+            metaRow.createEl("span", { text: `ID: ${server.id}` });
+            metaRow.createEl("span", { text: `Transport: ${server.transport.toUpperCase()}` });
+            metaRow.createEl("span", { text: `URL: ${server.url}` });
+            const hasKey = server.apiKey && server.apiKey.trim().length > 0;
+            metaRow.createEl("span", { text: hasKey ? "Auth: set" : "Auth: none" });
+            if (server.toolCount !== undefined) {
+                metaRow.createEl("span", { text: `Tools: ${server.toolCount}`, cls: "mcp-tool-count" });
+            }
+        });
+    }
+
+    private openMCPServerModal(server: MCPServer | null, onSave: (server: MCPServer) => void) {
+        const modal = new MCPServerModal(this.app, server, onSave);
+        modal.open();
     }
 
     private isGeminiProvider(provider: LLMProvider) {
@@ -619,4 +749,110 @@ export default class SettingsTab extends PluginSettingTab {
     }
 }
 
+class MCPServerModal extends Modal {
+    private server: MCPServer | null;
+    private onSave: (server: MCPServer) => void;
 
+    private idInput: TextComponent;
+    private nameInput: TextComponent;
+    private urlInput: TextComponent;
+    private transportSelect: HTMLSelectElement;
+    private apiKeyInput: TextComponent;
+
+    constructor(app: App, server: MCPServer | null, onSave: (server: MCPServer) => void) {
+        super(app);
+        this.server = server;
+        this.onSave = onSave;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.addClass("mcp-server-modal");
+
+        contentEl.createEl("h2", { text: this.server ? "Edit MCP Server" : "Add MCP Server" });
+
+        new Setting(contentEl)
+            .setName("Server ID")
+            .setDesc("Unique identifier (no spaces)")
+            .addText(text => {
+                this.idInput = text;
+                text.setValue(this.server?.id || "")
+                    .setPlaceholder("my-mcp-server")
+                    .setDisabled(!!this.server);
+            });
+
+        new Setting(contentEl)
+            .setName("Display Name")
+            .setDesc("Human-readable name for this server")
+            .addText(text => {
+                this.nameInput = text;
+                text.setValue(this.server?.name || "")
+                    .setPlaceholder("My MCP Server");
+            });
+
+        new Setting(contentEl)
+            .setName("Server URL")
+            .setDesc("MCP server endpoint URL")
+            .addText(text => {
+                this.urlInput = text;
+                text.setValue(this.server?.url || "")
+                    .setPlaceholder("https://mcp.example.com/mcp");
+            });
+
+        const transportSetting = new Setting(contentEl)
+            .setName("Transport")
+            .setDesc("Connection type (HTTP recommended)");
+
+        this.transportSelect = transportSetting.controlEl.createEl("select");
+        ["http", "sse"].forEach(t => {
+            const opt = this.transportSelect.createEl("option", { value: t, text: t.toUpperCase() });
+            if (this.server?.transport === t) opt.selected = true;
+        });
+
+        new Setting(contentEl)
+            .setName("API Key")
+            .setDesc("Optional authentication key")
+            .addText(text => {
+                this.apiKeyInput = text;
+                text.setValue(this.server?.apiKey || "")
+                    .setPlaceholder("Bearer token or API key")
+                    .inputEl.type = "password";
+            });
+
+        const buttonRow = contentEl.createDiv("modal-button-row");
+        const cancelBtn = new ButtonComponent(buttonRow);
+        cancelBtn.setButtonText("Cancel").onClick(() => this.close());
+
+        const saveBtn = new ButtonComponent(buttonRow);
+        saveBtn.setButtonText("Save").setCta().onClick(() => {
+            const id = this.idInput.getValue().trim().toLowerCase().replace(/\s+/g, "-");
+            const name = this.nameInput.getValue().trim();
+            const url = this.urlInput.getValue().trim();
+            const transport = this.transportSelect.value as MCPTransportType;
+            const apiKey = this.apiKeyInput.getValue().trim();
+
+            if (!id || !name || !url) {
+                new Notice("ID, Name, and URL are required");
+                return;
+            }
+
+            const server: MCPServer = {
+                id: this.server?.id || id,
+                name,
+                url,
+                transport,
+                apiKey: apiKey || undefined,
+                enabled: this.server?.enabled ?? true,
+                toolCount: this.server?.toolCount,
+            };
+
+            this.onSave(server);
+            this.close();
+        });
+    }
+
+    onClose() {
+        this.contentEl.empty();
+    }
+}

@@ -11,6 +11,9 @@ importers:
       '@ai-sdk/google':
         specifier: ^3.0.16
         version: 3.0.16(zod@3.25.76)
+      '@ai-sdk/mcp':
+        specifier: ^1.0.14
+        version: 1.0.14(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^1.3.22
         version: 1.3.23(zod@3.25.76)
@@ -80,6 +83,12 @@ packages:
 
   '@ai-sdk/google@3.0.16':
     resolution: {integrity: sha512-aflGst6QdfDFEZ+il1Fm8179BkEEXWbF0WI7CB8bzHCmJSRkrRLilacnogsN4VFup5Wg5jWKCfukThTf7S2xAg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/mcp@1.0.14':
+    resolution: {integrity: sha512-Rv8dORNPHH9RddwHfxBf9IBPSgmKa9YsWxnfH24PgnocDFE26Abqq8gPGMmFtN6gjZmC7qGrfqxTww+/dTtMCg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -1375,6 +1384,10 @@ packages:
     resolution: {integrity: sha512-5gTmgEY/sqK6gFXLIsQNH19lWb4ebPDLA4SdLP7dsWkIXHWlG66oPuVvXSGFPppYZz8ZDZq0dYYrbHfBCVUb1Q==}
     engines: {node: '>=12'}
 
+  pkce-challenge@5.0.1:
+    resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
+    engines: {node: '>=16.20.0'}
+
   postcss@8.5.6:
     resolution: {integrity: sha512-3Ybi1tAuwAP9s0r1UQ2J4n5Y0G05bJkpUIO0/bI9MhwmD70S5aTWbXGBwxHrelT+XM1k6dM0pk+SwNkpTRN7Pg==}
     engines: {node: ^10 || ^12 || >=14}
@@ -1694,6 +1707,13 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 3.0.5
       '@ai-sdk/provider-utils': 4.0.10(zod@3.25.76)
+      zod: 3.25.76
+
+  '@ai-sdk/mcp@1.0.14(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.5
+      '@ai-sdk/provider-utils': 4.0.10(zod@3.25.76)
+      pkce-challenge: 5.0.1
       zod: 3.25.76
 
   '@ai-sdk/openai@1.3.23(zod@3.25.76)':
@@ -2875,6 +2895,8 @@ snapshots:
   picomatch@2.3.1: {}
 
   picomatch@4.0.3: {}
+
+  pkce-challenge@5.0.1: {}
 
   postcss@8.5.6:
     dependencies:
