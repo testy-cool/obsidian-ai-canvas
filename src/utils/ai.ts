@@ -270,10 +270,13 @@ export const streamResponse = async (
 	const canUseSearch = useGoogle && supportsSearchGrounding(modelId);
 	const canUseUrlContext = useGoogle && supportsUrlContext(modelId);
 
-	// Merge MCP tools with Google's url_context if available
+	// Build tools - can't mix url_context with MCP tools (Gemini limitation)
 	const buildTools = (useUrlContext: boolean) => {
 		const allTools: Record<string, any> = {};
-		if (useUrlContext) {
+		const hasMcpTools = mcpTools && Object.keys(mcpTools).length > 0;
+
+		// Only use url_context if there are no MCP tools (Gemini doesn't support mixing them)
+		if (useUrlContext && !hasMcpTools) {
 			allTools.url_context = google.tools.urlContext({});
 		}
 		if (mcpTools) {
