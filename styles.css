@@ -568,6 +568,23 @@
 	border-top: 1px solid var(--background-modifier-border);
 }
 
+/* MCP Import Modal */
+.mcp-import-modal {
+	max-width: 600px;
+}
+
+.mcp-import-modal h2 {
+	margin-bottom: 8px;
+}
+
+.mcp-import-textarea {
+	width: 100%;
+	min-height: 200px;
+	font-family: var(--font-monospace);
+	font-size: 12px;
+	resize: vertical;
+}
+
 /* MCP Tool Display in Canvas Notes */
 .mcp-tools-container {
 	margin: 8px 0;

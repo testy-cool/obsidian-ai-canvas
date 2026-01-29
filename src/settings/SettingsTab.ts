@@ -344,6 +344,32 @@ export default class SettingsTab extends PluginSettingTab {
                 });
             }));
 
+        header.addButton(button => button
+            .setButtonText("Import JSON")
+            .onClick(() => {
+                const modal = new MCPImportModal(this.app, async (servers) => {
+                    let added = 0;
+                    for (const server of servers) {
+                        if (!this.plugin.settings.mcpServers.some(s => s.id === server.id)) {
+                            this.plugin.settings.mcpServers.push(server);
+                            added++;
+                        }
+                    }
+                    await this.plugin.saveSettings();
+                    new Notice(`Imported ${added} server(s)`);
+                    this.display();
+                });
+                modal.open();
+            }));
+
+        header.addButton(button => button
+            .setButtonText("Export JSON")
+            .onClick(() => {
+                const json = JSON.stringify(this.plugin.settings.mcpServers, null, 2);
+                navigator.clipboard.writeText(json);
+                new Notice("MCP servers copied to clipboard");
+            }));
+
         // MCP Settings
         const settingsRow = containerEl.createDiv("mcp-settings-row");
 
@@ -849,6 +875,81 @@ class MCPServerModal extends Modal {
 
             this.onSave(server);
             this.close();
+        });
+    }
+
+    onClose() {
+        this.contentEl.empty();
+    }
+}
+
+class MCPImportModal extends Modal {
+    private onImport: (servers: MCPServer[]) => void;
+    private textarea: TextAreaComponent;
+
+    constructor(app: App, onImport: (servers: MCPServer[]) => void) {
+        super(app);
+        this.onImport = onImport;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.addClass("mcp-import-modal");
+
+        contentEl.createEl("h2", { text: "Import MCP Servers" });
+        contentEl.createEl("p", {
+            text: "Paste a JSON array of MCP server configurations:",
+            cls: "mod-muted"
+        });
+
+        const textareaEl = contentEl.createEl("textarea", {
+            cls: "mcp-import-textarea",
+            attr: { rows: "12", placeholder: '[\n  {\n    "id": "my-server",\n    "name": "My MCP Server",\n    "url": "https://mcp.example.com",\n    "transport": "http",\n    "enabled": true\n  }\n]' }
+        });
+
+        const buttonRow = contentEl.createDiv("modal-button-row");
+        const cancelBtn = new ButtonComponent(buttonRow);
+        cancelBtn.setButtonText("Cancel").onClick(() => this.close());
+
+        const importBtn = new ButtonComponent(buttonRow);
+        importBtn.setButtonText("Import").setCta().onClick(() => {
+            const json = textareaEl.value.trim();
+            if (!json) {
+                new Notice("Please paste JSON configuration");
+                return;
+            }
+
+            try {
+                const parsed = JSON.parse(json);
+                if (!Array.isArray(parsed)) {
+                    new Notice("JSON must be an array of servers");
+                    return;
+                }
+
+                const servers: MCPServer[] = [];
+                for (const item of parsed) {
+                    if (!item.id || !item.name || !item.url) {
+                        new Notice("Each server must have id, name, and url");
+                        return;
+                    }
+                    servers.push({
+                        id: item.id,
+                        name: item.name,
+                        url: item.url,
+                        transport: item.transport || "http",
+                        apiKey: item.apiKey,
+                        headers: item.headers,
+                        enabled: item.enabled !== false,
+                        toolCount: item.toolCount,
+                    });
+                }
+
+                this.onImport(servers);
+                this.close();
+            } catch (e) {
+                new Notice(`Invalid JSON: ${e.message}`);
+            }
         });
     }
 
