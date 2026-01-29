@@ -365,7 +365,22 @@ export default class SettingsTab extends PluginSettingTab {
         header.addButton(button => button
             .setButtonText("Export JSON")
             .onClick(() => {
-                const json = JSON.stringify(this.plugin.settings.mcpServers, null, 2);
+                // Convert to standard mcpServers format
+                const mcpServers: Record<string, any> = {};
+                for (const server of this.plugin.settings.mcpServers) {
+                    const config: any = {
+                        type: server.transport,
+                        url: server.url,
+                    };
+                    if (server.apiKey) {
+                        config.headers = { Authorization: `Bearer ${server.apiKey}` };
+                    }
+                    if (server.headers) {
+                        config.headers = { ...config.headers, ...server.headers };
+                    }
+                    mcpServers[server.id] = config;
+                }
+                const json = JSON.stringify({ mcpServers }, null, 2);
                 navigator.clipboard.writeText(json);
                 new Notice("MCP servers copied to clipboard");
             }));
@@ -885,7 +900,6 @@ class MCPServerModal extends Modal {
 
 class MCPImportModal extends Modal {
     private onImport: (servers: MCPServer[]) => void;
-    private textarea: TextAreaComponent;
 
     constructor(app: App, onImport: (servers: MCPServer[]) => void) {
         super(app);
@@ -899,13 +913,25 @@ class MCPImportModal extends Modal {
 
         contentEl.createEl("h2", { text: "Import MCP Servers" });
         contentEl.createEl("p", {
-            text: "Paste a JSON array of MCP server configurations:",
+            text: "Paste standard MCP JSON config (mcpServers format):",
             cls: "mod-muted"
         });
 
+        const placeholder = `{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer token"
+      }
+    }
+  }
+}`;
+
         const textareaEl = contentEl.createEl("textarea", {
             cls: "mcp-import-textarea",
-            attr: { rows: "12", placeholder: '[\n  {\n    "id": "my-server",\n    "name": "My MCP Server",\n    "url": "https://mcp.example.com",\n    "transport": "http",\n    "enabled": true\n  }\n]' }
+            attr: { rows: "12", placeholder }
         });
 
         const buttonRow = contentEl.createDiv("modal-button-row");
@@ -922,33 +948,58 @@ class MCPImportModal extends Modal {
 
             try {
                 const parsed = JSON.parse(json);
-                if (!Array.isArray(parsed)) {
-                    new Notice("JSON must be an array of servers");
+                const servers: MCPServer[] = [];
+
+                // Standard format: { mcpServers: { "name": { type, url, headers } } }
+                const mcpServers = parsed.mcpServers || parsed.servers || parsed;
+
+                if (typeof mcpServers !== 'object' || Array.isArray(mcpServers)) {
+                    new Notice("Expected { mcpServers: { ... } } format");
                     return;
                 }
 
-                const servers: MCPServer[] = [];
-                for (const item of parsed) {
-                    if (!item.id || !item.name || !item.url) {
-                        new Notice("Each server must have id, name, and url");
+                for (const [id, config] of Object.entries(mcpServers)) {
+                    const cfg = config as any;
+                    // Skip stdio servers (they have command instead of url)
+                    if (cfg.command && !cfg.url) {
+                        continue;
+                    }
+                    if (!cfg.url) {
+                        new Notice(`Server "${id}" missing url`);
                         return;
                     }
+
+                    // Extract API key from Authorization header if present
+                    let apiKey: string | undefined;
+                    const headers = cfg.headers ? { ...cfg.headers } : undefined;
+                    if (headers?.Authorization) {
+                        const auth = headers.Authorization;
+                        if (auth.startsWith("Bearer ")) {
+                            apiKey = auth.slice(7);
+                            delete headers.Authorization;
+                        }
+                    }
+
                     servers.push({
-                        id: item.id,
-                        name: item.name,
-                        url: item.url,
-                        transport: item.transport || "http",
-                        apiKey: item.apiKey,
-                        headers: item.headers,
-                        enabled: item.enabled !== false,
-                        toolCount: item.toolCount,
+                        id,
+                        name: id,
+                        url: cfg.url,
+                        transport: cfg.type || "http",
+                        apiKey,
+                        headers: Object.keys(headers || {}).length ? headers : undefined,
+                        enabled: true,
                     });
+                }
+
+                if (!servers.length) {
+                    new Notice("No HTTP/SSE servers found (stdio not supported)");
+                    return;
                 }
 
                 this.onImport(servers);
                 this.close();
             } catch (e) {
-                new Notice(`Invalid JSON: ${e.message}`);
+                new Notice(`Invalid JSON: ${(e as Error).message}`);
             }
         });
     }
