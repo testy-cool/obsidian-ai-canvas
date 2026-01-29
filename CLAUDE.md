@@ -46,6 +46,32 @@ Based on internal project documentation, the key priorities for future developme
 - **UI/UX Improvements**: Enhance the user interface and experience.
 - **AI SDK Integration**: The project is already using `@ai-sdk`, and further integration is a consideration.
 
+## CRITICAL: Releasing Changes
+
+**EVERY TIME you make code changes, you MUST:**
+
+1. Bump version in `manifest.json`, `package.json`, and `versions.json`
+2. Build: `pnpm run build`
+3. Commit all files including `main.js`: `git add -A && git commit -m "version: description"`
+4. Push: `git push`
+5. Tag: `git tag X.Y.Z && git push origin X.Y.Z`
+6. Release: `gh release create X.Y.Z main.js manifest.json --title "X.Y.Z" --notes "description"`
+
+**One-liner:**
+```bash
+# After editing, run:
+pnpm run build && git add -A && git commit -m "X.Y.Z: description" && git push && git tag X.Y.Z && git push origin X.Y.Z && gh release create X.Y.Z main.js manifest.json --title "X.Y.Z" --notes "description"
+```
+
+## Testing
+
+**Run MCP tests before releasing MCP-related changes:**
+```bash
+pnpm test
+```
+
+Test MCP URL for development: `https://windmill.voidxd.cloud/api/mcp/w/main/sse?token=FDYWBRm6fHYwb1DLJ1PHpiuOKTfoH4cp`
+
 ## important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.
