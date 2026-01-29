@@ -244,13 +244,20 @@ export const streamResponse = async (
 			maxSteps,
 		});
 
-		return streamText({
+		const streamConfig: any = {
 			model: useSearchGrounding ? llm(modelId, { useSearchGrounding: true }) : llm(modelId),
 			messages,
 			maxOutputTokens: max_tokens,
 			temperature,
-			...(hasTools && { tools, maxSteps }),
-		});
+		};
+
+		if (hasTools) {
+			streamConfig.tools = tools;
+			streamConfig.maxSteps = maxSteps;
+			console.log("[AI Canvas] Adding tools to request, first tool:", Object.keys(tools!)[0], tools![Object.keys(tools!)[0]]);
+		}
+
+		return streamText(streamConfig);
 	};
 
 	let result;
@@ -258,17 +265,16 @@ export const streamResponse = async (
 	try {
 		result = await runStream(canUseSearch, canUseUrlContext);
 	} catch (error: any) {
-		logDebug("AI stream error:", {
+		console.error("[AI Canvas] Stream error:", {
 			message: error?.message,
 			cause: error?.cause,
 			responseBody: error?.responseBody,
 			data: error?.data,
-			fullError: error,
 		});
 		if (!canUseSearch && !canUseUrlContext) {
 			throw error;
 		}
-		logDebug("Google features failed, retrying without them.", { error });
+		console.log("[AI Canvas] Retrying without Google features...");
 		result = await runStream(false, false);
 	}
 
