@@ -9,6 +9,61 @@ const toolsCache = new Map<string, any>();
 // Session IDs for servers (for Streamable HTTP)
 const sessionIds = new Map<string, string>();
 
+// Store original JSON schemas for each tool (needed to fix @ai-sdk/google bug)
+const toolSchemas = new Map<string, any>();
+
+/**
+ * Convert JSON Schema to Gemini's format (uppercase types)
+ * Required because Gemini requires type: "OBJECT" not type: "object"
+ */
+export const convertToGeminiSchema = (schema: any): any => {
+	if (!schema) return { type: 'OBJECT', properties: {} };
+
+	const result: any = {};
+
+	// Convert type to uppercase
+	if (schema.type) {
+		result.type = schema.type.toUpperCase();
+	}
+
+	// Convert properties recursively
+	if (schema.properties) {
+		result.properties = {};
+		for (const [key, value] of Object.entries(schema.properties)) {
+			result.properties[key] = convertToGeminiSchema(value);
+		}
+	}
+
+	// Copy description
+	if (schema.description) {
+		result.description = schema.description;
+	}
+
+	// Copy required
+	if (schema.required) {
+		result.required = schema.required;
+	}
+
+	// Handle items for arrays
+	if (schema.items) {
+		result.items = convertToGeminiSchema(schema.items);
+	}
+
+	// Handle enum
+	if (schema.enum) {
+		result.enum = schema.enum;
+	}
+
+	return result;
+};
+
+/**
+ * Get the stored schema for a tool name
+ */
+export const getToolSchema = (toolName: string): any => {
+	return toolSchemas.get(toolName);
+};
+
 /**
  * Make an MCP JSON-RPC request using Obsidian's requestUrl (bypasses CORS)
  */
@@ -87,6 +142,9 @@ const fetchMCPTools = async (server: MCPServer): Promise<Record<string, any>> =>
 		const toolName = mcpTool.name;
 		const inputSchema = mcpTool.inputSchema || { type: 'object', properties: {} };
 
+		// Store original schema for Gemini conversion (fixes @ai-sdk/google bug)
+		toolSchemas.set(toolName, inputSchema);
+
 		tools[toolName] = createTool({
 			description: mcpTool.description || mcpTool.title || toolName,
 			inputSchema: jsonSchema(inputSchema),
@@ -135,6 +193,11 @@ export const getAllMCPTools = async (servers: MCPServer[]): Promise<Record<strin
 			for (const [toolName, tool] of Object.entries(tools)) {
 				const namespacedName = `${server.id}__${toolName}`;
 				allTools[namespacedName] = tool;
+				// Also store schema with namespaced name
+				const originalSchema = toolSchemas.get(toolName);
+				if (originalSchema) {
+					toolSchemas.set(namespacedName, originalSchema);
+				}
 			}
 		} catch (error) {
 			logDebug(`Failed to get tools from MCP server ${server.name}: ${error}`);

@@ -5,9 +5,58 @@ import { ModelMessage } from "@ai-sdk/provider-utils";
 import { logDebug } from "src/logDebug";
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
 import { requestUrl } from "obsidian";
+import { getToolSchema, convertToGeminiSchema } from "./mcpClient";
 
 // Cache for access tokens: serviceAccountEmail -> { token, expiresAt }
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+// Track if fetch has been patched
+let fetchPatched = false;
+
+/**
+ * Patch global fetch to fix @ai-sdk/google tool schema bug
+ * The AI SDK sends broken schemas (missing type, empty properties) to Gemini
+ * This patch intercepts requests and fixes the schemas before sending
+ */
+const patchFetchForGemini = () => {
+	if (fetchPatched) return;
+	fetchPatched = true;
+
+	const originalFetch = globalThis.fetch;
+	globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+		const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+		// Only intercept Gemini API requests
+		if (url.includes('generativelanguage.googleapis.com') || url.includes('aiplatform.googleapis.com')) {
+			if (init?.body && typeof init.body === 'string') {
+				try {
+					const body = JSON.parse(init.body);
+
+					// Fix tool schemas
+					if (body.tools) {
+						for (const toolGroup of body.tools) {
+							if (toolGroup.functionDeclarations) {
+								for (const func of toolGroup.functionDeclarations) {
+									// Get the stored schema for this tool
+									const storedSchema = getToolSchema(func.name);
+									if (storedSchema) {
+										func.parameters = convertToGeminiSchema(storedSchema);
+										logDebug(`[AI] Fixed schema for tool: ${func.name}`);
+									}
+								}
+							}
+						}
+						init.body = JSON.stringify(body);
+					}
+				} catch (e) {
+					// Not JSON or parsing failed, pass through
+				}
+			}
+		}
+
+		return originalFetch(input, init);
+	};
+};
 
 const base64UrlEncode = (data: ArrayBuffer | string): string => {
 	const bytes = typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data);
@@ -203,6 +252,9 @@ export const streamResponse = async (
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ) => {
+	// Patch fetch for Gemini API requests (fixes broken tool schemas in @ai-sdk/google)
+	patchFetchForGemini();
+
 	const mcpToolCount = mcpTools ? Object.keys(mcpTools).length : 0;
 	console.log("[AI Canvas] Stream request:", {
 		model,
