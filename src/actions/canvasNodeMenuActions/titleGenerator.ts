@@ -97,8 +97,7 @@ const applyGroupLabel = async (node: CanvasNode, label: string) => {
 		node.labelEl.setText(label);
 	}
 	if ("label" in node) {
-		// @ts-expect-error - group nodes expose label directly
-		node.label = label;
+		(node as any).label = label;
 	}
 	if (node.canvas) {
 		await node.canvas.requestSave();

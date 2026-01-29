@@ -111,8 +111,18 @@ export class ModelFetchModal extends Modal {
 		});
 	}
 
+	private isVertexProvider() {
+		const type = this.provider.type.toLowerCase();
+		return type === "vertex";
+	}
+
 	private async fetchModels(button: HTMLButtonElement) {
-		if (!this.provider.apiKey) {
+		const isVertex = this.isVertexProvider();
+		if (isVertex && !this.provider.serviceAccountJson) {
+			new Notice(`${this.provider.type} service account JSON is required to fetch models.`);
+			return;
+		}
+		if (!isVertex && !this.provider.apiKey) {
 			new Notice(`${this.provider.type} API key is required to fetch models.`);
 			return;
 		}

@@ -3,9 +3,9 @@ import { requestUrl } from "obsidian";
 import { logDebug } from "src/logDebug";
 import { getResponse as getResponseFromAI, streamResponse as streamResponseFromAI } from "./ai";
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
-import { CoreMessage } from "ai";
+import { ModelMessage } from "@ai-sdk/provider-utils";
 
-export type Message = CoreMessage;
+export type Message = ModelMessage;
 
 export const streamResponse = async (
 	provider: LLMProvider,

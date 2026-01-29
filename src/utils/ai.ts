@@ -1,83 +1,138 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { GoogleGenerativeAILanguageModel } from "@ai-sdk/google/internal";
-import { streamText, generateText, CoreMessage } from "ai";
+import { createGoogleGenerativeAI, google } from "@ai-sdk/google";
+import { streamText, generateText } from "ai";
+import { ModelMessage } from "@ai-sdk/provider-utils";
 import { logDebug } from "src/logDebug";
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
+import { requestUrl } from "obsidian";
 
-const isSupportedGoogleFileUrl = (url: URL) =>
-	url.toString().startsWith("https://generativelanguage.googleapis.com/v1beta/files/");
+// Cache for access tokens: serviceAccountEmail -> { token, expiresAt }
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
-const isSupportedYouTubeUrl = (url: URL) => {
-	const value = url.toString();
-	return (
-		value.startsWith("https://www.youtube.com/") ||
-		value.startsWith("https://youtube.com/") ||
-		value.startsWith("https://youtu.be/")
+const base64UrlEncode = (data: ArrayBuffer | string): string => {
+	const bytes = typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data);
+	let binary = "";
+	for (let i = 0; i < bytes.length; i++) {
+		binary += String.fromCharCode(bytes[i]);
+	}
+	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+
+const pemToArrayBuffer = (pem: string): ArrayBuffer => {
+	const base64 = pem
+		.replace(/-----BEGIN PRIVATE KEY-----/, "")
+		.replace(/-----END PRIVATE KEY-----/, "")
+		.replace(/\s/g, "");
+	const binary = atob(base64);
+	const bytes = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i++) {
+		bytes[i] = binary.charCodeAt(i);
+	}
+	return bytes.buffer;
+};
+
+const signJwt = async (payload: object, privateKeyPem: string): Promise<string> => {
+	const header = { alg: "RS256", typ: "JWT" };
+	const encodedHeader = base64UrlEncode(JSON.stringify(header));
+	const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+	const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+	const keyData = pemToArrayBuffer(privateKeyPem);
+	const cryptoKey = await crypto.subtle.importKey(
+		"pkcs8",
+		keyData,
+		{ name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+		false,
+		["sign"]
 	);
+
+	const signature = await crypto.subtle.sign(
+		"RSASSA-PKCS1-v1_5",
+		cryptoKey,
+		new TextEncoder().encode(signingInput)
+	);
+
+	return `${signingInput}.${base64UrlEncode(signature)}`;
 };
 
-const generateId = (size = 16) => {
-	const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-	let result = "";
-	for (let i = 0; i < size; i += 1) {
-		result += chars[Math.floor(Math.random() * chars.length)];
+export const getVertexAccessToken = async (serviceAccountJson: string): Promise<string> => {
+	const sa = JSON.parse(serviceAccountJson);
+	const email = sa.client_email;
+	const privateKey = sa.private_key;
+
+	if (!email || !privateKey) {
+		throw new Error("Invalid service account JSON: missing client_email or private_key");
 	}
-	return result;
-};
 
-const withoutTrailingSlash = (value?: string) =>
-	value ? value.replace(/\/+$/, "") : value;
-
-const loadApiKey = (apiKey?: string) => {
-	if (!apiKey) {
-		throw new Error("Google Generative AI API key is missing.");
+	// Check cache
+	const cached = tokenCache.get(email);
+	if (cached && cached.expiresAt > Date.now() + 60000) {
+		return cached.token;
 	}
-	return apiKey;
-};
 
-const createGoogleGenerativeAI = (options: {
-	apiKey?: string;
-	baseURL?: string;
-	headers?: Record<string, string | undefined>;
-	generateId?: () => string;
-	fetch?: typeof fetch;
-} = {}) => {
-	const baseURL =
-		withoutTrailingSlash(options.baseURL) ??
-		"https://generativelanguage.googleapis.com/v1beta";
-	const getHeaders = () => ({
-		"x-goog-api-key": loadApiKey(options.apiKey),
-		...options.headers,
+	const now = Math.floor(Date.now() / 1000);
+	const jwtPayload = {
+		iss: email,
+		scope: "https://www.googleapis.com/auth/cloud-platform",
+		aud: "https://oauth2.googleapis.com/token",
+		iat: now,
+		exp: now + 3600,
+	};
+
+	const signedJwt = await signJwt(jwtPayload, privateKey);
+
+	const response = await requestUrl({
+		url: "https://oauth2.googleapis.com/token",
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${signedJwt}`,
 	});
-	const createChatModel = (modelId: string, settings: Record<string, any> = {}) =>
-		new GoogleGenerativeAILanguageModel(modelId as any, settings, {
-			provider: "google.generative-ai",
-			baseURL,
-			headers: getHeaders,
-			generateId: options.generateId ?? generateId,
-			isSupportedUrl: (url: URL) =>
-				isSupportedGoogleFileUrl(url) || isSupportedYouTubeUrl(url),
-			fetch: options.fetch,
-		});
 
-	const provider = function (modelId: string, settings?: Record<string, any>) {
-		if (new.target) {
-			throw new Error(
-				"The Google Generative AI model function cannot be called with the new keyword."
-			);
-		}
-		return createChatModel(modelId, settings);
-	} as any;
+	const tokenData = response.json;
+	if (!tokenData.access_token) {
+		throw new Error(`Failed to get access token: ${JSON.stringify(tokenData)}`);
+	}
 
-	provider.languageModel = createChatModel;
-	provider.chat = createChatModel;
-	provider.generativeAI = createChatModel;
+	// Cache the token
+	tokenCache.set(email, {
+		token: tokenData.access_token,
+		expiresAt: Date.now() + (tokenData.expires_in || 3600) * 1000,
+	});
 
-	return provider;
+	return tokenData.access_token;
+};
+
+const createVertexProvider = (provider: LLMProvider) => {
+	const location = provider.location || "us-central1";
+	const baseURL = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${provider.projectId}/locations/${location}/publishers/google/models`;
+
+	// Create a fetch wrapper that adds the Authorization header
+	const vertexFetch: typeof fetch = async (input, init) => {
+		const token = await getVertexAccessToken(provider.serviceAccountJson!);
+		const headers = new Headers(init?.headers);
+		headers.set("Authorization", `Bearer ${token}`);
+		headers.delete("x-goog-api-key"); // Remove API key header
+		return fetch(input, { ...init, headers });
+	};
+
+	return createGoogleGenerativeAI({
+		baseURL,
+		apiKey: "vertex", // Dummy value - will be replaced by Authorization header
+		fetch: vertexFetch,
+	});
 };
 
 const getLlm = (provider: LLMProvider) => {
 	switch (provider.type) {
+		case "Vertex": {
+			if (!provider.serviceAccountJson) {
+				throw new Error("Vertex AI requires service account JSON credentials");
+			}
+			if (!provider.projectId) {
+				throw new Error("Vertex AI requires a project ID");
+			}
+			return createVertexProvider(provider);
+		}
 		case "Gemini":
 		case "Google":
 			return createGoogleGenerativeAI({
@@ -112,14 +167,17 @@ const getLlm = (provider: LLMProvider) => {
 };
 
 const isGoogleProvider = (provider: LLMProvider) =>
-	provider.type === "Gemini" || provider.type === "Google";
+	provider.type === "Gemini" || provider.type === "Google" || provider.type === "Vertex";
 
 const supportsSearchGrounding = (modelId: string) =>
 	/^(?:models\/)?gemini-2\.5-/.test(modelId);
 
+const supportsUrlContext = (modelId: string) =>
+	/^(?:models\/)?gemini-(?:2\.5|3)-/.test(modelId);
+
 export const streamResponse = async (
 	provider: LLMProvider,
-	messages: CoreMessage[],
+	messages: ModelMessage[],
 	{
 		max_tokens,
 		model,
@@ -141,46 +199,70 @@ export const streamResponse = async (
 
 	const llm = getLlm(provider) as any;
 	const modelId = model || "gemini-3-flash-preview";
-	const canUseSearch = isGoogleProvider(provider) && supportsSearchGrounding(modelId);
+	const useGoogle = isGoogleProvider(provider);
+	const canUseSearch = useGoogle && supportsSearchGrounding(modelId);
+	const canUseUrlContext = useGoogle && supportsUrlContext(modelId);
 
-	const runStream = (useSearchGrounding: boolean) =>
+	const runStream = (useSearchGrounding: boolean, useUrlContext: boolean) =>
 		streamText({
 			model: useSearchGrounding ? llm(modelId, { useSearchGrounding: true }) : llm(modelId),
 			messages,
-			maxTokens: max_tokens,
+			maxOutputTokens: max_tokens,
 			temperature,
+			...(useUrlContext && { tools: { url_context: google.tools.urlContext({}) } }),
 		});
 
 	let result;
 	try {
-		result = await runStream(canUseSearch);
-	} catch (error) {
-		if (!canUseSearch) {
+		result = await runStream(canUseSearch, canUseUrlContext);
+	} catch (error: any) {
+		logDebug("AI stream error:", {
+			message: error?.message,
+			cause: error?.cause,
+			responseBody: error?.responseBody,
+			data: error?.data,
+			fullError: error,
+		});
+		if (!canUseSearch && !canUseUrlContext) {
 			throw error;
 		}
-		logDebug("Search grounding failed, retrying without it.", { error });
-		result = await runStream(false);
+		logDebug("Google features failed, retrying without them.", { error });
+		result = await runStream(false, false);
 	}
 
-	for await (const part of result.fullStream) {
-		switch (part.type) {
-			case 'text-delta':
-				cb(part.textDelta, null, null, null);
-				break;
-			case 'tool-call':
-				cb(null, null, part, null);
-				break;
-			default:
-				// Ignore other parts for now
-				break;
+	try {
+		for await (const part of result.fullStream) {
+			switch (part.type) {
+				case 'text-delta':
+					cb((part as any).text || (part as any).textDelta, null, null, null);
+					break;
+				case 'tool-call':
+					cb(null, null, part, null);
+					break;
+				case 'error':
+					logDebug("Stream error part:", part);
+					throw (part as any).error || new Error("Stream error");
+				default:
+					// Ignore other parts for now
+					break;
+			}
 		}
+		cb(null, await result, null, null);
+	} catch (streamError: any) {
+		logDebug("Error during streaming:", {
+			message: streamError?.message,
+			cause: streamError?.cause,
+			responseBody: streamError?.responseBody,
+			data: streamError?.data,
+			fullError: streamError,
+		});
+		throw streamError;
 	}
-	cb(null, await result, null, null);
 };
 
 export const getResponse = async (
 	provider: LLMProvider,
-	messages: CoreMessage[],
+	messages: ModelMessage[],
 	{
 		model,
 		max_tokens,
@@ -204,26 +286,35 @@ export const getResponse = async (
 
 	const llm = getLlm(provider) as any;
 	const modelId = model || "gemini-3-flash-preview";
-	const canUseSearch = isGoogleProvider(provider) && supportsSearchGrounding(modelId);
+	const useGoogle = isGoogleProvider(provider);
+	const canUseSearch = useGoogle && supportsSearchGrounding(modelId);
+	const canUseUrlContext = useGoogle && supportsUrlContext(modelId);
 
-	const runGenerate = (useSearchGrounding: boolean) =>
+	const runGenerate = (useSearchGrounding: boolean, useUrlContext: boolean) =>
 		generateText({
 			model: useSearchGrounding ? llm(modelId, { useSearchGrounding: true }) : llm(modelId),
 			messages,
-			maxTokens: max_tokens,
+			maxOutputTokens: max_tokens,
 			temperature,
-			// TODO: Add JSON mode with schema for better type safety
+			...(useUrlContext && { tools: { url_context: google.tools.urlContext({}) } }),
 		});
 
 	let textResult;
 	try {
-		textResult = await runGenerate(canUseSearch);
-	} catch (error) {
-		if (!canUseSearch) {
+		textResult = await runGenerate(canUseSearch, canUseUrlContext);
+	} catch (error: any) {
+		logDebug("AI generate error:", {
+			message: error?.message,
+			cause: error?.cause,
+			responseBody: error?.responseBody,
+			data: error?.data,
+			fullError: error,
+		});
+		if (!canUseSearch && !canUseUrlContext) {
 			throw error;
 		}
-		logDebug("Search grounding failed, retrying without it.", { error });
-		textResult = await runGenerate(false);
+		logDebug("Google features failed, retrying without them.", { error });
+		textResult = await runGenerate(false, false);
 	}
 
 	const { text } = textResult;

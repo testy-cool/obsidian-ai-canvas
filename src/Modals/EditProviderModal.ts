@@ -8,6 +8,7 @@ const PROVIDER_PRESETS = [
     { id: "groq", type: "Groq", baseUrl: "https://api.groq.com/v1" },
     { id: "openrouter", type: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
     { id: "gemini", type: "Gemini", baseUrl: GEMINI_BASE_URL },
+    { id: "vertex", type: "Vertex", baseUrl: "" },
     { id: "ollama", type: "Ollama", baseUrl: "http://localhost:11434/v1" }
 ];
 
@@ -15,6 +16,12 @@ const isGeminiProvider = (id: string, type: string) => {
     const normalizedId = id.trim().toLowerCase();
     const normalizedType = type.trim().toLowerCase();
     return normalizedId === "gemini" || normalizedType === "gemini" || normalizedType === "google";
+};
+
+const isVertexProvider = (id: string, type: string) => {
+    const normalizedId = id.trim().toLowerCase();
+    const normalizedType = type.trim().toLowerCase();
+    return normalizedId === "vertex" || normalizedType === "vertex";
 };
 
 export class EditProviderModal extends Modal {
@@ -26,10 +33,15 @@ export class EditProviderModal extends Modal {
     baseUrlInput: string = "";
     apiKeyInput: string = "";
     enabledInput: boolean = true;
+    projectIdInput: string = "";
+    locationInput: string = "us-central1";
+    serviceAccountJsonInput: string = "";
     contentEl: HTMLElement;
     idInputEl?: TextComponent;
     typeInputEl?: TextComponent;
     baseUrlInputEl?: TextComponent;
+    apiKeySettingEl?: Setting;
+    vertexSettingsEl?: HTMLElement;
 
     constructor(
         app: App, 
@@ -49,6 +61,9 @@ export class EditProviderModal extends Modal {
             this.baseUrlInput = provider.baseUrl;
             this.apiKeyInput = provider.apiKey;
             this.enabledInput = provider.enabled;
+            this.projectIdInput = provider.projectId || "";
+            this.locationInput = provider.location || "us-central1";
+            this.serviceAccountJsonInput = provider.serviceAccountJson || "";
         }
     }
 
@@ -62,16 +77,47 @@ export class EditProviderModal extends Modal {
         });
 
         let baseUrlSetting: Setting | null = null;
-        const updateBaseUrlState = () => {
+        let apiKeySetting: Setting | null = null;
+
+        const updateProviderFieldsState = () => {
             const isGemini = isGeminiProvider(this.idInput, this.typeInput);
+            const isVertex = isVertexProvider(this.idInput, this.typeInput);
+
+            // Handle base URL visibility/state
             if (isGemini) {
                 this.baseUrlInput = GEMINI_BASE_URL;
                 this.baseUrlInputEl?.setValue(this.baseUrlInput);
                 this.baseUrlInputEl?.setDisabled(true);
                 baseUrlSetting?.setDesc("Gemini uses the Google SDK (endpoint is fixed).");
+                baseUrlSetting?.settingEl.show();
+            } else if (isVertex) {
+                this.baseUrlInput = "";
+                this.baseUrlInputEl?.setValue("");
+                this.baseUrlInputEl?.setDisabled(true);
+                baseUrlSetting?.setDesc("Vertex AI uses service account authentication.");
+                baseUrlSetting?.settingEl.hide();
             } else {
                 this.baseUrlInputEl?.setDisabled(false);
                 baseUrlSetting?.setDesc("OpenAI compatible API endpoint");
+                baseUrlSetting?.settingEl.show();
+            }
+
+            // Hide API key for Vertex (uses service account JSON instead)
+            if (isVertex) {
+                apiKeySetting?.settingEl.hide();
+            } else {
+                apiKeySetting?.settingEl.show();
+                apiKeySetting?.setName("API Key");
+                apiKeySetting?.setDesc("API key for this provider");
+            }
+
+            // Handle Vertex-specific settings visibility
+            if (this.vertexSettingsEl) {
+                if (isVertex) {
+                    this.vertexSettingsEl.show();
+                } else {
+                    this.vertexSettingsEl.hide();
+                }
             }
         };
 
@@ -83,7 +129,7 @@ export class EditProviderModal extends Modal {
             this.idInputEl?.setValue(this.idInput);
             this.typeInputEl?.setValue(this.typeInput);
             this.baseUrlInputEl?.setValue(this.baseUrlInput);
-            updateBaseUrlState();
+            updateProviderFieldsState();
         };
 
         if (!this.provider) {
@@ -114,7 +160,7 @@ export class EditProviderModal extends Modal {
                     .setPlaceholder("e.g., anthropic, ollama")
                     .onChange((value) => {
                         this.idInput = value;
-                        updateBaseUrlState();
+                        updateProviderFieldsState();
                     });
             });
 
@@ -128,7 +174,7 @@ export class EditProviderModal extends Modal {
                     .setPlaceholder("e.g., Anthropic, Ollama")
                     .onChange((value) => {
                         this.typeInput = value;
-                        updateBaseUrlState();
+                        updateProviderFieldsState();
                     });
             });
 
@@ -144,10 +190,9 @@ export class EditProviderModal extends Modal {
                         this.baseUrlInput = value;
                     });
             });
-        updateBaseUrlState();
 
         // API Key
-        new Setting(this.contentEl)
+        apiKeySetting = new Setting(this.contentEl)
             .setName("API Key")
             .setDesc("API key for this provider")
             .addText((text) => {
@@ -158,6 +203,58 @@ export class EditProviderModal extends Modal {
                     });
                 text.inputEl.type = "password";
             });
+
+        // Vertex AI specific settings
+        this.vertexSettingsEl = this.contentEl.createDiv("vertex-settings");
+
+        new Setting(this.vertexSettingsEl)
+            .setName("Project ID")
+            .setDesc("Your Google Cloud project ID (from the JSON or console)")
+            .addText((text) => {
+                text.setPlaceholder("my-project-id")
+                    .setValue(this.projectIdInput)
+                    .onChange((value) => {
+                        this.projectIdInput = value;
+                    });
+            });
+
+        new Setting(this.vertexSettingsEl)
+            .setName("Location")
+            .setDesc("Google Cloud region (e.g., us-central1)")
+            .addText((text) => {
+                text.setPlaceholder("us-central1")
+                    .setValue(this.locationInput)
+                    .onChange((value) => {
+                        this.locationInput = value;
+                    });
+            });
+
+        new Setting(this.vertexSettingsEl)
+            .setName("Service Account JSON")
+            .setDesc("Paste the entire service account JSON file contents")
+            .addTextArea((text) => {
+                text.setPlaceholder('{"type": "service_account", "project_id": "...", ...}')
+                    .setValue(this.serviceAccountJsonInput)
+                    .onChange((value) => {
+                        this.serviceAccountJsonInput = value;
+                        // Auto-fill project ID if empty
+                        if (!this.projectIdInput.trim()) {
+                            try {
+                                const sa = JSON.parse(value);
+                                if (sa.project_id) {
+                                    this.projectIdInput = sa.project_id;
+                                }
+                            } catch {}
+                        }
+                    });
+                text.inputEl.rows = 8;
+                text.inputEl.style.width = "100%";
+                text.inputEl.style.fontFamily = "monospace";
+                text.inputEl.style.fontSize = "11px";
+            });
+
+        // Initialize visibility state
+        updateProviderFieldsState();
 
         // Enabled Toggle
         new Setting(this.contentEl)
@@ -188,26 +285,56 @@ export class EditProviderModal extends Modal {
                 new Notice("Provider ID is required");
                 return;
             }
-            
+
             if (!this.typeInput.trim()) {
                 new Notice("Provider name is required");
                 return;
             }
-            
+
             const geminiProvider = isGeminiProvider(this.idInput, this.typeInput);
-            if (!geminiProvider && !this.baseUrlInput.trim()) {
+            const vertexProvider = isVertexProvider(this.idInput, this.typeInput);
+
+            if (!geminiProvider && !vertexProvider && !this.baseUrlInput.trim()) {
                 new Notice("Base URL is required");
                 return;
             }
-            
+
+            if (vertexProvider) {
+                if (!this.serviceAccountJsonInput.trim()) {
+                    new Notice("Service Account JSON is required for Vertex AI");
+                    return;
+                }
+                try {
+                    const sa = JSON.parse(this.serviceAccountJsonInput);
+                    if (!sa.client_email || !sa.private_key) {
+                        new Notice("Invalid service account JSON: missing client_email or private_key");
+                        return;
+                    }
+                    // Auto-fill project ID from JSON if not set
+                    if (!this.projectIdInput.trim() && sa.project_id) {
+                        this.projectIdInput = sa.project_id;
+                    }
+                } catch {
+                    new Notice("Invalid JSON format in Service Account JSON");
+                    return;
+                }
+                if (!this.projectIdInput.trim()) {
+                    new Notice("Project ID is required for Vertex AI");
+                    return;
+                }
+            }
+
             const updatedProvider: LLMProvider = {
                 id: this.idInput,
                 type: this.typeInput,
                 baseUrl: geminiProvider ? GEMINI_BASE_URL : this.baseUrlInput,
                 apiKey: this.apiKeyInput,
-                enabled: this.enabledInput
+                enabled: this.enabledInput,
+                projectId: vertexProvider ? this.projectIdInput : undefined,
+                location: vertexProvider ? (this.locationInput || "us-central1") : undefined,
+                serviceAccountJson: vertexProvider ? this.serviceAccountJsonInput : undefined,
             };
-            
+
             this.onSubmit(updatedProvider);
             this.close();
         });

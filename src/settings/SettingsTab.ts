@@ -151,16 +151,29 @@ export default class SettingsTab extends PluginSettingTab {
 
             const metaRow = providerBlock.createDiv("provider-meta");
             metaRow.createEl("span", { text: `ID: ${provider.id}` });
-            if (this.isGeminiProvider(provider)) {
+            if (this.isVertexProvider(provider)) {
+                metaRow.createEl("span", { text: `Project: ${provider.projectId || "(not set)"}` });
+                metaRow.createEl("span", { text: `Location: ${provider.location || "us-central1"}` });
+                const hasCredentials = provider.serviceAccountJson && provider.serviceAccountJson.trim().length > 0;
+                metaRow.createEl("span", {
+                    text: hasCredentials ? "Credentials: set" : "Credentials: missing",
+                    cls: hasCredentials ? "" : "mod-warning",
+                });
+            } else if (this.isGeminiProvider(provider)) {
                 metaRow.createEl("span", { text: "Endpoint: Google SDK (fixed)" });
+                const hasKey = provider.apiKey && provider.apiKey.trim().length > 0;
+                metaRow.createEl("span", {
+                    text: hasKey ? "API key: set" : "API key: missing",
+                    cls: hasKey ? "" : "mod-warning",
+                });
             } else {
                 metaRow.createEl("span", { text: `URL: ${provider.baseUrl}` });
+                const hasKey = provider.apiKey && provider.apiKey.trim().length > 0;
+                metaRow.createEl("span", {
+                    text: hasKey ? "API key: set" : "API key: missing",
+                    cls: hasKey ? "" : "mod-warning",
+                });
             }
-            const hasKey = provider.apiKey && provider.apiKey.trim().length > 0;
-            metaRow.createEl("span", {
-                text: hasKey ? "API key: set" : "API key: missing",
-                cls: hasKey ? "" : "mod-warning",
-            });
 
             this.renderProviderModels(provider, providerBlock);
         });
@@ -306,6 +319,12 @@ export default class SettingsTab extends PluginSettingTab {
         const id = provider.id.trim().toLowerCase();
         const type = provider.type.trim().toLowerCase();
         return id === "gemini" || type === "gemini" || type === "google";
+    }
+
+    private isVertexProvider(provider: LLMProvider) {
+        const id = provider.id.trim().toLowerCase();
+        const type = provider.type.trim().toLowerCase();
+        return id === "vertex" || type === "vertex";
     }
 
     private ensureActiveModelForProvider(providerId?: string) {

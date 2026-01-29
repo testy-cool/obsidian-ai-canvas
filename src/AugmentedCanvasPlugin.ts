@@ -463,8 +463,16 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		});
 		// * no event name to add to Canvas context menu ("canvas-menu" does not exist)
 		this.registerEvent(
-			this.app.workspace.on("canvas:node-menu", (menu) => {
+			this.app.workspace.on("canvas:node-menu", (menu, node) => {
 				menu.addSeparator();
+				menu.addItem((item) => {
+					item.setTitle("Copy node ID")
+						.setIcon("lucide-copy")
+						.onClick(() => {
+							navigator.clipboard.writeText(node.id);
+							new Notice("Node ID copied to clipboard");
+						});
+				});
 				menu.addItem((item) => {
 					item.setTitle("Generate image")
 						.setIcon("lucide-image")

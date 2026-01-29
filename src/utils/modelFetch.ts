@@ -50,10 +50,18 @@ export const fetchProviderModels = async (
 		provider.type === "Gemini" ||
 		provider.type === "Google" ||
 		["gemini", "google"].includes(provider.id.toLowerCase());
+	const isVertex =
+		provider.type === "Vertex" || provider.id.toLowerCase() === "vertex";
 
 	const headers: Record<string, string> = {};
 	if (apiKey) {
 		headers.Authorization = `Bearer ${apiKey}`;
+	}
+
+	if (isVertex) {
+		// Vertex AI doesn't have a simple model listing API
+		// Use the "Custom model" field to add models manually (e.g., gemini-1.5-pro-002)
+		return [];
 	}
 
 	if (isGoogle) {

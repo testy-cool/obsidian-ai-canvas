@@ -59,6 +59,21 @@ export interface LLMProvider {
 	 * Whether this provider is enabled
 	 */
 	enabled: boolean;
+
+	/**
+	 * Google Cloud project ID (for Vertex AI)
+	 */
+	projectId?: string;
+
+	/**
+	 * Google Cloud location/region (for Vertex AI)
+	 */
+	location?: string;
+
+	/**
+	 * Service account JSON credentials (for Vertex AI)
+	 */
+	serviceAccountJson?: string;
 }
 
 export interface AugmentedCanvasSettings {
@@ -252,6 +267,15 @@ const DEFAULT_PROVIDERS: LLMProvider[] = [
 		baseUrl: GEMINI_BASE_URL,
 		apiKey: "",
 		enabled: true
+	},
+	{
+		id: "vertex",
+		type: "Vertex",
+		baseUrl: "",
+		apiKey: "",
+		enabled: false,
+		projectId: "",
+		location: "us-central1"
 	}
 ];
 

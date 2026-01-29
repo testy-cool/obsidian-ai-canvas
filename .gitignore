@@ -8,9 +8,7 @@
 # npm
 node_modules
 
-# Don't include the compiled main.js file in the repo.
-# They should be uploaded to GitHub releases instead.
-main.js
+# main.js is committed for BRAT compatibility
 
 # Exclude sourcemaps
 *.map
@@ -30,3 +28,4 @@ repomix-output.xml
 .env
 bigdocs/
 tmp/
+nul

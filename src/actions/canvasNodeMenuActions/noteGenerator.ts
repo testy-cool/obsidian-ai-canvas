@@ -739,11 +739,40 @@ export function noteGenerator(
 				// 	// If the user has not changed selection, select the created node
 				// 	canvas.selectOnly(created, false /* startEditing */);
 				// }
-			} catch (error) {
-				new Notice(`Error calling the AI: ${error.message || error}`);
-				if (!toNode) {
-					canvas.removeNode(created);
+			} catch (error: any) {
+				// Extract detailed error info from AI SDK errors
+				let errorDetail = error.message || String(error);
+
+				// AI SDK errors often have nested details
+				if (error.cause?.message) {
+					errorDetail = error.cause.message;
 				}
+				if (error.responseBody) {
+					try {
+						const body = typeof error.responseBody === 'string'
+							? JSON.parse(error.responseBody)
+							: error.responseBody;
+						if (body?.error?.message) {
+							errorDetail = body.error.message;
+						}
+					} catch {}
+				}
+				// Gemini specific error format
+				if (error.data?.error?.message) {
+					errorDetail = error.data.error.message;
+				}
+
+				new Notice(`Error calling the AI: ${errorDetail}`, 10000);
+
+				// Show the error in the node instead of removing it
+				created.setText(`**Error:** ${errorDetail}`);
+				const errorDimensions = calculateNoteDimensions(created.text, 300, 500);
+				created.moveAndResize({
+					height: errorDimensions.height,
+					width: errorDimensions.width,
+					x: created.x,
+					y: created.y
+				});
 			}
 
 			await canvas.requestSave();

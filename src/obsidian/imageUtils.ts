@@ -11,7 +11,7 @@ const writeImageToFile = async (
 		// TODO : bind to settings attachments path or fallback to settings.imagePath
 
 		// Write the array buffer to the vault
-		await fileAdapter.writeBinary(imagePath, new Uint8Array(imageBuffer));
+		await fileAdapter.writeBinary(imagePath, imageBuffer);
 		console.log("Image saved successfully.");
 	} catch (error) {
 		console.error("Error saving the image:", error);
