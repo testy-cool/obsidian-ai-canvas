@@ -645,11 +645,12 @@ export function noteGenerator(
 				if (settings.mcpEnabled && settings.mcpServers.length > 0) {
 					try {
 						mcpTools = await getAllMCPTools(settings.mcpServers);
-						if (Object.keys(mcpTools).length > 0) {
-							logDebug(`Loaded ${Object.keys(mcpTools).length} MCP tools`);
+						const toolCount = Object.keys(mcpTools).length;
+						if (toolCount > 0) {
+							new Notice(`Loaded ${toolCount} MCP tools`);
 						}
 					} catch (error) {
-						logDebug(`Failed to load MCP tools: ${error}`);
+						new Notice(`Failed to load MCP tools: ${error}`);
 					}
 				}
 
