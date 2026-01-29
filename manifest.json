@@ -1,9 +1,9 @@
 {
 	"id": "obsidian-ai-canvas",
 	"name": "Obsidian AI Canvas",
-	"version": "0.1.32",
+	"version": "0.1.33",
 	"minAppVersion": "1.1.0",
-	"description": "AI-powered Canvas for Obsidian with intelligent note interactions and content generation.",
+	"description": "Transform your Canvas into an AI workspace. Chat with notes, generate content, use MCP tools, and connect to any LLM provider.",
 	"author": "testycool",
 	"authorUrl": "https://github.com/testy-cool/",
 	"isDesktopOnly": false
