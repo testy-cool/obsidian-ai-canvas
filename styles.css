@@ -650,3 +650,18 @@
 	letter-spacing: 0.05em;
 	border-bottom: 1px solid var(--background-modifier-border);
 }
+
+/* AI Features Indicator */
+.ai-features-indicator {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 10px;
+	margin-bottom: 8px;
+	font-size: var(--font-ui-smaller);
+	font-weight: 500;
+	color: var(--text-muted);
+	background: var(--background-secondary-alt);
+	border-radius: var(--radius-s);
+	border: 1px solid var(--background-modifier-border);
+}

@@ -656,8 +656,18 @@ export function noteGenerator(
 
 				let reasoningEl: HTMLElement;
 				let toolsContainer: HTMLElement;
+				let featuresEl: HTMLElement;
 				let firstDelta = true;
 				const toolRefs = new Map<string, HTMLElement>();
+
+				// Determine what features are active
+				const hasMcpTools = mcpTools && Object.keys(mcpTools).length > 0;
+				const mcpToolCount = hasMcpTools ? Object.keys(mcpTools!).length : 0;
+				const isGemini = provider.type === "Gemini" || provider.type === "Google" || provider.type === "Vertex";
+				const modelSupportsUrlContext = /^(?:models\/)?gemini-(?:2\.5|3)-/.test(model.model);
+				const modelSupportsSearchGrounding = /^(?:models\/)?gemini-2\.5-/.test(model.model);
+				const usesUrlContext = isGemini && modelSupportsUrlContext && !hasMcpTools;
+				const usesSearchGrounding = isGemini && modelSupportsSearchGrounding;
 
 				const truncateText = (text: string, maxLen = 100) => {
 					if (!text) return "";
@@ -677,6 +687,17 @@ export function noteGenerator(
 					(delta: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => {
 						if (firstDelta) {
 							created.setText("");
+
+							// Show active features indicator
+							if (hasMcpTools || usesUrlContext || usesSearchGrounding) {
+								featuresEl = created.contentEl.createEl("div", { cls: "ai-features-indicator" });
+								const features: string[] = [];
+								if (hasMcpTools) features.push(`🔧 MCP (${mcpToolCount} tools)`);
+								if (usesUrlContext) features.push("🌐 URL Context");
+								if (usesSearchGrounding) features.push("🔍 Search");
+								featuresEl.setText(features.join(" · "));
+							}
+
 							const details = created.contentEl.createEl("details");
 							details.createEl("summary", { text: "Reasoning" });
 							reasoningEl = details.createEl("div", { cls: "reasoning" });
