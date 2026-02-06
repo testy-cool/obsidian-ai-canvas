@@ -518,6 +518,16 @@ export default class SettingsTab extends PluginSettingTab {
         new Setting(containerEl).setHeading().setName("Generation Settings");
 
         new Setting(containerEl)
+            .setName("Auto-expand HTML previews")
+            .setDesc("Automatically expand HTML preview sections when AI generates HTML code blocks.")
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.autoPreviewHtml)
+                .onChange(async (value) => {
+                    this.plugin.settings.autoPreviewHtml = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
             .setName("Temperature")
             .setDesc("Controls the randomness of the AI's responses. Higher values are more creative.")
             .addSlider(slider => slider

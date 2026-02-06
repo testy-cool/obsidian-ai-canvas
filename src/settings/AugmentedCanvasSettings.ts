@@ -280,6 +280,11 @@ export interface AugmentedCanvasSettings {
 	 * Whether to require approval before executing MCP tools
 	 */
 	mcpRequireApproval: boolean;
+
+	/**
+	 * Auto-expand HTML previews when AI generates HTML code blocks
+	 */
+	autoPreviewHtml: boolean;
 }
 
 const DEFAULT_SYSTEM_PROMPT = `
@@ -391,7 +396,8 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	mcpServers: [],
 	mcpEnabled: true,
 	mcpMaxSteps: 5,
-	mcpRequireApproval: false
+	mcpRequireApproval: false,
+	autoPreviewHtml: false
 };
 
 

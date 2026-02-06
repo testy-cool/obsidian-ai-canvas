@@ -25,6 +25,7 @@ import { getResponse, streamResponse, ToolEvent } from "../../utils/llm";
 import { addModelIndicator, getYouTubeVideoId } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { getAllMCPTools } from "../../utils/mcpClient";
+import { extractHtmlCodeBlocks, addHtmlPreviewToNode } from "../../utils/htmlPreview";
 
 /**
  * Color for assistant notes: 6 == purple
@@ -781,6 +782,12 @@ export function noteGenerator(
 
 							// Add subtle model indicator to the note
 							addModelIndicator(created, provider.type, model.model);
+
+							// Add HTML preview if there are HTML code blocks
+							const htmlBlocks = extractHtmlCodeBlocks(created.text);
+							if (htmlBlocks.length > 0) {
+								addHtmlPreviewToNode(created, htmlBlocks, settings.autoPreviewHtml ?? false);
+							}
 						}
 					}
 				);
