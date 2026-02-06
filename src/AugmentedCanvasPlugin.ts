@@ -46,6 +46,7 @@ import { InputModal } from "./Modals/InputModal";
 import { runYoutubeCaptions } from "./actions/commands/youtubeCaptions";
 import { insertWebsiteContent } from "./actions/commands/websiteContent";
 import { noteGenerator } from "./actions/canvasNodeMenuActions/noteGenerator";
+import { setupHtmlPreviewPersistence } from "./utils/htmlPreview";
 
 // @ts-expect-error
 import promptsCsvText from "./data/prompts.csv.txt";
@@ -54,6 +55,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	triggerByPlugin: boolean = false;
 	patchSucceed: boolean = false;
 	private cleanupIndicatorPersistence?: () => void;
+	private cleanupHtmlPreviewPersistence?: () => void;
 
 	settings: AugmentedCanvasSettings;
 
@@ -76,6 +78,12 @@ export default class AugmentedCanvasPlugin extends Plugin {
 
 			// Set up persistent model indicators
 			this.cleanupIndicatorPersistence = setupCanvasIndicatorPersistence(this.app);
+
+			// Set up persistent HTML previews
+			this.cleanupHtmlPreviewPersistence = setupHtmlPreviewPersistence(
+				this.app,
+				() => this.settings.autoPreviewHtml ?? false
+			);
 
 			if (this.settings.systemPrompts.length === 0) {
 				this.fetchSystemPrompts();
@@ -122,6 +130,9 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		// Clean up event listeners
 		if (this.cleanupIndicatorPersistence) {
 			this.cleanupIndicatorPersistence();
+		}
+		if (this.cleanupHtmlPreviewPersistence) {
+			this.cleanupHtmlPreviewPersistence();
 		}
 	}
 

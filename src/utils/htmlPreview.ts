@@ -11,15 +11,19 @@ export interface HtmlCodeBlock {
  */
 export function extractHtmlCodeBlocks(text: string): HtmlCodeBlock[] {
 	const blocks: HtmlCodeBlock[] = [];
-	const regex = /```html\s*\n([\s\S]*?)```/gi;
+	// More lenient regex - optional newline after ```html
+	const regex = /```html\s*([\s\S]*?)```/gi;
 	let match;
 
 	while ((match = regex.exec(text)) !== null) {
-		blocks.push({
-			content: match[1].trim(),
-			startIndex: match.index,
-			endIndex: match.index + match[0].length,
-		});
+		const content = match[1].trim();
+		if (content) {
+			blocks.push({
+				content,
+				startIndex: match.index,
+				endIndex: match.index + match[0].length,
+			});
+		}
 	}
 
 	return blocks;
@@ -72,6 +76,12 @@ export function addHtmlPreviewToNode(
 ): HTMLElement | null {
 	if (!htmlBlocks.length || !node.contentEl) return null;
 
+	// Remove existing preview if present
+	const existing = node.contentEl.querySelector(".html-preview-container");
+	if (existing) {
+		existing.remove();
+	}
+
 	const container = node.contentEl.createEl("div", { cls: "html-preview-container" });
 
 	htmlBlocks.forEach((block, index) => {
@@ -100,7 +110,7 @@ export function addHtmlPreviewToNode(
 			// Update button states
 			sizeContainer.querySelectorAll("button").forEach((btn) => {
 				btn.removeClass("html-preview-size-active");
-				if (btn.getText() === size) {
+				if (btn.textContent === size) {
 					btn.addClass("html-preview-size-active");
 				}
 			});
@@ -150,4 +160,53 @@ function openHtmlInNewWindow(htmlContent: string): void {
 		newWindow.document.write(htmlContent);
 		newWindow.document.close();
 	}
+}
+
+/**
+ * Restore HTML previews for all nodes in a canvas
+ */
+export function restoreHtmlPreviews(canvas: any, autoExpand: boolean = false): void {
+	if (!canvas?.nodes) return;
+
+	canvas.nodes.forEach((node: CanvasNode) => {
+		const nodeData = node.getData?.();
+		// Only process AI-generated text nodes
+		if (nodeData?.type === "text" && nodeData?.chat_role === "assistant") {
+			const text = node.text || "";
+			const htmlBlocks = extractHtmlCodeBlocks(text);
+			if (htmlBlocks.length > 0) {
+				addHtmlPreviewToNode(node, htmlBlocks, autoExpand);
+			}
+		}
+	});
+}
+
+/**
+ * Set up canvas event listeners to restore HTML previews
+ */
+export function setupHtmlPreviewPersistence(app: any, getAutoExpand: () => boolean): () => void {
+	const restoreForActiveCanvas = () => {
+		const maybeCanvasView = app.workspace.getActiveViewOfType(
+			app.workspace.activeLeaf?.view?.constructor
+		);
+		const canvas = maybeCanvasView?.["canvas"];
+		if (canvas) {
+			// Use a small delay to ensure DOM is ready
+			setTimeout(() => {
+				restoreHtmlPreviews(canvas, getAutoExpand());
+			}, 150);
+		}
+	};
+
+	// Restore previews when switching to canvas view
+	app.workspace.on("active-leaf-change", restoreForActiveCanvas);
+
+	// Restore previews when canvas is loaded
+	app.workspace.on("layout-change", restoreForActiveCanvas);
+
+	// Return cleanup function
+	return () => {
+		app.workspace.off("active-leaf-change", restoreForActiveCanvas);
+		app.workspace.off("layout-change", restoreForActiveCanvas);
+	};
 }
