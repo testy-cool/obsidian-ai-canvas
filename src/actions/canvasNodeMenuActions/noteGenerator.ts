@@ -207,7 +207,7 @@ const buildGeminiImagePartsFromMessages = (messages: any[]) => {
 				parts.push({
 					inlineData: {
 						data: base64,
-						mimeType: part.mimeType || "image/png",
+						mimeType: part.mediaType || "image/png",
 					},
 				});
 			}
@@ -431,7 +431,7 @@ export function noteGenerator(
 				parts.push({
 					type: "image",
 					image: nodeMedia.data,
-					mimeType: nodeMedia.mimeType,
+					mediaType: nodeMedia.mimeType,
 				});
 				messages.unshift({
 					content: parts,
@@ -442,7 +442,7 @@ export function noteGenerator(
 				parts.push({
 					type: "file",
 					data: nodeMedia.data,
-					mimeType: nodeMedia.mimeType,
+					mediaType: nodeMedia.mimeType,
 					filename: nodeMedia.filename,
 				});
 				if (nodeText) {
@@ -463,8 +463,8 @@ export function noteGenerator(
 					try {
 						parts.push({
 							type: "file",
-							data: new URL(url),
-							mimeType: "video/mp4",
+							data: url,
+							mediaType: "video/mp4",
 						});
 					} catch {
 						continue;
@@ -785,8 +785,11 @@ export function noteGenerator(
 
 							// Add HTML preview if there are HTML code blocks
 							const htmlBlocks = extractHtmlCodeBlocks(created.text);
+							console.log("[HTML Preview] Text length:", created.text?.length, "HTML blocks found:", htmlBlocks.length);
 							if (htmlBlocks.length > 0) {
-								addHtmlPreviewToNode(created, htmlBlocks, settings.autoPreviewHtml ?? false);
+								console.log("[HTML Preview] Adding preview to node, contentEl:", !!created.contentEl);
+								const previewEl = addHtmlPreviewToNode(created, htmlBlocks, settings.autoPreviewHtml ?? false);
+								console.log("[HTML Preview] Preview element created:", !!previewEl);
 							}
 						}
 					}

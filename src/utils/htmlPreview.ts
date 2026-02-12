@@ -15,8 +15,11 @@ export function extractHtmlCodeBlocks(text: string): HtmlCodeBlock[] {
 	const regex = /```html\s*([\s\S]*?)```/gi;
 	let match;
 
+	console.log("[HTML Preview] Extracting from text:", text?.substring(0, 200));
+
 	while ((match = regex.exec(text)) !== null) {
 		const content = match[1].trim();
+		console.log("[HTML Preview] Found match, content length:", content?.length);
 		if (content) {
 			blocks.push({
 				content,
@@ -26,6 +29,7 @@ export function extractHtmlCodeBlocks(text: string): HtmlCodeBlock[] {
 		}
 	}
 
+	console.log("[HTML Preview] Total blocks found:", blocks.length);
 	return blocks;
 }
 
@@ -74,15 +78,23 @@ export function addHtmlPreviewToNode(
 	htmlBlocks: HtmlCodeBlock[],
 	autoExpand?: boolean
 ): HTMLElement | null {
-	if (!htmlBlocks.length || !node.contentEl) return null;
+	console.log("[HTML Preview] addHtmlPreviewToNode called, blocks:", htmlBlocks.length, "contentEl:", !!node.contentEl);
+
+	if (!htmlBlocks.length || !node.contentEl) {
+		console.log("[HTML Preview] Early return - no blocks or no contentEl");
+		return null;
+	}
 
 	// Remove existing preview if present
 	const existing = node.contentEl.querySelector(".html-preview-container");
 	if (existing) {
+		console.log("[HTML Preview] Removing existing preview");
 		existing.remove();
 	}
 
+	console.log("[HTML Preview] Creating container in contentEl");
 	const container = node.contentEl.createEl("div", { cls: "html-preview-container" });
+	console.log("[HTML Preview] Container created:", !!container);
 
 	htmlBlocks.forEach((block, index) => {
 		const details = container.createEl("details", { cls: "html-preview-details" });

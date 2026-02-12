@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-ai-canvas",
-	"version": "0.1.36",
+	"version": "0.1.37",
 	"description": "Transform your Canvas into an AI workspace. Chat with notes, generate content, use MCP tools, and connect to any LLM provider.",
 	"main": "main.js",
 	"scripts": {
