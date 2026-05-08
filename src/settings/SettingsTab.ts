@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent, TextComponent, ToggleComponent, Modal } from "obsidian";
+import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent, TextComponent, ToggleComponent, Modal, requestUrl } from "obsidian";
 import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
 import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
 import { LLMModel, LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
@@ -27,6 +27,7 @@ export default class SettingsTab extends PluginSettingTab {
 		this.renderImageSettings(containerEl);
 		this.renderNamingSettings(containerEl);
         this.renderPromptManagement(containerEl);
+        this.renderObservability(containerEl);
     }
 
     private renderGeneralSettings(containerEl: HTMLElement) {
@@ -863,6 +864,116 @@ export default class SettingsTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     });
             });
+    }
+
+    private renderObservability(containerEl: HTMLElement) {
+        new Setting(containerEl).setHeading().setName("Observability");
+
+        new Setting(containerEl)
+            .setName("Enable tracing")
+            .setDesc("Send LLM traces to an observability provider.")
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.observability.enabled)
+                .onChange(async value => {
+                    this.plugin.settings.observability.enabled = value;
+                    await this.plugin.saveSettings();
+                    this.display();
+                }));
+
+        if (!this.plugin.settings.observability.enabled) return;
+
+        new Setting(containerEl)
+            .setName("Provider")
+            .setDesc("Observability backend to send traces to.")
+            .addDropdown(dropdown => {
+                dropdown.addOption("none", "None");
+                dropdown.addOption("langfuse", "Langfuse");
+                dropdown.addOption("laminar", "Laminar");
+                dropdown.addOption("custom", "Custom");
+                dropdown
+                    .setValue(this.plugin.settings.observability.provider)
+                    .onChange(async value => {
+                        this.plugin.settings.observability.provider = value as "none" | "langfuse" | "laminar" | "custom";
+                        await this.plugin.saveSettings();
+                        this.display();
+                    });
+            });
+
+        if (this.plugin.settings.observability.provider === "none") return;
+
+        new Setting(containerEl)
+            .setName("Host URL")
+            .setDesc("Base URL of your observability instance (e.g. https://cloud.langfuse.com).")
+            .addText(text => text
+                .setPlaceholder("https://")
+                .setValue(this.plugin.settings.observability.host)
+                .onChange(async value => {
+                    this.plugin.settings.observability.host = value.trim();
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName("Public key")
+            .setDesc("Public API key for the observability provider.")
+            .addText(text => text
+                .setValue(this.plugin.settings.observability.publicKey)
+                .onChange(async value => {
+                    this.plugin.settings.observability.publicKey = value.trim();
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName("Secret key")
+            .setDesc("Secret API key for the observability provider.")
+            .addText(text => {
+                text.setValue(this.plugin.settings.observability.secretKey)
+                    .onChange(async value => {
+                        this.plugin.settings.observability.secretKey = value.trim();
+                        await this.plugin.saveSettings();
+                    });
+                text.inputEl.type = "password";
+            });
+
+        const testSetting = new Setting(containerEl)
+            .setName("Test connection")
+            .setDesc("Verify the host and credentials are reachable.");
+
+        testSetting.addButton(button => {
+            button.setButtonText("Test connection").onClick(async () => {
+                const { host, publicKey, secretKey, provider } = this.plugin.settings.observability;
+                if (!host) {
+                    new Notice("Host URL is required");
+                    return;
+                }
+
+                button.setButtonText("Testing...").setDisabled(true);
+
+                const healthPath = provider === "langfuse"
+                    ? "/api/public/health"
+                    : "/v1/health";
+
+                const url = host.replace(/\/$/, "") + healthPath;
+                const credentials = btoa(`${publicKey}:${secretKey}`);
+
+                try {
+                    const response = await requestUrl({
+                        url,
+                        method: "GET",
+                        headers: { Authorization: `Basic ${credentials}` },
+                        throw: false,
+                    });
+                    if (response.status >= 200 && response.status < 300) {
+                        testSetting.setDesc("✓ Connected");
+                    } else {
+                        testSetting.setDesc(`✗ Failed (HTTP ${response.status})`);
+                    }
+                } catch (e) {
+                    testSetting.setDesc(`✗ Failed: ${(e as Error).message}`);
+                } finally {
+                    button.setButtonText("Test connection").setDisabled(false);
+                }
+            });
+        });
     }
 }
 
