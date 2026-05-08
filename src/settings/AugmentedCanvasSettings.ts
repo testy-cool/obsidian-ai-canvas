@@ -32,6 +32,36 @@ export interface LLMModel {
 	 * Whether this model is enabled
 	 */
 	enabled: boolean;
+
+	/**
+	 * Request timeout in milliseconds
+	 */
+	timeoutMs?: number;
+
+	/**
+	 * Maximum number of retries on failure
+	 */
+	maxRetries?: number;
+
+	/**
+	 * Input cost per million tokens (for cost tracking)
+	 */
+	inputCostPerMillion?: number;
+
+	/**
+	 * Output cost per million tokens (for cost tracking)
+	 */
+	outputCostPerMillion?: number;
+
+	/**
+	 * Whether cost fields were manually overridden
+	 */
+	costOverridden?: boolean;
+
+	/**
+	 * Provider-specific parameters (service tier, reasoning effort, etc.)
+	 */
+	providerParams?: Record<string, unknown>;
 }
 
 export type MCPTransportType = 'http' | 'sse' | 'websocket';
@@ -120,6 +150,14 @@ export interface LLMProvider {
 	serviceAccountJson?: string;
 }
 
+export interface ObservabilitySettings {
+	provider: "none" | "langfuse" | "laminar" | "custom";
+	host: string;
+	publicKey: string;
+	secretKey: string;
+	enabled: boolean;
+}
+
 export interface AugmentedCanvasSettings {
 	/**
 	 * List of configured LLM providers
@@ -155,6 +193,11 @@ export interface AugmentedCanvasSettings {
 	 * Enable debug output in the console
 	 */
 	debug: boolean;
+
+	/**
+	 * Observability/tracing configuration
+	 */
+	observability: ObservabilitySettings;
 
 	/**
 	 * The maximum number of tokens to send (up to model limit). 0 means as many as possible.
@@ -370,6 +413,13 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	temperature: 1,
 	systemPrompt: DEFAULT_SYSTEM_PROMPT,
 	debug: true,
+	observability: {
+		provider: "none",
+		host: "",
+		publicKey: "",
+		secretKey: "",
+		enabled: false,
+	},
 	maxInputTokens: 0,
 	maxResponseTokens: 0,
 	maxDepth: 0,
