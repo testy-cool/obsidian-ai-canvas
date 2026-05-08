@@ -40,7 +40,7 @@ const patchFetchForGemini = () => {
 									// Get the stored schema for this tool
 									const storedSchema = getToolSchema(func.name);
 									if (storedSchema) {
-										func.parameters = convertToGeminiSchema(storedSchema);
+										func.parameters = convertToGeminiSchema(JSON.parse(JSON.stringify(storedSchema)));
 										logDebug(`[AI] Fixed schema for tool: ${func.name}`);
 									}
 								}
