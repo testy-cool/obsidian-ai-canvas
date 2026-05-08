@@ -244,6 +244,7 @@ export interface StreamOptions {
 	maxSteps?: number;
 	providerParams?: Record<string, unknown>;
 	timeoutMs?: number;
+	onComplete?: (result: { inputTokens: number; outputTokens: number; totalText: string; error?: string }) => void;
 }
 
 export type ToolEvent = {
@@ -265,6 +266,7 @@ export const streamResponse = async (
 		maxSteps = 10,
 		providerParams,
 		timeoutMs,
+		onComplete,
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ) => {
@@ -395,6 +397,14 @@ export const streamResponse = async (
 		const finalText = await finalResult.text;
 		console.log("[AI Canvas] Final result text length:", finalText?.length);
 		cb(null, finalResult, null, null);
+		if (onComplete) {
+			const usage = await finalResult.usage;
+			onComplete({
+				inputTokens: usage?.inputTokens ?? 0,
+				outputTokens: usage?.outputTokens ?? 0,
+				totalText: finalText ?? "",
+			});
+		}
 	} catch (streamError: any) {
 		logDebug("Error during streaming:", {
 			message: streamError?.message,
@@ -403,6 +413,14 @@ export const streamResponse = async (
 			data: streamError?.data,
 			fullError: streamError,
 		});
+		if (onComplete) {
+			onComplete({
+				inputTokens: 0,
+				outputTokens: 0,
+				totalText: "",
+				error: streamError?.message ?? "Unknown stream error",
+			});
+		}
 		throw streamError;
 	} finally {
 		clearTimeout((result as any)?.__timeoutTimer);
@@ -419,6 +437,7 @@ export const getResponse = async (
 		isJSON,
 		providerParams,
 		timeoutMs,
+		onComplete,
 	}: {
 		model?: string;
 		max_tokens?: number;
@@ -426,6 +445,7 @@ export const getResponse = async (
 		isJSON?: boolean;
 		providerParams?: Record<string, unknown>;
 		timeoutMs?: number;
+		onComplete?: (result: { inputTokens: number; outputTokens: number; totalText: string; error?: string }) => void;
 	} = {}
 ) => {
 	logDebug("Calling AI (non-stream):", {
@@ -471,6 +491,14 @@ export const getResponse = async (
 			fullError: error,
 		});
 		if (!canUseSearch && !canUseUrlContext) {
+			if (onComplete) {
+				onComplete({
+					inputTokens: 0,
+					outputTokens: 0,
+					totalText: "",
+					error: error?.message ?? "Unknown generate error",
+				});
+			}
 			throw error;
 		}
 		logDebug("Google features failed, retrying without them.", { error });
@@ -479,7 +507,15 @@ export const getResponse = async (
 		clearTimeout(timer);
 	}
 
-	const { text } = textResult;
+	const { text, usage } = textResult;
+
+	if (onComplete) {
+		onComplete({
+			inputTokens: usage?.inputTokens ?? 0,
+			outputTokens: usage?.outputTokens ?? 0,
+			totalText: (text as string) ?? "",
+		});
+	}
 
 	logDebug("AI response", { text });
 	if (isJSON) {

@@ -47,6 +47,7 @@ import { runYoutubeCaptions } from "./actions/commands/youtubeCaptions";
 import { insertWebsiteContent } from "./actions/commands/websiteContent";
 import { noteGenerator } from "./actions/canvasNodeMenuActions/noteGenerator";
 import { setupHtmlPreviewPersistence } from "./utils/htmlPreview";
+import { ObservabilityClient } from "./utils/observability";
 
 // @ts-expect-error
 import promptsCsvText from "./data/prompts.csv.txt";
@@ -56,11 +57,13 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	patchSucceed: boolean = false;
 	private cleanupIndicatorPersistence?: () => void;
 	private cleanupHtmlPreviewPersistence?: () => void;
+	observabilityClient: ObservabilityClient | null = null;
 
 	settings: AugmentedCanvasSettings;
 
 	async onload() {
 		await this.loadSettings();
+		this.observabilityClient = new ObservabilityClient(this.settings.observability);
 		this.addSettingTab(new SettingsTab(this.app, this));
 
 		// this.registerCommands();
@@ -134,6 +137,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		if (this.cleanupHtmlPreviewPersistence) {
 			this.cleanupHtmlPreviewPersistence();
 		}
+		this.observabilityClient?.shutdown();
 	}
 
 	async loadSettings() {
