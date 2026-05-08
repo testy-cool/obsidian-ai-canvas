@@ -51,6 +51,44 @@ export function getParamsForProvider(providerType: string): ProviderParamDef[] {
   );
 }
 
+/**
+ * Detect provider params from model ID when provider type has no specific params.
+ * Useful for proxy providers (Bifrost, LiteLLM) where type is "Custom" but
+ * the model is actually a Gemini/OpenAI/Anthropic model.
+ */
+export function getParamsForModel(
+  modelId: string,
+  providerType: string
+): ProviderParamDef[] {
+  const byProvider = getParamsForProvider(providerType);
+  if (byProvider.length) return byProvider;
+
+  const lower = modelId.toLowerCase();
+  if (lower.includes("gemini")) return getParamsForProvider("Gemini");
+  if (lower.includes("claude")) return getParamsForProvider("Anthropic");
+  if (/(?:^|[\/-])o[134]\b/.test(lower)) return getParamsForProvider("OpenAI");
+
+  return [];
+}
+
+/**
+ * Returns the detected provider type label for display purposes.
+ */
+export function detectProviderLabel(
+  modelId: string,
+  providerType: string
+): string {
+  const byProvider = getParamsForProvider(providerType);
+  if (byProvider.length) return providerType;
+
+  const lower = modelId.toLowerCase();
+  if (lower.includes("gemini")) return "Gemini";
+  if (lower.includes("claude")) return "Anthropic";
+  if (/(?:^|[\/-])o[134]\b/.test(lower)) return "OpenAI";
+
+  return providerType;
+}
+
 export function getDefaultProviderParams(
   providerType: string
 ): Record<string, unknown> {

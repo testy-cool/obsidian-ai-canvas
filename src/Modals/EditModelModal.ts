@@ -2,7 +2,7 @@ import { App, Modal, Notice, Setting } from "obsidian";
 import AugmentedCanvasPlugin from "../AugmentedCanvasPlugin";
 import { LLMModel, LLMProvider } from "../settings/AugmentedCanvasSettings";
 import { fetchProviderModels } from "../utils/modelFetch";
-import { getParamsForProvider } from "../utils/providerParams";
+import { getParamsForModel, detectProviderLabel } from "../utils/providerParams";
 
 export class EditModelModal extends Modal {
     plugin: AugmentedCanvasPlugin;
@@ -230,9 +230,10 @@ export class EditModelModal extends Modal {
         // Provider-specific params
         const provider = this.providers.find(p => p.id === this.model!.providerId);
         if (provider) {
-            const params = getParamsForProvider(provider.type);
+            const params = getParamsForModel(this.model!.model, provider.type);
             if (params.length) {
-                new Setting(this.contentEl).setHeading().setName(`${provider.type} Settings`);
+                const label = detectProviderLabel(this.model!.model, provider.type);
+                new Setting(this.contentEl).setHeading().setName(`${label} Settings`);
 
                 for (const def of params) {
                     const currentVal = this.model!.providerParams?.[def.key] ?? def.default;

@@ -3,7 +3,7 @@ import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
 import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
 import { LLMModel, LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
 import { testMCPServer } from "src/utils/mcpClient";
-import { getParamsForProvider } from "src/utils/providerParams";
+import { getParamsForModel, detectProviderLabel } from "src/utils/providerParams";
 
 export default class SettingsTab extends PluginSettingTab {
     plugin: AugmentedCanvasPlugin;
@@ -80,9 +80,10 @@ export default class SettingsTab extends PluginSettingTab {
         );
 
         if (activeProvider && activeModel) {
-            const params = getParamsForProvider(activeProvider.type);
+            const params = getParamsForModel(activeModel.model, activeProvider.type);
             if (params.length) {
-                new Setting(containerEl).setHeading().setName(`${activeProvider.type} Settings`);
+                const label = detectProviderLabel(activeModel.model, activeProvider.type);
+                new Setting(containerEl).setHeading().setName(`${label} Settings`);
 
                 for (const def of params) {
                     const currentVal = activeModel.providerParams?.[def.key] ?? def.default;
