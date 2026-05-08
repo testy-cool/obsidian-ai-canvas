@@ -1,7 +1,6 @@
 import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent, TextComponent, ToggleComponent, Modal } from "obsidian";
 import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
-import { EditProviderModal } from "src/Modals/EditProviderModal";
-import { ModelFetchModal } from "src/Modals/ModelFetchModal";
+import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
 import { LLMModel, LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
 import { testMCPServer } from "src/utils/mcpClient";
 
@@ -76,15 +75,25 @@ export default class SettingsTab extends PluginSettingTab {
             .setButtonText("Add New Provider")
             .setCta()
             .onClick(() => {
-                new EditProviderModal(this.app, this.plugin, null, async (newProvider) => {
-                    if (this.plugin.settings.providers.some(p => p.id === newProvider.id)) {
-                        new Notice("A provider with this ID already exists");
-                        return;
+                new UnifiedProviderModal(
+                    this.app,
+                    async (provider, models) => {
+                        if (this.plugin.settings.providers.some(p => p.id === provider.id)) {
+                            new Notice("A provider with this ID already exists");
+                            return;
+                        }
+                        this.plugin.settings.providers.push(provider);
+                        this.plugin.settings.models.push(...models);
+                        if (this.plugin.settings.providers.filter(p => p.enabled).length === 1) {
+                            this.plugin.settings.activeProvider = provider.id;
+                            if (models.length > 0) {
+                                this.plugin.settings.apiModel = models[0].model;
+                            }
+                        }
+                        await this.plugin.saveSettings();
+                        this.display();
                     }
-                    this.plugin.settings.providers.push(newProvider);
-                    await this.plugin.saveSettings();
-                    this.display();
-                }).open();
+                ).open();
             }));
 
         const cardsContainer = containerEl.createDiv("provider-list");
@@ -108,14 +117,24 @@ export default class SettingsTab extends PluginSettingTab {
             const editBtn = new ButtonComponent(controls);
             editBtn.setButtonText("Edit");
             editBtn.onClick(() => {
-                new EditProviderModal(this.app, this.plugin, provider, async (updated) => {
-                    const index = this.plugin.settings.providers.findIndex(p => p.id === provider.id);
-                    if (index > -1) {
-                        this.plugin.settings.providers[index] = updated;
+                new UnifiedProviderModal(
+                    this.app,
+                    async (updated, models) => {
+                        const index = this.plugin.settings.providers.findIndex(p => p.id === provider.id);
+                        if (index > -1) {
+                            this.plugin.settings.providers[index] = updated;
+                        }
+                        this.plugin.settings.models = this.plugin.settings.models.filter(
+                            m => m.providerId !== provider.id
+                        );
+                        this.plugin.settings.models.push(...models);
+                        this.ensureActiveModelForProvider(this.plugin.settings.activeProvider);
                         await this.plugin.saveSettings();
                         this.display();
-                    }
-                }).open();
+                    },
+                    provider,
+                    this.plugin.settings.models.filter(m => m.providerId === provider.id)
+                ).open();
             });
 
             const isLastProvider = this.plugin.settings.providers.length === 1;
@@ -202,43 +221,25 @@ export default class SettingsTab extends PluginSettingTab {
         addBtn.setButtonText("Add Model");
         addBtn.setCta();
         addBtn.onClick(() => {
-            const providerModels = getProviderModels();
-            const enabledIds = providerModels.filter(m => m.enabled).map(m => m.id);
-
-            new ModelFetchModal(
+            new UnifiedProviderModal(
                 this.app,
-                provider,
-                enabledIds,
-                async (selectedIds) => {
-                    const existing = new Map(
-                        getProviderModels().map(m => [m.id, m])
-                    );
-                    const additions: LLMModel[] = [];
-
-                    selectedIds.forEach(modelId => {
-                        const existingModel = existing.get(modelId);
-                        if (existingModel) {
-                            existingModel.enabled = true;
-                        } else {
-                            additions.push({
-                                id: modelId,
-                                providerId: provider.id,
-                                model: modelId,
-                                enabled: true,
-                            });
-                        }
-                    });
-
-                    if (additions.length) {
-                        this.plugin.settings.models.push(...additions);
+                async (updated, models) => {
+                    const index = this.plugin.settings.providers.findIndex(p => p.id === provider.id);
+                    if (index > -1) {
+                        this.plugin.settings.providers[index] = updated;
                     }
-
+                    this.plugin.settings.models = this.plugin.settings.models.filter(
+                        m => m.providerId !== provider.id
+                    );
+                    this.plugin.settings.models.push(...models);
                     this.ensureActiveModelForProvider(this.plugin.settings.activeProvider);
                     await this.plugin.saveSettings();
                     updateHeader();
                     renderModelList();
-                    new Notice(`Enabled ${selectedIds.length} model(s) for ${provider.type}.`);
-                }
+                    new Notice(`Updated models for ${provider.type}.`);
+                },
+                provider,
+                this.plugin.settings.models.filter(m => m.providerId === provider.id)
             ).open();
         });
 
