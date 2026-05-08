@@ -1,0 +1,11 @@
+[      39ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) @ http://localhost:8848/docs/superpowers/specs/settings-mockup.html:0
+[      39ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) @ http://localhost:8848/docs/superpowers/specs/settings-mockup.html:0
+[      44ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://localhost:8848/favicon.ico:0
+[  369262ms] TypeError: Cannot read properties of null (reading 'style')
+    at HTMLSelectElement.<anonymous> (http://localhost:8848/docs/superpowers/specs/settings-mockup.html:1218:13)
+[  370308ms] TypeError: Cannot read properties of null (reading 'style')
+    at HTMLSelectElement.<anonymous> (http://localhost:8848/docs/superpowers/specs/settings-mockup.html:1218:13)
+[  385318ms] TypeError: Cannot read properties of null (reading 'style')
+    at HTMLSelectElement.<anonymous> (http://localhost:8848/docs/superpowers/specs/settings-mockup.html:1218:13)
+[  386157ms] TypeError: Cannot read properties of null (reading 'style')
+    at HTMLSelectElement.<anonymous> (http://localhost:8848/docs/superpowers/specs/settings-mockup.html:1218:13)

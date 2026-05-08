@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Canvas Settings Mockup</title>
+<style>
+  :root {
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #262626;
+    --bg-tertiary: #2b2b2b;
+    --bg-hover: #303030;
+    --bg-active: #383838;
+    --bg-modal: #242424;
+    --bg-modal-overlay: rgba(0,0,0,0.58);
+    --text-normal: #dcddde;
+    --text-muted: #999;
+    --text-faint: #666;
+    --text-on-accent: #fff;
+    --interactive-accent: #7f6df2;
+    --interactive-accent-hover: #8b7cf3;
+    --border-color: #363636;
+    --border-color-light: #404040;
+    --input-bg: #181818;
+    --input-border: #363636;
+    --input-border-focus: #7f6df2;
+    --success: #4caf50;
+    --success-bg: rgba(76,175,80,0.12);
+    --warning: #fb8c00;
+    --danger: #e53935;
+    --danger-bg: rgba(229,57,53,0.12);
+    --tag-bg: #2d2d44;
+    --tag-text: #a89bef;
+    --radius: 4px;
+    --radius-lg: 8px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --transition: 150ms ease;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg-primary);
+    color: var(--text-normal);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .settings-container {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 24px 20px 80px;
+  }
+
+  /* Plugin header */
+  .plugin-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .plugin-header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-normal);
+  }
+  .plugin-version {
+    font-size: 11px;
+    color: var(--text-faint);
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+  }
+
+  /* Section headers */
+  .setting-section {
+    margin-top: 28px;
+  }
+  .setting-section-header {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-normal);
+    margin-bottom: 4px;
+  }
+  .setting-section-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+
+  /* Setting items */
+  .setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 0;
+    border-top: 1px solid var(--border-color);
+    gap: 16px;
+  }
+  .setting-item:last-child {
+    border-bottom: 1px solid var(--border-color);
+  }
+  .setting-item-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .setting-item-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-normal);
+  }
+  .setting-item-description {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .setting-item-control {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Dropdowns */
+  select {
+    appearance: none;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    color: var(--text-normal);
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 6px 28px 6px 10px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color var(--transition);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    min-width: 160px;
+  }
+  select:hover { border-color: var(--border-color-light); }
+  select:focus { border-color: var(--input-border-focus); }
+
+  /* Text inputs */
+  input[type="text"], input[type="password"], input[type="number"] {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    color: var(--text-normal);
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 6px 10px;
+    outline: none;
+    transition: border-color var(--transition);
+    width: 160px;
+  }
+  input:hover { border-color: var(--border-color-light); }
+  input:focus { border-color: var(--input-border-focus); }
+  input::placeholder { color: var(--text-faint); }
+  input[type="number"] { width: 80px; }
+
+  /* Toggle switch */
+  .toggle {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .toggle input { display: none; }
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--bg-tertiary);
+    border-radius: 11px;
+    border: 1px solid var(--input-border);
+    transition: all var(--transition);
+  }
+  .toggle-slider::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    top: 2px;
+    left: 2px;
+    transition: all var(--transition);
+  }
+  .toggle input:checked + .toggle-slider {
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+  }
+  .toggle input:checked + .toggle-slider::after {
+    background: #fff;
+    transform: translateX(18px);
+  }
+
+  /* Range / slider */
+  .slider-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 120px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg-tertiary);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--interactive-accent);
+    cursor: pointer;
+  }
+  .slider-value {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    min-width: 28px;
+    text-align: right;
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    border: none;
+    transition: all var(--transition);
+    font-weight: 500;
+  }
+  .btn-primary {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+  }
+  .btn-primary:hover { background: var(--interactive-accent-hover); }
+  .btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-normal);
+    border: 1px solid var(--input-border);
+  }
+  .btn-secondary:hover { background: var(--bg-hover); }
+  .btn-danger {
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  .btn-danger:hover { background: var(--danger-bg); }
+  .btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  .btn-icon {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition);
+  }
+  .btn-icon:hover { color: var(--text-normal); background: var(--bg-hover); }
+
+  /* Provider cards */
+  .provider-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 12px;
+  }
+  .provider-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    border: 1px solid var(--border-color);
+    transition: border-color var(--transition);
+  }
+  .provider-card:hover { border-color: var(--border-color-light); }
+  .provider-card-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius);
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .provider-card-info { flex: 1; min-width: 0; }
+  .provider-card-name {
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .provider-card-meta {
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 1px;
+  }
+  .provider-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+  }
+  .badge-models {
+    background: var(--tag-bg);
+    color: var(--tag-text);
+  }
+  .badge-active {
+    background: rgba(76,175,80,0.15);
+    color: var(--success);
+  }
+
+  /* Model cards */
+  .model-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .model-card {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    background: var(--bg-secondary);
+    overflow: hidden;
+  }
+  .model-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background var(--transition);
+  }
+  .model-card-header:hover { background: var(--bg-hover); }
+  .model-card-chevron {
+    color: var(--text-faint);
+    font-size: 10px;
+    transition: transform var(--transition);
+    flex-shrink: 0;
+  }
+  .model-card.expanded .model-card-chevron { transform: rotate(90deg); }
+  .model-card-title {
+    font-size: 13px;
+    font-weight: 500;
+    flex: 1;
+    font-family: var(--font-mono);
+  }
+  .model-card-provider {
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+  .model-card-body {
+    display: none;
+    padding: 0 12px 14px;
+    border-top: 1px solid var(--border-color);
+  }
+  .model-card.expanded .model-card-body { display: block; }
+  .model-card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .model-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .model-field label {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .model-field input, .model-field select {
+    width: 100%;
+    min-width: unset;
+  }
+  .model-field-full {
+    grid-column: 1 / -1;
+  }
+
+  /* Status indicator */
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status-dot.active { background: var(--success); }
+  .status-dot.inactive { background: var(--text-faint); }
+
+  /* Connection test */
+  .test-result {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: var(--radius);
+    animation: fadeIn 200ms ease;
+  }
+  .test-result.success {
+    color: var(--success);
+    background: var(--success-bg);
+  }
+  .test-result.error {
+    color: var(--danger);
+    background: var(--danger-bg);
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg-modal-overlay);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+  .modal-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .modal {
+    background: var(--bg-modal);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    width: 520px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+    transform: scale(0.96) translateY(8px);
+    transition: transform 200ms ease;
+  }
+  .modal-overlay.visible .modal {
+    transform: scale(1) translateY(0);
+  }
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .modal-body {
+    padding: 16px 20px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  /* Modal form */
+  .modal-field {
+    margin-bottom: 14px;
+  }
+  .modal-field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-normal);
+    margin-bottom: 4px;
+  }
+  .modal-field-desc {
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-bottom: 4px;
+  }
+  .modal-field input, .modal-field select {
+    width: 100%;
+    min-width: unset;
+  }
+  .modal-field input[type="password"] { width: 100%; }
+
+  /* Model checklist in modal */
+  .model-fetch-area {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+  }
+  .model-fetch-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .model-fetch-title {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .model-fetch-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .model-filter {
+    width: 100%;
+    min-width: unset;
+    margin-bottom: 8px;
+  }
+  .model-checklist {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    background: var(--input-bg);
+  }
+  .model-check-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: background var(--transition);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 13px;
+    font-family: var(--font-mono);
+  }
+  .model-check-item:last-child { border-bottom: none; }
+  .model-check-item:hover { background: var(--bg-hover); }
+  .model-check-item input[type="checkbox"] {
+    width: auto;
+    accent-color: var(--interactive-accent);
+    cursor: pointer;
+  }
+  .custom-model-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .custom-model-row input {
+    flex: 1;
+    min-width: unset;
+  }
+
+  /* Connection row */
+  .connection-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  /* Separator */
+  .separator {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 24px 0;
+  }
+
+  /* Tier info callout */
+  .callout {
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    font-size: 12px;
+    color: var(--text-muted);
+    border-left: 3px solid;
+    margin-top: 4px;
+  }
+  .callout-info {
+    background: rgba(127,109,242,0.08);
+    border-color: var(--interactive-accent);
+  }
+  .callout-warning {
+    background: rgba(251,140,0,0.08);
+    border-color: var(--warning);
+  }
+
+  /* SVG icons */
+  .icon {
+    width: 16px;
+    height: 16px;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--bg-active); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+  /* Section note for mockup */
+  .mockup-note {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    padding: 6px 12px;
+    border-radius: var(--radius);
+    font-size: 11px;
+    color: var(--text-faint);
+    z-index: 999;
+  }
+</style>
+</head>
+<body>
+
+<div class="settings-container">
+
+  <!-- Header -->
+  <div class="plugin-header">
+    <h1>AI Canvas</h1>
+    <span class="plugin-version">v0.2.0</span>
+  </div>
+
+  <!-- ===================== GENERAL ===================== -->
+  <div class="setting-section">
+    <div class="setting-section-header">General</div>
+    <div class="setting-section-desc">Default provider and model for AI generation.</div>
+
+    <div class="setting-item">
+      <div class="setting-item-info">
+        <div class="setting-item-name">Active provider</div>
+        <div class="setting-item-description">Provider used for AI generation by default.</div>
+      </div>
+      <div class="setting-item-control">
+        <select id="activeProvider">
+          <option selected>Gemini</option>
+          <option>Bifrost</option>
+          <option>OpenRouter</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="setting-item">
+      <div class="setting-item-info">
+        <div class="setting-item-name">Active model</div>
+        <div class="setting-item-description">Model used for AI generation.</div>
+      </div>
+      <div class="setting-item-control">
+        <select>
+          <option selected>gemini-3-flash-preview</option>
+          <option>gemini-3-pro-preview</option>
+          <option>gemini-2.5-flash</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Provider-specific params rendered dynamically -->
+    <div class="setting-item" id="providerParamsRow" data-provider="gemini">
+      <div class="setting-item-info">
+        <div class="setting-item-name">Service tier <span style="font-size:11px;color:var(--text-faint);font-weight:400">(Gemini)</span></div>
+        <div class="setting-item-description">Inference priority. Flex is 50% cheaper but slower (1-15 min).</div>
+      </div>
+      <div class="setting-item-control">
+        <select id="serviceTierSelect">
+          <option>Standard</option>
+          <option selected>Flex</option>
+          <option>Priority</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="setting-item">
+      <div class="setting-item-info">
+        <div class="setting-item-name">Temperature</div>
+        <div class="setting-item-description">Controls randomness of responses. Lower is more deterministic.</div>
+      </div>
+      <div class="setting-item-control">
+        <div class="slider-container">
+          <input type="range" min="0" max="200" value="100" id="tempSlider">
+          <span class="slider-value" id="tempValue">1.0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="setting-item">
+      <div class="setting-item-info">
+        <div class="setting-item-name">Request timeout</div>
+        <div class="setting-item-description">Seconds before a request times out. Set higher for Flex tier. 0 = default.</div>
+      </div>
+      <div class="setting-item-control">
+        <div class="slider-container">
+          <input type="number" value="60" min="0" max="900" style="width:64px">
+          <span class="slider-value" style="min-width:8px">s</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="setting-item">
+      <div class="setting-item-info">
+        <div class="setting-item-name">Max retries</div>
+        <div class="setting-item-description">Number of retry attempts on failure. Uses exponential backoff.</div>
+      </div>
+      <div class="setting-item-control">
+        <input type="number" value="2" min="0" max="5" style="width:52px">
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PROVIDERS ===================== -->
+  <div class="setting-section">
+    <div class="setting-section-header">Providers</div>
+    <div class="setting-section-desc">Configure AI providers and their API credentials.</div>
+
+    <div class="provider-list">
+      <!-- Gemini -->
+      <div class="provider-card">
+        <div class="provider-card-icon">G</div>
+        <div class="provider-card-info">
+          <div class="provider-card-name">
+            Gemini
+            <span class="badge badge-active">active</span>
+          </div>
+          <div class="provider-card-meta">generativelanguage.googleapis.com</div>
+        </div>
+        <span class="badge badge-models">3 models</span>
+        <div class="provider-card-actions">
+          <button class="btn-icon" title="Edit" onclick="openModal()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon" title="Delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bifrost -->
+      <div class="provider-card">
+        <div class="provider-card-icon" style="color:#4fc3f7">B</div>
+        <div class="provider-card-info">
+          <div class="provider-card-name">Bifrost</div>
+          <div class="provider-card-meta">bifrost.voidxd.cloud</div>
+        </div>
+        <span class="badge badge-models">12 models</span>
+        <div class="provider-card-actions">
+          <button class="btn-icon" title="Edit">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon" title="Delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- OpenRouter -->
+      <div class="provider-card">
+        <div class="provider-card-icon" style="color:#ff6b6b">O</div>
+        <div class="provider-card-info">
+          <div class="provider-card-name">OpenRouter</div>
+          <div class="provider-card-meta">openrouter.ai/api/v1</div>
+        </div>
+        <span class="badge badge-models">8 models</span>
+        <div class="provider-card-actions">
+          <button class="btn-icon" title="Edit">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon" title="Delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="openModal()">+ Add provider</button>
+  </div>
+
+  <!-- ===================== MODEL CONFIGURATION ===================== -->
+  <div class="setting-section">
+    <div class="setting-section-header">Model Configuration</div>
+    <div class="setting-section-desc">Per-model settings for cost tracking, inference tier, and timeouts. Expand a model to configure.</div>
+
+    <div class="model-list">
+      <!-- Model 1 - Gemini, expanded (shows Gemini-specific params) -->
+      <div class="model-card expanded">
+        <div class="model-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+          <span class="model-card-chevron">&#9654;</span>
+          <span class="model-card-title">gemini-3-flash-preview</span>
+          <span class="model-card-provider">Gemini</span>
+          <label class="toggle" onclick="event.stopPropagation()">
+            <input type="checkbox" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="model-card-body">
+          <div class="model-card-grid">
+            <div class="model-field">
+              <label>Input Cost ($/M tokens)</label>
+              <input type="number" value="0.10" step="0.01" placeholder="0.00">
+            </div>
+            <div class="model-field">
+              <label>Output Cost ($/M tokens)</label>
+              <input type="number" value="0.40" step="0.01" placeholder="0.00">
+            </div>
+            <div class="model-field">
+              <label>Timeout (seconds)</label>
+              <input type="number" value="600" placeholder="0 = default">
+            </div>
+            <div class="model-field">
+              <label>Max Retries</label>
+              <input type="number" value="2" min="0" max="5">
+            </div>
+          </div>
+          <!-- Gemini-specific provider params -->
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color)">
+            <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.3px;font-weight:500;margin-bottom:8px">Gemini Settings</div>
+            <div class="model-card-grid">
+              <div class="model-field">
+                <label>Service Tier</label>
+                <select>
+                  <option>Standard</option>
+                  <option selected>Flex</option>
+                  <option>Priority</option>
+                </select>
+              </div>
+              <div class="model-field">
+                <label>Flex Fallback</label>
+                <select>
+                  <option>Disabled</option>
+                  <option selected>Fall back to Standard on timeout</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="callout callout-info" style="margin-top:12px">
+            Flex tier: ~50% cheaper, 1-15 min response time. Best for batch operations.
+          </div>
+        </div>
+      </div>
+
+      <!-- Model 2 - Gemini, collapsed -->
+      <div class="model-card">
+        <div class="model-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+          <span class="model-card-chevron">&#9654;</span>
+          <span class="model-card-title">gemini-3-pro-preview</span>
+          <span class="model-card-provider">Gemini</span>
+          <label class="toggle" onclick="event.stopPropagation()">
+            <input type="checkbox" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="model-card-body">
+          <div class="model-card-grid">
+            <div class="model-field">
+              <label>Input Cost ($/M tokens)</label>
+              <input type="number" value="1.25" step="0.01">
+            </div>
+            <div class="model-field">
+              <label>Output Cost ($/M tokens)</label>
+              <input type="number" value="10.00" step="0.01">
+            </div>
+            <div class="model-field">
+              <label>Timeout (seconds)</label>
+              <input type="number" value="60">
+            </div>
+            <div class="model-field">
+              <label>Max Retries</label>
+              <input type="number" value="2">
+            </div>
+          </div>
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color)">
+            <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.3px;font-weight:500;margin-bottom:8px">Gemini Settings</div>
+            <div class="model-card-grid">
+              <div class="model-field">
+                <label>Service Tier</label>
+                <select><option selected>Standard</option><option>Flex</option><option>Priority</option></select>
+              </div>
+              <div class="model-field">
+                <label>Flex Fallback</label>
+                <select><option selected>Disabled</option><option>Fall back to Standard on timeout</option></select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Model 3 - Anthropic via Bifrost (shows Anthropic-specific params) -->
+      <div class="model-card expanded">
+        <div class="model-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+          <span class="model-card-chevron">&#9654;</span>
+          <span class="model-card-title">claude-sonnet-4-6</span>
+          <span class="model-card-provider">Bifrost</span>
+          <label class="toggle" onclick="event.stopPropagation()">
+            <input type="checkbox" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="model-card-body">
+          <div class="model-card-grid">
+            <div class="model-field">
+              <label>Input Cost ($/M tokens)</label>
+              <input type="number" value="3.00" step="0.01">
+            </div>
+            <div class="model-field">
+              <label>Output Cost ($/M tokens)</label>
+              <input type="number" value="15.00" step="0.01">
+            </div>
+            <div class="model-field">
+              <label>Timeout (seconds)</label>
+              <input type="number" value="120">
+            </div>
+            <div class="model-field">
+              <label>Max Retries</label>
+              <input type="number" value="2">
+            </div>
+          </div>
+          <!-- No provider-specific params for generic OpenAI-compatible -->
+          <div style="margin-top:8px;font-size:11px;color:var(--text-faint);font-style:italic">No provider-specific parameters for OpenAI-compatible endpoints.</div>
+        </div>
+      </div>
+
+      <!-- Model 4 - OpenAI o3 via OpenRouter (shows OpenAI-specific params) -->
+      <div class="model-card expanded">
+        <div class="model-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+          <span class="model-card-chevron">&#9654;</span>
+          <span class="model-card-title">openai/o3</span>
+          <span class="model-card-provider">OpenRouter</span>
+          <label class="toggle" onclick="event.stopPropagation()">
+            <input type="checkbox" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="model-card-body">
+          <div class="model-card-grid">
+            <div class="model-field">
+              <label>Input Cost ($/M tokens)</label>
+              <input type="number" value="2.00" step="0.01">
+            </div>
+            <div class="model-field">
+              <label>Output Cost ($/M tokens)</label>
+              <input type="number" value="8.00" step="0.01">
+            </div>
+            <div class="model-field">
+              <label>Timeout (seconds)</label>
+              <input type="number" value="120">
+            </div>
+            <div class="model-field">
+              <label>Max Retries</label>
+              <input type="number" value="2">
+            </div>
+          </div>
+          <!-- OpenAI-specific params for o-series -->
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color)">
+            <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.3px;font-weight:500;margin-bottom:8px">OpenAI Settings</div>
+            <div class="model-card-grid">
+              <div class="model-field">
+                <label>Reasoning Effort</label>
+                <select>
+                  <option>Low</option>
+                  <option selected>Medium</option>
+                  <option>High</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Model 5 - gpt-4o collapsed -->
+      <div class="model-card">
+        <div class="model-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+          <span class="model-card-chevron">&#9654;</span>
+          <span class="model-card-title">openai/gpt-4o</span>
+          <span class="model-card-provider">OpenRouter</span>
+          <label class="toggle" onclick="event.stopPropagation()">
+            <input type="checkbox">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="model-card-body">
+          <div class="model-card-grid">
+            <div class="model-field">
+              <label>Input Cost ($/M tokens)</label>
+              <input type="number" value="2.50" step="0.01">
+            </div>
+            <div class="model-field">
+              <label>Output Cost ($/M tokens)</label>
+              <input type="number" value="10.00" step="0.01">
+            </div>
+            <div class="model-field">
+              <label>Timeout (seconds)</label>
+              <input type="number" value="60">
+            </div>
+            <div class="model-field">
+              <label>Max Retries</label>
+              <input type="number" value="2">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== OBSERVABILITY ===================== -->
+  <div class="setting-section">
+    <div class="setting-section-header">Observability</div>
+    <div class="setting-section-desc">Send traces to Langfuse or Laminar for cost tracking, latency monitoring, and debugging.</div>
+
+    <div class="setting-item">
+      <div class="setting-item-info">
+        <div class="setting-item-name">Enable tracing</div>
+        <div class="setting-item-description">Send trace data after each AI generation.</div>
+      </div>
+      <div class="setting-item-control">
+        <label class="toggle">
+          <input type="checkbox" checked id="obsToggle">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div id="obsFields">
+      <div class="setting-item">
+        <div class="setting-item-info">
+          <div class="setting-item-name">Provider</div>
+          <div class="setting-item-description">Observability platform to send traces to.</div>
+        </div>
+        <div class="setting-item-control">
+          <select id="obsProvider">
+            <option>Langfuse</option>
+            <option>Laminar</option>
+            <option>Custom</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-item-info">
+          <div class="setting-item-name">Host URL</div>
+          <div class="setting-item-description">Your self-hosted or cloud instance URL.</div>
+        </div>
+        <div class="setting-item-control">
+          <input type="text" value="https://langfuse.voidxd.cloud" placeholder="https://...">
+        </div>
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-item-info">
+          <div class="setting-item-name">Public key</div>
+        </div>
+        <div class="setting-item-control">
+          <input type="text" placeholder="pk-lf-..." style="width:200px">
+        </div>
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-item-info">
+          <div class="setting-item-name">Secret key</div>
+        </div>
+        <div class="setting-item-control">
+          <input type="password" value="sk-lf-xxxxxxxxxxxx" style="width:200px">
+        </div>
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-item-info">
+          <div class="setting-item-name">Connection</div>
+        </div>
+        <div class="setting-item-control">
+          <button class="btn btn-secondary btn-sm">Test connection</button>
+          <span class="test-result success">&#10003; Connected</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===================== ADD PROVIDER MODAL ===================== -->
+<div class="modal-overlay" id="addProviderModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Add Provider</span>
+      <button class="btn-icon" onclick="closeModal()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <!-- Preset -->
+      <div class="modal-field">
+        <label>Preset</label>
+        <select id="presetSelect" onchange="applyPreset()">
+          <option value="">Choose a preset...</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="groq">Groq</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="gemini">Gemini</option>
+          <option value="vertex">Vertex AI</option>
+          <option value="ollama">Ollama</option>
+          <option value="custom" selected>OpenAI-Compatible</option>
+        </select>
+      </div>
+
+      <!-- Name -->
+      <div class="modal-field">
+        <label>Provider name</label>
+        <input type="text" id="providerName" value="Bifrost" placeholder="My Provider">
+      </div>
+
+      <!-- Base URL -->
+      <div class="modal-field" id="baseUrlField">
+        <label>Base URL</label>
+        <div class="modal-field-desc">OpenAI-compatible endpoint. Must serve /v1/models.</div>
+        <input type="text" id="baseUrl" value="https://bifrost.voidxd.cloud/v1" placeholder="https://api.example.com/v1">
+      </div>
+
+      <!-- API Key -->
+      <div class="modal-field">
+        <label>API key</label>
+        <input type="password" id="apiKey" value="sk-bf-xxxxxxxxxxxx" placeholder="sk-...">
+      </div>
+
+      <!-- Test connection -->
+      <div class="connection-row">
+        <button class="btn btn-secondary btn-sm" onclick="testConnection()">Test connection</button>
+        <span class="test-result success" id="connResult">&#10003; 47 models found</span>
+      </div>
+
+      <!-- Models section -->
+      <div class="model-fetch-area">
+        <div class="model-fetch-header">
+          <span class="model-fetch-title">Models</span>
+          <div class="model-fetch-actions">
+            <button class="btn btn-secondary btn-sm" onclick="selectAll()">Select all</button>
+            <button class="btn btn-secondary btn-sm" onclick="clearAll()">Clear</button>
+          </div>
+        </div>
+        <input type="text" class="model-filter" placeholder="Filter models..." id="modelFilter" oninput="filterModels()">
+        <div class="model-checklist" id="modelChecklist">
+          <label class="model-check-item"><input type="checkbox" checked> anthropic/claude-sonnet-4-6</label>
+          <label class="model-check-item"><input type="checkbox" checked> anthropic/claude-haiku-4-5</label>
+          <label class="model-check-item"><input type="checkbox"> anthropic/claude-opus-4-6</label>
+          <label class="model-check-item"><input type="checkbox" checked> gemini/gemini-3-flash-preview</label>
+          <label class="model-check-item"><input type="checkbox"> gemini/gemini-3-pro-preview</label>
+          <label class="model-check-item"><input type="checkbox" checked> openai/gpt-4o</label>
+          <label class="model-check-item"><input type="checkbox"> openai/gpt-4o-mini</label>
+          <label class="model-check-item"><input type="checkbox"> openai/o3</label>
+          <label class="model-check-item"><input type="checkbox"> deepseek/deepseek-r1</label>
+          <label class="model-check-item"><input type="checkbox"> meta/llama-4-maverick</label>
+          <label class="model-check-item"><input type="checkbox"> mistral/mistral-large</label>
+        </div>
+        <div class="custom-model-row">
+          <input type="text" placeholder="Custom model ID...">
+          <button class="btn btn-secondary btn-sm">+ Add</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary">Save provider</button>
+    </div>
+  </div>
+</div>
+
+<div class="mockup-note">Mockup &mdash; AI Canvas Settings v0.2.0</div>
+
+<script>
+  // Temperature slider
+  const tempSlider = document.getElementById('tempSlider');
+  const tempValue = document.getElementById('tempValue');
+  tempSlider.addEventListener('input', () => {
+    tempValue.textContent = (tempSlider.value / 100).toFixed(1);
+  });
+
+  // Service tier visibility based on provider
+  const providerSelect = document.getElementById('activeProvider');
+  const tierRow = document.getElementById('serviceTierRow');
+  providerSelect.addEventListener('change', () => {
+    tierRow.style.display = providerSelect.value === 'Gemini' ? 'flex' : 'none';
+  });
+
+  // Modal
+  function openModal() {
+    document.getElementById('addProviderModal').classList.add('visible');
+  }
+  function closeModal() {
+    document.getElementById('addProviderModal').classList.remove('visible');
+  }
+  document.getElementById('addProviderModal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+
+  // Preset handling
+  const presets = {
+    openai: { name: 'OpenAI', url: 'https://api.openai.com/v1' },
+    anthropic: { name: 'Anthropic', url: 'https://api.anthropic.com/v1' },
+    groq: { name: 'Groq', url: 'https://api.groq.com/openai/v1' },
+    openrouter: { name: 'OpenRouter', url: 'https://openrouter.ai/api/v1' },
+    ollama: { name: 'Ollama', url: 'http://localhost:11434/v1' },
+    custom: { name: '', url: '' },
+  };
+  function applyPreset() {
+    const val = document.getElementById('presetSelect').value;
+    const p = presets[val];
+    if (p) {
+      if (p.name) document.getElementById('providerName').value = p.name;
+      if (p.url) document.getElementById('baseUrl').value = p.url;
+    }
+    // Hide base URL for Gemini/Vertex
+    document.getElementById('baseUrlField').style.display =
+      (val === 'gemini' || val === 'vertex') ? 'none' : 'block';
+  }
+
+  // Simulated connection test
+  function testConnection() {
+    const result = document.getElementById('connResult');
+    result.className = 'test-result success';
+    result.innerHTML = '&#10003; 47 models found';
+  }
+
+  // Model filter
+  function filterModels() {
+    const filter = document.getElementById('modelFilter').value.toLowerCase();
+    const items = document.querySelectorAll('.model-check-item');
+    items.forEach(item => {
+      item.style.display = item.textContent.toLowerCase().includes(filter) ? 'flex' : 'none';
+    });
+  }
+
+  // Select all / clear
+  function selectAll() {
+    document.querySelectorAll('.model-checklist input[type="checkbox"]').forEach(cb => cb.checked = true);
+  }
+  function clearAll() {
+    document.querySelectorAll('.model-checklist input[type="checkbox"]').forEach(cb => cb.checked = false);
+  }
+</script>
+
+</body>
+</html>

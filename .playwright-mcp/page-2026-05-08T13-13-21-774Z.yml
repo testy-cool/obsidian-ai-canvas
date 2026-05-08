@@ -1,0 +1,295 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - heading "AI Canvas" [level=1] [ref=e4]
+      - generic [ref=e5]: v0.2.0
+    - generic [ref=e6]:
+      - generic [ref=e7]: General
+      - generic [ref=e8]: Default provider and model for AI generation.
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - generic [ref=e11]: Active provider
+          - generic [ref=e12]: Provider used for AI generation by default.
+        - combobox [ref=e14] [cursor=pointer]:
+          - option "Gemini" [selected]
+          - option "Bifrost"
+          - option "OpenRouter"
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - generic [ref=e17]: Active model
+          - generic [ref=e18]: Model used for AI generation.
+        - combobox [ref=e20] [cursor=pointer]:
+          - option "gemini-3-flash-preview" [selected]
+          - option "gemini-3-pro-preview"
+          - option "gemini-2.5-flash"
+      - generic [ref=e21]:
+        - generic [ref=e22]:
+          - generic [ref=e23]: Service tier (Gemini)
+          - generic [ref=e24]: Inference priority. Flex is 50% cheaper but slower (1-15 min).
+        - combobox [ref=e26] [cursor=pointer]:
+          - option "Standard"
+          - option "Flex" [selected]
+          - option "Priority"
+      - generic [ref=e27]:
+        - generic [ref=e28]:
+          - generic [ref=e29]: Temperature
+          - generic [ref=e30]: Controls randomness of responses. Lower is more deterministic.
+        - generic [ref=e32]:
+          - slider [ref=e33] [cursor=pointer]: "100"
+          - generic [ref=e34]: "1.0"
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - generic [ref=e37]: Request timeout
+          - generic [ref=e38]: Seconds before a request times out. Set higher for Flex tier. 0 = default.
+        - generic [ref=e40]:
+          - spinbutton [ref=e41]: "60"
+          - generic [ref=e42]: s
+      - generic [ref=e43]:
+        - generic [ref=e44]:
+          - generic [ref=e45]: Max retries
+          - generic [ref=e46]: Number of retry attempts on failure. Uses exponential backoff.
+        - spinbutton [ref=e48]: "2"
+    - generic [ref=e49]:
+      - generic [ref=e50]: Providers
+      - generic [ref=e51]: Configure AI providers and their API credentials.
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - generic [ref=e54]: G
+          - generic [ref=e55]:
+            - generic [ref=e56]:
+              - text: Gemini
+              - generic [ref=e57]: active
+            - generic [ref=e58]: generativelanguage.googleapis.com
+          - generic [ref=e59]: 3 models
+          - generic [ref=e60]:
+            - button "Edit" [ref=e61] [cursor=pointer]:
+              - img [ref=e62]
+            - button "Delete" [ref=e65] [cursor=pointer]:
+              - img [ref=e66]
+        - generic [ref=e68]:
+          - generic [ref=e69]: B
+          - generic [ref=e70]:
+            - generic [ref=e71]: Bifrost
+            - generic [ref=e72]: bifrost.voidxd.cloud
+          - generic [ref=e73]: 12 models
+          - generic [ref=e74]:
+            - button "Edit" [ref=e75] [cursor=pointer]:
+              - img [ref=e76]
+            - button "Delete" [ref=e79] [cursor=pointer]:
+              - img [ref=e80]
+        - generic [ref=e82]:
+          - generic [ref=e83]: O
+          - generic [ref=e84]:
+            - generic [ref=e85]: OpenRouter
+            - generic [ref=e86]: openrouter.ai/api/v1
+          - generic [ref=e87]: 8 models
+          - generic [ref=e88]:
+            - button "Edit" [ref=e89] [cursor=pointer]:
+              - img [ref=e90]
+            - button "Delete" [ref=e93] [cursor=pointer]:
+              - img [ref=e94]
+      - button "+ Add provider" [ref=e96] [cursor=pointer]
+    - generic [ref=e97]:
+      - generic [ref=e98]: Model Configuration
+      - generic [ref=e99]: Per-model settings for cost tracking, inference tier, and timeouts. Expand a model to configure.
+      - generic [ref=e100]:
+        - generic [ref=e101]:
+          - generic [ref=e102] [cursor=pointer]:
+            - generic [ref=e103]: ▶
+            - generic [ref=e104]: gemini-3-flash-preview
+            - generic [ref=e105]: Gemini
+          - generic [ref=e108]:
+            - generic [ref=e109]:
+              - generic [ref=e110]:
+                - generic [ref=e111]: Input Cost ($/M tokens)
+                - spinbutton [ref=e112]: "0.10"
+              - generic [ref=e113]:
+                - generic [ref=e114]: Output Cost ($/M tokens)
+                - spinbutton [ref=e115]: "0.40"
+              - generic [ref=e116]:
+                - generic [ref=e117]: Timeout (seconds)
+                - spinbutton [ref=e118]: "600"
+              - generic [ref=e119]:
+                - generic [ref=e120]: Max Retries
+                - spinbutton [ref=e121]: "2"
+            - generic [ref=e122]:
+              - generic [ref=e123]: Gemini Settings
+              - generic [ref=e124]:
+                - generic [ref=e125]:
+                  - generic [ref=e126]: Service Tier
+                  - combobox [ref=e127] [cursor=pointer]:
+                    - option "Standard"
+                    - option "Flex" [selected]
+                    - option "Priority"
+                - generic [ref=e128]:
+                  - generic [ref=e129]: Flex Fallback
+                  - combobox [ref=e130] [cursor=pointer]:
+                    - option "Disabled"
+                    - option "Fall back to Standard on timeout" [selected]
+            - generic [ref=e131]: "Flex tier: ~50% cheaper, 1-15 min response time. Best for batch operations."
+        - generic [ref=e133] [cursor=pointer]:
+          - generic [ref=e134]: ▶
+          - generic [ref=e135]: gemini-3-pro-preview
+          - generic [ref=e136]: Gemini
+        - generic [ref=e139]:
+          - generic [ref=e140] [cursor=pointer]:
+            - generic [ref=e141]: ▶
+            - generic [ref=e142]: claude-sonnet-4-6
+            - generic [ref=e143]: Bifrost
+          - generic [ref=e146]:
+            - generic [ref=e147]:
+              - generic [ref=e148]:
+                - generic [ref=e149]: Input Cost ($/M tokens)
+                - spinbutton [ref=e150]: "3.00"
+              - generic [ref=e151]:
+                - generic [ref=e152]: Output Cost ($/M tokens)
+                - spinbutton [ref=e153]: "15.00"
+              - generic [ref=e154]:
+                - generic [ref=e155]: Timeout (seconds)
+                - spinbutton [ref=e156]: "120"
+              - generic [ref=e157]:
+                - generic [ref=e158]: Max Retries
+                - spinbutton [ref=e159]: "2"
+            - generic [ref=e160]: No provider-specific parameters for OpenAI-compatible endpoints.
+        - generic [ref=e161]:
+          - generic [ref=e162] [cursor=pointer]:
+            - generic [ref=e163]: ▶
+            - generic [ref=e164]: openai/o3
+            - generic [ref=e165]: OpenRouter
+          - generic [ref=e168]:
+            - generic [ref=e169]:
+              - generic [ref=e170]:
+                - generic [ref=e171]: Input Cost ($/M tokens)
+                - spinbutton [ref=e172]: "2.00"
+              - generic [ref=e173]:
+                - generic [ref=e174]: Output Cost ($/M tokens)
+                - spinbutton [ref=e175]: "8.00"
+              - generic [ref=e176]:
+                - generic [ref=e177]: Timeout (seconds)
+                - spinbutton [ref=e178]: "120"
+              - generic [ref=e179]:
+                - generic [ref=e180]: Max Retries
+                - spinbutton [ref=e181]: "2"
+            - generic [ref=e182]:
+              - generic [ref=e183]: OpenAI Settings
+              - generic [ref=e185]:
+                - generic [ref=e186]: Reasoning Effort
+                - combobox [ref=e187] [cursor=pointer]:
+                  - option "Low"
+                  - option "Medium" [selected]
+                  - option "High"
+        - generic [ref=e189] [cursor=pointer]:
+          - generic [ref=e190]: ▶
+          - generic [ref=e191]: openai/gpt-4o
+          - generic [ref=e192]: OpenRouter
+    - generic [ref=e195]:
+      - generic [ref=e196]: Observability
+      - generic [ref=e197]: Send traces to Langfuse or Laminar for cost tracking, latency monitoring, and debugging.
+      - generic [ref=e199]:
+        - generic [ref=e200]: Enable tracing
+        - generic [ref=e201]: Send trace data after each AI generation.
+      - generic [ref=e205]:
+        - generic [ref=e206]:
+          - generic [ref=e207]:
+            - generic [ref=e208]: Provider
+            - generic [ref=e209]: Observability platform to send traces to.
+          - combobox [ref=e211] [cursor=pointer]:
+            - option "Langfuse" [selected]
+            - option "Laminar"
+            - option "Custom"
+        - generic [ref=e212]:
+          - generic [ref=e213]:
+            - generic [ref=e214]: Host URL
+            - generic [ref=e215]: Your self-hosted or cloud instance URL.
+          - textbox "https://..." [ref=e217]: https://langfuse.voidxd.cloud
+        - generic [ref=e218]:
+          - generic [ref=e220]: Public key
+          - textbox "pk-lf-..." [ref=e222]
+        - generic [ref=e223]:
+          - generic [ref=e225]: Secret key
+          - textbox [ref=e227]: sk-lf-xxxxxxxxxxxx
+        - generic [ref=e228]:
+          - generic [ref=e230]: Connection
+          - generic [ref=e231]:
+            - button "Test connection" [ref=e232] [cursor=pointer]
+            - generic [ref=e233]: ✓ Connected
+  - generic:
+    - generic:
+      - generic:
+        - generic: Add Provider
+        - button:
+          - img
+      - generic:
+        - generic:
+          - generic: Preset
+          - combobox:
+            - option "Choose a preset..."
+            - option "OpenAI"
+            - option "Anthropic"
+            - option "Groq"
+            - option "OpenRouter"
+            - option "Gemini"
+            - option "Vertex AI"
+            - option "Ollama"
+            - option "OpenAI-Compatible" [selected]
+        - generic:
+          - generic: Provider name
+          - textbox "My Provider": Bifrost
+        - generic:
+          - generic: Base URL
+          - generic: OpenAI-compatible endpoint. Must serve /v1/models.
+          - textbox "https://api.example.com/v1": https://bifrost.voidxd.cloud/v1
+        - generic:
+          - generic: API key
+          - textbox "sk-...": sk-bf-xxxxxxxxxxxx
+        - generic:
+          - button "Test connection"
+          - generic: ✓ 47 models found
+        - generic:
+          - generic:
+            - generic: Models
+            - generic:
+              - button "Select all"
+              - button "Clear"
+          - textbox "Filter models..."
+          - generic:
+            - generic:
+              - checkbox "anthropic/claude-sonnet-4-6" [checked]
+              - text: anthropic/claude-sonnet-4-6
+            - generic:
+              - checkbox "anthropic/claude-haiku-4-5" [checked]
+              - text: anthropic/claude-haiku-4-5
+            - generic:
+              - checkbox "anthropic/claude-opus-4-6"
+              - text: anthropic/claude-opus-4-6
+            - generic:
+              - checkbox "gemini/gemini-3-flash-preview" [checked]
+              - text: gemini/gemini-3-flash-preview
+            - generic:
+              - checkbox "gemini/gemini-3-pro-preview"
+              - text: gemini/gemini-3-pro-preview
+            - generic:
+              - checkbox "openai/gpt-4o" [checked]
+              - text: openai/gpt-4o
+            - generic:
+              - checkbox "openai/gpt-4o-mini"
+              - text: openai/gpt-4o-mini
+            - generic:
+              - checkbox "openai/o3"
+              - text: openai/o3
+            - generic:
+              - checkbox "deepseek/deepseek-r1"
+              - text: deepseek/deepseek-r1
+            - generic:
+              - checkbox "meta/llama-4-maverick"
+              - text: meta/llama-4-maverick
+            - generic:
+              - checkbox "mistral/mistral-large"
+              - text: mistral/mistral-large
+          - generic:
+            - textbox "Custom model ID..."
+            - button "+ Add"
+      - generic:
+        - button "Cancel"
+        - button "Save provider"
+  - generic [ref=e234]: Mockup — AI Canvas Settings v0.2.0

@@ -1,0 +1,3 @@
+[      96ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) @ http://localhost:8847/settings-mockup.html:0
+[      96ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) @ http://localhost:8847/settings-mockup.html:0
+[     107ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://localhost:8847/favicon.ico:0
