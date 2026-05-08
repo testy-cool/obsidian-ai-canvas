@@ -3,6 +3,7 @@ import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
 import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
 import { LLMModel, LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
 import { testMCPServer } from "src/utils/mcpClient";
+import { getParamsForProvider } from "src/utils/providerParams";
 
 export default class SettingsTab extends PluginSettingTab {
     plugin: AugmentedCanvasPlugin;
@@ -65,8 +66,72 @@ export default class SettingsTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         this.plugin.settings.apiModel = value;
                         await this.plugin.saveSettings();
+                        this.display();
                     });
             });
+
+        // Provider-specific params for active model
+        const activeProvider = this.plugin.settings.providers.find(
+            p => p.id === this.plugin.settings.activeProvider
+        );
+        const activeModel = availableModels.find(
+            m => m.id === this.plugin.settings.apiModel
+        );
+
+        if (activeProvider && activeModel) {
+            const params = getParamsForProvider(activeProvider.type);
+            if (params.length) {
+                new Setting(containerEl).setHeading().setName(`${activeProvider.type} Settings`);
+
+                for (const def of params) {
+                    const currentVal = activeModel.providerParams?.[def.key] ?? def.default;
+
+                    if (def.type === "select" && def.options) {
+                        new Setting(containerEl)
+                            .setName(def.label)
+                            .setDesc(def.description)
+                            .addDropdown((dropdown) => {
+                                dropdown.addOption("", "(default)");
+                                for (const opt of def.options!) {
+                                    dropdown.addOption(opt, opt);
+                                }
+                                dropdown.setValue((currentVal as string) ?? "")
+                                    .onChange(async (value) => {
+                                        if (!activeModel.providerParams) activeModel.providerParams = {};
+                                        activeModel.providerParams[def.key] = value || undefined;
+                                        await this.plugin.saveSettings();
+                                    });
+                            });
+                    } else if (def.type === "boolean") {
+                        new Setting(containerEl)
+                            .setName(def.label)
+                            .setDesc(def.description)
+                            .addToggle((toggle) => {
+                                toggle.setValue(!!currentVal)
+                                    .onChange(async (value) => {
+                                        if (!activeModel.providerParams) activeModel.providerParams = {};
+                                        activeModel.providerParams[def.key] = value;
+                                        await this.plugin.saveSettings();
+                                    });
+                            });
+                    } else if (def.type === "number") {
+                        new Setting(containerEl)
+                            .setName(def.label)
+                            .setDesc(def.description)
+                            .addText((text) => {
+                                text.setValue(currentVal != null ? String(currentVal) : "")
+                                    .onChange(async (value) => {
+                                        if (!activeModel.providerParams) activeModel.providerParams = {};
+                                        const parsed = parseFloat(value);
+                                        activeModel.providerParams[def.key] = isNaN(parsed) ? undefined : parsed;
+                                        await this.plugin.saveSettings();
+                                    });
+                                text.inputEl.type = "number";
+                            });
+                    }
+                }
+            }
+        }
     }
 
     private renderProviders(containerEl: HTMLElement) {

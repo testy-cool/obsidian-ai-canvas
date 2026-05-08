@@ -2,6 +2,7 @@ import { App, Modal, Notice, Setting } from "obsidian";
 import AugmentedCanvasPlugin from "../AugmentedCanvasPlugin";
 import { LLMModel, LLMProvider } from "../settings/AugmentedCanvasSettings";
 import { fetchProviderModels } from "../utils/modelFetch";
+import { getParamsForProvider } from "../utils/providerParams";
 
 export class EditModelModal extends Modal {
     plugin: AugmentedCanvasPlugin;
@@ -81,7 +82,13 @@ export class EditModelModal extends Modal {
                     id: this.idInput.trim(),
                     providerId: this.providerIdInput,
                     model: this.modelInput.trim(),
-                    enabled: this.enabledInput
+                    enabled: this.enabledInput,
+                    timeoutMs: this.model!.timeoutMs,
+                    maxRetries: this.model!.maxRetries,
+                    inputCostPerMillion: this.model!.inputCostPerMillion,
+                    outputCostPerMillion: this.model!.outputCostPerMillion,
+                    costOverridden: this.model!.costOverridden,
+                    providerParams: this.model!.providerParams,
                 };
 
                 this.onSubmit([updatedModel]);
@@ -162,6 +169,117 @@ export class EditModelModal extends Modal {
                         this.enabledInput = value;
                     });
             });
+
+        // Universal fields
+        new Setting(this.contentEl)
+            .setName("Timeout (ms)")
+            .setDesc("Request timeout in milliseconds. Leave empty for default.")
+            .addText((text) => {
+                text.setValue(this.model!.timeoutMs?.toString() ?? "")
+                    .setPlaceholder("e.g., 30000")
+                    .onChange((value) => {
+                        const parsed = parseInt(value);
+                        this.model!.timeoutMs = isNaN(parsed) ? undefined : parsed;
+                    });
+                text.inputEl.type = "number";
+            });
+
+        new Setting(this.contentEl)
+            .setName("Max Retries")
+            .setDesc("Maximum number of retries on failure.")
+            .addText((text) => {
+                text.setValue(this.model!.maxRetries?.toString() ?? "")
+                    .setPlaceholder("e.g., 2")
+                    .onChange((value) => {
+                        const parsed = parseInt(value);
+                        this.model!.maxRetries = isNaN(parsed) ? undefined : parsed;
+                    });
+                text.inputEl.type = "number";
+            });
+
+        new Setting(this.contentEl)
+            .setName("Input Cost (per 1M tokens)")
+            .setDesc("Cost per million input tokens, for tracking.")
+            .addText((text) => {
+                text.setValue(this.model!.inputCostPerMillion?.toString() ?? "")
+                    .setPlaceholder("e.g., 0.25")
+                    .onChange((value) => {
+                        const parsed = parseFloat(value);
+                        this.model!.inputCostPerMillion = isNaN(parsed) ? undefined : parsed;
+                        this.model!.costOverridden = !isNaN(parsed);
+                    });
+                text.inputEl.type = "number";
+                text.inputEl.step = "0.01";
+            });
+
+        new Setting(this.contentEl)
+            .setName("Output Cost (per 1M tokens)")
+            .setDesc("Cost per million output tokens, for tracking.")
+            .addText((text) => {
+                text.setValue(this.model!.outputCostPerMillion?.toString() ?? "")
+                    .setPlaceholder("e.g., 1.25")
+                    .onChange((value) => {
+                        const parsed = parseFloat(value);
+                        this.model!.outputCostPerMillion = isNaN(parsed) ? undefined : parsed;
+                        this.model!.costOverridden = !isNaN(parsed);
+                    });
+                text.inputEl.type = "number";
+                text.inputEl.step = "0.01";
+            });
+
+        // Provider-specific params
+        const provider = this.providers.find(p => p.id === this.model!.providerId);
+        if (provider) {
+            const params = getParamsForProvider(provider.type);
+            if (params.length) {
+                new Setting(this.contentEl).setHeading().setName(`${provider.type} Settings`);
+
+                for (const def of params) {
+                    const currentVal = this.model!.providerParams?.[def.key] ?? def.default;
+
+                    if (def.type === "select" && def.options) {
+                        new Setting(this.contentEl)
+                            .setName(def.label)
+                            .setDesc(def.description)
+                            .addDropdown((dropdown) => {
+                                dropdown.addOption("", "(default)");
+                                for (const opt of def.options!) {
+                                    dropdown.addOption(opt, opt);
+                                }
+                                dropdown.setValue((currentVal as string) ?? "")
+                                    .onChange((value) => {
+                                        if (!this.model!.providerParams) this.model!.providerParams = {};
+                                        this.model!.providerParams[def.key] = value || undefined;
+                                    });
+                            });
+                    } else if (def.type === "boolean") {
+                        new Setting(this.contentEl)
+                            .setName(def.label)
+                            .setDesc(def.description)
+                            .addToggle((toggle) => {
+                                toggle.setValue(!!currentVal)
+                                    .onChange((value) => {
+                                        if (!this.model!.providerParams) this.model!.providerParams = {};
+                                        this.model!.providerParams[def.key] = value;
+                                    });
+                            });
+                    } else if (def.type === "number") {
+                        new Setting(this.contentEl)
+                            .setName(def.label)
+                            .setDesc(def.description)
+                            .addText((text) => {
+                                text.setValue(currentVal != null ? String(currentVal) : "")
+                                    .onChange((value) => {
+                                        if (!this.model!.providerParams) this.model!.providerParams = {};
+                                        const parsed = parseFloat(value);
+                                        this.model!.providerParams[def.key] = isNaN(parsed) ? undefined : parsed;
+                                    });
+                                text.inputEl.type = "number";
+                            });
+                    }
+                }
+            }
+        }
     }
 
     private renderAddFields() {
