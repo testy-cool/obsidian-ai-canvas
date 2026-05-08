@@ -250,6 +250,22 @@ export default class AugmentedCanvasPlugin extends Plugin {
 				this.settings.imageModelId = "";
 			}
 		}
+
+		// Ensure observability settings exist (upgrade from pre-0.2.0)
+		if (!this.settings.observability) {
+			this.settings.observability = {
+				provider: "none",
+				host: "",
+				publicKey: "",
+				secretKey: "",
+				enabled: false,
+			};
+		}
+
+		// Ensure models have new optional fields
+		for (const model of this.settings.models) {
+			if (model.maxRetries === undefined) model.maxRetries = 2;
+		}
 	}
 
 	patchCanvasMenu() {
