@@ -10,47 +10,56 @@ import { getToolSchema, convertToGeminiSchema } from "./mcpClient";
 // Cache for access tokens: serviceAccountEmail -> { token, expiresAt }
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
-// Track if fetch has been patched
-let fetchPatched = false;
-
 /**
- * Patch global fetch to fix @ai-sdk/google tool schema bug
- * The AI SDK sends broken schemas (missing type, empty properties) to Gemini
- * This patch intercepts requests and fixes the schemas before sending
+ * Create a scoped fetch function that intercepts only Gemini/Vertex API requests.
+ * Fixes broken tool schemas from @ai-sdk/google and injects provider params.
  */
-const patchFetchForGemini = () => {
-	if (fetchPatched) return;
-	fetchPatched = true;
-
+const createScopedGeminiFetch = (providerParams?: Record<string, unknown>): typeof fetch => {
 	const originalFetch = globalThis.fetch;
-	globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+
+	return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
 		const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
-		// Only intercept Gemini API requests
-		if (url.includes('generativelanguage.googleapis.com') || url.includes('aiplatform.googleapis.com')) {
-			if (init?.body && typeof init.body === 'string') {
-				try {
-					const body = JSON.parse(init.body);
+		// Only intercept Gemini/Vertex API requests, pass everything else through
+		if (!url.includes('generativelanguage.googleapis.com') && !url.includes('aiplatform.googleapis.com')) {
+			return originalFetch(input, init);
+		}
 
-					// Fix tool schemas
-					if (body.tools) {
-						for (const toolGroup of body.tools) {
-							if (toolGroup.functionDeclarations) {
-								for (const func of toolGroup.functionDeclarations) {
-									// Get the stored schema for this tool
-									const storedSchema = getToolSchema(func.name);
-									if (storedSchema) {
-										func.parameters = convertToGeminiSchema(JSON.parse(JSON.stringify(storedSchema)));
-										logDebug(`[AI] Fixed schema for tool: ${func.name}`);
-									}
+		if (init?.body && typeof init.body === 'string') {
+			try {
+				const body = JSON.parse(init.body);
+				let modified = false;
+
+				// Fix tool schemas
+				if (body.tools) {
+					for (const toolGroup of body.tools) {
+						if (toolGroup.functionDeclarations) {
+							for (const func of toolGroup.functionDeclarations) {
+								const storedSchema = getToolSchema(func.name);
+								if (storedSchema) {
+									func.parameters = convertToGeminiSchema(JSON.parse(JSON.stringify(storedSchema)));
+									logDebug(`[AI] Fixed schema for tool: ${func.name}`);
+									modified = true;
 								}
 							}
 						}
-						init.body = JSON.stringify(body);
 					}
-				} catch (e) {
-					// Not JSON or parsing failed, pass through
 				}
+
+				// Inject service_tier when set and not "standard"
+				const serviceTier = providerParams?.serviceTier as string | undefined;
+				if (serviceTier && serviceTier !== "standard") {
+					body.generationConfig = body.generationConfig || {};
+					body.generationConfig.service_tier = serviceTier;
+					logDebug(`[AI] Injected service_tier: ${serviceTier}`);
+					modified = true;
+				}
+
+				if (modified) {
+					init.body = JSON.stringify(body);
+				}
+			} catch (e) {
+				// Not JSON or parsing failed, pass through
 			}
 		}
 
@@ -151,17 +160,19 @@ export const getVertexAccessToken = async (serviceAccountJson: string): Promise<
 	return tokenData.access_token;
 };
 
-const createVertexProvider = (provider: LLMProvider) => {
+const createVertexProvider = (provider: LLMProvider, providerParams?: Record<string, unknown>) => {
 	const location = provider.location || "us-central1";
 	const baseURL = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${provider.projectId}/locations/${location}/publishers/google/models`;
 
-	// Create a fetch wrapper that adds the Authorization header
+	const scopedFetch = createScopedGeminiFetch(providerParams);
+
+	// Compose: scoped fetch (schema fix + params) wraps around auth header injection
 	const vertexFetch: typeof fetch = async (input, init) => {
 		const token = await getVertexAccessToken(provider.serviceAccountJson!);
 		const headers = new Headers(init?.headers);
 		headers.set("Authorization", `Bearer ${token}`);
 		headers.delete("x-goog-api-key"); // Remove API key header
-		return fetch(input, { ...init, headers });
+		return scopedFetch(input, { ...init, headers });
 	};
 
 	return createGoogleGenerativeAI({
@@ -171,7 +182,7 @@ const createVertexProvider = (provider: LLMProvider) => {
 	});
 };
 
-const getLlm = (provider: LLMProvider) => {
+const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>) => {
 	switch (provider.type) {
 		case "Vertex": {
 			if (!provider.serviceAccountJson) {
@@ -180,12 +191,13 @@ const getLlm = (provider: LLMProvider) => {
 			if (!provider.projectId) {
 				throw new Error("Vertex AI requires a project ID");
 			}
-			return createVertexProvider(provider);
+			return createVertexProvider(provider, providerParams);
 		}
 		case "Gemini":
 		case "Google":
 			return createGoogleGenerativeAI({
 				apiKey: provider.apiKey,
+				fetch: createScopedGeminiFetch(providerParams),
 			});
 		case "OpenAI":
 		case "OpenRouter":
@@ -230,6 +242,8 @@ export interface StreamOptions {
 	temperature?: number;
 	tools?: Record<string, any>;
 	maxSteps?: number;
+	providerParams?: Record<string, unknown>;
+	timeoutMs?: number;
 }
 
 export type ToolEvent = {
@@ -249,12 +263,11 @@ export const streamResponse = async (
 		temperature,
 		tools: mcpTools,
 		maxSteps = 10,
+		providerParams,
+		timeoutMs,
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ) => {
-	// Patch fetch for Gemini API requests (fixes broken tool schemas in @ai-sdk/google)
-	patchFetchForGemini();
-
 	const mcpToolCount = mcpTools ? Object.keys(mcpTools).length : 0;
 	console.log("[AI Canvas] Stream request:", {
 		model,
@@ -264,11 +277,15 @@ export const streamResponse = async (
 		toolNames: mcpTools ? Object.keys(mcpTools).slice(0, 5) : [],
 	});
 
-	const llm = getLlm(provider) as any;
+	const llm = getLlm(provider, providerParams) as any;
 	const modelId = model || "gemini-3-flash-preview";
 	const useGoogle = isGoogleProvider(provider);
 	const canUseSearch = useGoogle && supportsSearchGrounding(modelId);
 	const canUseUrlContext = useGoogle && supportsUrlContext(modelId);
+
+	// Default timeout: 600s for flex tier, 60s otherwise
+	const isFlexTier = providerParams?.serviceTier === "flex";
+	const effectiveTimeout = timeoutMs ?? (isFlexTier ? 600_000 : 60_000);
 
 	// Build tools - can't mix url_context with MCP tools (Gemini limitation)
 	const buildTools = (useUrlContext: boolean) => {
@@ -299,11 +316,15 @@ export const streamResponse = async (
 			maxSteps,
 		});
 
+		const abortController = new AbortController();
+		const timer = setTimeout(() => abortController.abort(), effectiveTimeout);
+
 		const streamConfig: any = {
 			model: useSearchGrounding ? llm(modelId, { useSearchGrounding: true }) : llm(modelId),
 			messages,
 			maxOutputTokens: max_tokens,
 			temperature,
+			abortSignal: abortController.signal,
 		};
 
 		if (hasTools) {
@@ -312,7 +333,10 @@ export const streamResponse = async (
 			console.log("[AI Canvas] Adding tools to request, first tool:", Object.keys(tools!)[0], tools![Object.keys(tools!)[0]]);
 		}
 
-		return streamText(streamConfig);
+		const stream = streamText(streamConfig);
+		// Attach cleanup so we can clear the timer when done
+		(stream as any).__timeoutTimer = timer;
+		return stream;
 	};
 
 	let result;
@@ -380,6 +404,8 @@ export const streamResponse = async (
 			fullError: streamError,
 		});
 		throw streamError;
+	} finally {
+		clearTimeout((result as any)?.__timeoutTimer);
 	}
 };
 
@@ -391,11 +417,15 @@ export const getResponse = async (
 		max_tokens,
 		temperature,
 		isJSON,
+		providerParams,
+		timeoutMs,
 	}: {
 		model?: string;
 		max_tokens?: number;
 		temperature?: number;
 		isJSON?: boolean;
+		providerParams?: Record<string, unknown>;
+		timeoutMs?: number;
 	} = {}
 ) => {
 	logDebug("Calling AI (non-stream):", {
@@ -407,11 +437,17 @@ export const getResponse = async (
 		provider,
 	});
 
-	const llm = getLlm(provider) as any;
+	const llm = getLlm(provider, providerParams) as any;
 	const modelId = model || "gemini-3-flash-preview";
 	const useGoogle = isGoogleProvider(provider);
 	const canUseSearch = useGoogle && supportsSearchGrounding(modelId);
 	const canUseUrlContext = useGoogle && supportsUrlContext(modelId);
+
+	// Default timeout: 600s for flex tier, 60s otherwise
+	const isFlexTier = providerParams?.serviceTier === "flex";
+	const effectiveTimeout = timeoutMs ?? (isFlexTier ? 600_000 : 60_000);
+	const abortController = new AbortController();
+	const timer = setTimeout(() => abortController.abort(), effectiveTimeout);
 
 	const runGenerate = (useSearchGrounding: boolean, useUrlContext: boolean) =>
 		generateText({
@@ -419,6 +455,7 @@ export const getResponse = async (
 			messages,
 			maxOutputTokens: max_tokens,
 			temperature,
+			abortSignal: abortController.signal,
 			...(useUrlContext && { tools: { url_context: google.tools.urlContext({}) } }),
 		});
 
@@ -438,6 +475,8 @@ export const getResponse = async (
 		}
 		logDebug("Google features failed, retrying without them.", { error });
 		textResult = await runGenerate(false, false);
+	} finally {
+		clearTimeout(timer);
 	}
 
 	const { text } = textResult;
