@@ -286,6 +286,7 @@ export class UnifiedProviderModal extends Modal {
         } else {
           this.selectedModelIds.delete(modelId);
         }
+        this.renderModelList();
       });
       row.createEl("span", { text: modelId, cls: "model-check-label" });
 
