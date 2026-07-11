@@ -1,6 +1,6 @@
 import { App, ItemView, Notice, TFile, TFolder } from "obsidian";
 import { AugmentedCanvasSettings, LLMProvider } from "src/settings/AugmentedCanvasSettings";
-import { createGeminiImage, createImage } from "src/utils/llm";
+import { createGeminiImage, createImage, createVertexImage } from "src/utils/llm";
 import { Canvas, CanvasNode } from "src/obsidian/canvas-internal";
 import { addEdge, getIncomingEdgeDirection } from "src/obsidian/canvas-patches";
 import { addImageNode, randomHexString } from "src/utils";
@@ -124,9 +124,15 @@ export async function handleGenerateImage(
 	const headers = isGeminiProvider(imageProvider) && apiKey
 		? { "x-goog-api-key": apiKey }
 		: undefined;
+	const isVertex = imageProvider?.type === "Vertex";
 
-	if (!apiKey) {
+	if (!apiKey && !isVertex) {
 		new Notice("Please set your API key in the plugin settings");
+		return;
+	}
+
+	if (isVertex && (!imageProvider?.serviceAccountJson || !imageProvider?.projectId)) {
+		new Notice("Vertex image generation needs a service account JSON and project ID in the provider settings.");
 		return;
 	}
 
@@ -170,6 +176,11 @@ export async function handleGenerateImage(
 			return;
 		}
 
+		if (isVertex && !model) {
+			new Notice("Select an image model for Vertex in the Image Generation settings.");
+			return;
+		}
+
 		const placeholderLabel = model
 			? `Generating image (${model.replace(/^models\//i, "")})...`
 			: "Generating image...";
@@ -181,7 +192,12 @@ export async function handleGenerateImage(
 		);
 		void activeItem.requestFrame?.();
 
-		const imageOutput = isGeminiProvider(imageProvider)
+		const imageOutput = isVertex
+			? await createVertexImage(imageProvider!, nodeContent, {
+					model: model,
+					parts: options?.parts,
+			  })
+			: isGeminiProvider(imageProvider)
 			? await createGeminiImage(apiKey, nodeContent, {
 					model: model,
 					baseUrl: imageProvider?.baseUrl,
