@@ -4,6 +4,7 @@ import { GEMINI_BASE_URL } from "../settings/AugmentedCanvasSettings";
 import { fetchProviderModels } from "../utils/modelFetch";
 import { fetchPricingForModels } from "../utils/pricingFetch";
 import { getDefaultProviderParams, getParamsForModel, detectProviderLabel } from "../utils/providerParams";
+import { findCodexBinary, CODEX_MODELS } from "../utils/codexCli";
 
 interface ProviderPreset {
   id: string;
@@ -20,6 +21,7 @@ const PRESETS: ProviderPreset[] = [
   { id: "gemini", type: "Gemini", baseUrl: GEMINI_BASE_URL },
   { id: "vertex", type: "Vertex", baseUrl: "" },
   { id: "ollama", type: "Ollama", baseUrl: "http://localhost:11434/v1" },
+  { id: "codex", type: "Codex", baseUrl: "" },
   { id: "custom", type: "Custom", baseUrl: "" },
 ];
 
@@ -29,6 +31,10 @@ function isGeminiType(type: string): boolean {
 
 function isVertexType(type: string): boolean {
   return type === "Vertex";
+}
+
+function isCodexType(type: string): boolean {
+  return type === "Codex";
 }
 
 export class UnifiedProviderModal extends Modal {
@@ -110,8 +116,12 @@ export class UnifiedProviderModal extends Modal {
         });
     });
 
-    // --- Base URL (hidden for Gemini/Vertex) ---
-    if (!isGeminiType(this.provider.type ?? "") && !isVertexType(this.provider.type ?? "")) {
+    // --- Base URL (hidden for Gemini/Vertex/Codex) ---
+    if (
+      !isGeminiType(this.provider.type ?? "") &&
+      !isVertexType(this.provider.type ?? "") &&
+      !isCodexType(this.provider.type ?? "")
+    ) {
       const isAzure = this.provider.type === "Azure";
       new Setting(contentEl)
         .setName("Base URL")
@@ -132,8 +142,8 @@ export class UnifiedProviderModal extends Modal {
         });
     }
 
-    // --- API Key (hidden for Vertex) ---
-    if (!isVertexType(this.provider.type ?? "")) {
+    // --- API Key (hidden for Vertex/Codex) ---
+    if (!isVertexType(this.provider.type ?? "") && !isCodexType(this.provider.type ?? "")) {
       new Setting(contentEl).setName("API key").addText((text) => {
         text.inputEl.type = "password";
         text
@@ -170,6 +180,24 @@ export class UnifiedProviderModal extends Modal {
         });
     }
 
+    // --- Codex-specific fields ---
+    if (isCodexType(this.provider.type ?? "")) {
+      const detected = findCodexBinary(this.provider.binaryPath);
+      new Setting(contentEl)
+        .setName("Codex binary")
+        .setDesc(
+          detected
+            ? `Detected: ${detected}`
+            : "Not found — install with `npm i -g @openai/codex` or set the path below."
+        )
+        .addText((text) => {
+          text
+            .setPlaceholder("/path/to/codex (optional override)")
+            .setValue(this.provider.binaryPath ?? "")
+            .onChange((val) => (this.provider.binaryPath = val || undefined));
+        });
+    }
+
     // --- Test connection + Fetch models ---
     const connSetting = new Setting(contentEl);
     let connStatus: HTMLElement;
@@ -180,6 +208,20 @@ export class UnifiedProviderModal extends Modal {
         btn.setButtonText("Fetching...");
         connStatus?.setText("");
         try {
+          if (isCodexType(this.provider.type ?? "")) {
+            const detected = findCodexBinary(this.provider.binaryPath);
+            this.fetchedModelIds = [...CODEX_MODELS];
+            connStatus?.setText(
+              detected
+                ? `Codex detected: ${detected}`
+                : "Codex CLI not found — install it or set the binary path above."
+            );
+            connStatus?.toggleClass("mod-success", !!detected);
+            connStatus?.toggleClass("mod-warning", !detected);
+            this.renderModelList();
+            return;
+          }
+
           const models = await fetchProviderModels(this.provider as LLMProvider);
           this.fetchedModelIds = models;
           connStatus?.setText(`Found ${models.length} models`);
@@ -366,6 +408,7 @@ export class UnifiedProviderModal extends Modal {
     if (
       !isGeminiType(p.type) &&
       !isVertexType(p.type) &&
+      !isCodexType(p.type) &&
       !p.baseUrl?.trim()
     ) {
       new Notice("Base URL is required.");
@@ -381,6 +424,7 @@ export class UnifiedProviderModal extends Modal {
       projectId: p.projectId,
       location: p.location,
       serviceAccountJson: p.serviceAccountJson,
+      binaryPath: p.binaryPath,
     };
 
     const models: LLMModel[] = [...this.selectedModelIds].map((modelId) => {

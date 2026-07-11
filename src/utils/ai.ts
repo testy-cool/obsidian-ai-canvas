@@ -7,6 +7,7 @@ import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
 import { requestUrl } from "obsidian";
 import { getToolSchema, convertToGeminiSchema } from "./mcpClient";
 import { applyOpenAICompatParams } from "./providerParams";
+import { streamCodexResponse } from "./codexCli";
 
 // Cache for access tokens: serviceAccountEmail -> { token, expiresAt }
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -309,6 +310,10 @@ export const streamResponse = async (
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ): Promise<void> => {
+	if (provider.type === "Codex") {
+		return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete }, cb);
+	}
+
 	const mcpToolCount = mcpTools ? Object.keys(mcpTools).length : 0;
 	console.log("[AI Canvas] Stream request:", {
 		model,
@@ -516,6 +521,14 @@ export const getResponse = async (
 		onComplete?: (result: { inputTokens: number; outputTokens: number; totalText: string; error?: string }) => void;
 	} = {}
 ): Promise<any> => {
+	if (provider.type === "Codex") {
+		let text = "";
+		await streamCodexResponse(provider, messages, { model, providerParams, timeoutMs, onComplete }, (chunk) => {
+			if (chunk) text += chunk;
+		});
+		return isJSON ? (() => { try { return JSON.parse(text); } catch { return {}; } })() : text;
+	}
+
 	logDebug("Calling AI (non-stream):", {
 		messages,
 		model,
