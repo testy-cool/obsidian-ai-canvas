@@ -77,12 +77,18 @@ export default class SettingsTab extends PluginSettingTab {
         );
         const activeModel = availableModels.find(
             m => m.id === this.plugin.settings.apiModel
+        ) ?? availableModels.find(
+            m => m.model === this.plugin.settings.apiModel
         );
 
-        if (activeProvider && activeModel) {
-            const params = getParamsForModel(activeModel.model, activeProvider.type);
+        const paramsProvider = this.plugin.settings.providers.find(
+            p => p.id === activeModel?.providerId
+        ) ?? activeProvider;
+
+        if (paramsProvider && activeModel) {
+            const params = getParamsForModel(activeModel.model, paramsProvider.type);
             if (params.length) {
-                const label = detectProviderLabel(activeModel.model, activeProvider.type);
+                const label = detectProviderLabel(activeModel.model, paramsProvider.type);
                 new Setting(containerEl).setHeading().setName(`${label} Settings`);
 
                 for (const def of params) {
@@ -154,7 +160,7 @@ export default class SettingsTab extends PluginSettingTab {
                         if (this.plugin.settings.providers.filter(p => p.enabled).length === 1) {
                             this.plugin.settings.activeProvider = provider.id;
                             if (models.length > 0) {
-                                this.plugin.settings.apiModel = models[0].model;
+                                this.plugin.settings.apiModel = models[0].id;
                             }
                         }
                         await this.plugin.saveSettings();

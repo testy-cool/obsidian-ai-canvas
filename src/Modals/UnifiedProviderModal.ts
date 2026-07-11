@@ -3,7 +3,7 @@ import type { LLMProvider, LLMModel } from "../settings/AugmentedCanvasSettings"
 import { GEMINI_BASE_URL } from "../settings/AugmentedCanvasSettings";
 import { fetchProviderModels } from "../utils/modelFetch";
 import { fetchPricingForModels } from "../utils/pricingFetch";
-import { getDefaultProviderParams } from "../utils/providerParams";
+import { getDefaultProviderParams, getParamsForModel, detectProviderLabel } from "../utils/providerParams";
 
 interface ProviderPreset {
   id: string;
@@ -39,6 +39,8 @@ export class UnifiedProviderModal extends Modal {
   private modelListEl: HTMLElement | null = null;
   private editing: boolean;
   private pricingData: Map<string, { inputCostPerMillion: number; outputCostPerMillion: number }> | undefined;
+  private modelParams = new Map<string, Record<string, unknown>>();
+  private expandedParams = new Set<string>();
 
   constructor(
     app: App,
@@ -56,6 +58,10 @@ export class UnifiedProviderModal extends Modal {
       this.selectedModelIds = new Set(
         existingModels.filter((m) => m.enabled).map((m) => m.model)
       );
+    }
+
+    for (const m of existingModels) {
+      if (m.providerParams) this.modelParams.set(m.model, { ...m.providerParams });
     }
   }
 
@@ -270,7 +276,8 @@ export class UnifiedProviderModal extends Modal {
     }
 
     for (const modelId of filtered) {
-      const row = this.modelListEl.createDiv({ cls: "model-check-item" });
+      const itemWrap = this.modelListEl.createDiv({ cls: "model-check-item-wrap" });
+      const row = itemWrap.createDiv({ cls: "model-check-item" });
       const cb = row.createEl("input", { type: "checkbox" });
       cb.checked = this.selectedModelIds.has(modelId);
       cb.addEventListener("change", () => {
@@ -281,6 +288,60 @@ export class UnifiedProviderModal extends Modal {
         }
       });
       row.createEl("span", { text: modelId, cls: "model-check-label" });
+
+      const defs = getParamsForModel(modelId, this.provider.type ?? "");
+      if (this.selectedModelIds.has(modelId) && defs.length) {
+        const gearBtn = row.createEl("button", {
+          text: "⚙",
+          cls: "clickable-icon",
+        });
+        gearBtn.addEventListener("click", () => {
+          if (this.expandedParams.has(modelId)) {
+            this.expandedParams.delete(modelId);
+          } else {
+            this.expandedParams.add(modelId);
+          }
+          this.renderModelList();
+        });
+
+        if (this.expandedParams.has(modelId)) {
+          const paramsContainer = itemWrap.createDiv({ cls: "model-params-editor" });
+          this.renderParamsEditor(paramsContainer, modelId);
+        }
+      }
+    }
+  }
+
+  private renderParamsEditor(container: HTMLElement, modelId: string): void {
+    const type = this.provider.type ?? "";
+    const defs = getParamsForModel(modelId, type);
+    if (!defs.length) return;
+    const current = this.modelParams.get(modelId) ?? {};
+    container.createEl("div", {
+      text: `${detectProviderLabel(modelId, type)} settings`,
+      cls: "setting-item-description",
+    });
+    for (const def of defs) {
+      const row = new Setting(container).setName(def.label).setDesc(def.description);
+      if (def.type === "select" && def.options) {
+        row.addDropdown((dd) => {
+          dd.addOption("", "(default)");
+          for (const opt of def.options!) dd.addOption(opt, opt);
+          dd.setValue((current[def.key] as string) ?? "").onChange((val) => {
+            const params = this.modelParams.get(modelId) ?? {};
+            if (val) params[def.key] = val; else delete params[def.key];
+            this.modelParams.set(modelId, params);
+          });
+        });
+      } else if (def.type === "boolean") {
+        row.addToggle((t) => {
+          t.setValue(!!current[def.key]).onChange((val) => {
+            const params = this.modelParams.get(modelId) ?? {};
+            params[def.key] = val;
+            this.modelParams.set(modelId, params);
+          });
+        });
+      }
     }
   }
 
@@ -328,7 +389,10 @@ export class UnifiedProviderModal extends Modal {
         outputCostPerMillion: existing?.costOverridden
           ? existing.outputCostPerMillion
           : (price?.outputCostPerMillion ?? existing?.outputCostPerMillion),
-        providerParams: existing?.providerParams ?? (Object.keys(defaultParams).length > 0 ? defaultParams : undefined),
+        providerParams:
+          this.modelParams.get(modelId) ??
+          existing?.providerParams ??
+          (Object.keys(defaultParams).length > 0 ? defaultParams : undefined),
       };
     });
 
