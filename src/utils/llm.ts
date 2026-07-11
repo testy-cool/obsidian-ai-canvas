@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { requestUrl } from "obsidian";
 import { logDebug } from "src/logDebug";
-import { getResponse as getResponseFromAI, streamResponse as streamResponseFromAI, StreamOptions, ToolEvent } from "./ai";
+import { getResponse as getResponseFromAI, streamResponse as streamResponseFromAI, StreamOptions, ToolEvent, getVertexAccessToken } from "./ai";
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
 import { ModelMessage } from "@ai-sdk/provider-utils";
 
@@ -154,6 +154,58 @@ export const createGeminiImage = async (
 		image: imageResult,
 		raw: raw ?? (payload ? safeStringify(payload) : null),
 	};
+};
+
+export const buildVertexImageUrl = (
+	provider: LLMProvider,
+	modelId: string
+): string => {
+	const location = provider.location || "us-central1";
+	const model = modelId.replace(/^models\//i, "");
+	return `https://${location}-aiplatform.googleapis.com/v1/projects/${provider.projectId}/locations/${location}/publishers/google/models/${model}:generateContent`;
+};
+
+export const createVertexImage = async (
+	provider: LLMProvider,
+	prompt: string,
+	{
+		model,
+		parts,
+	}: {
+		model?: string;
+		parts?: { text?: string; inlineData?: { data: string; mimeType: string } }[];
+	} = {}
+): Promise<ImageGenerationOutput> => {
+	if (!provider.serviceAccountJson || !provider.projectId) {
+		throw new Error("Vertex image generation requires service account JSON and project ID.");
+	}
+	if (!model) {
+		throw new Error("Vertex image model is required.");
+	}
+
+	const token = await getVertexAccessToken(provider.serviceAccountJson);
+	const contentParts =
+		Array.isArray(parts) && parts.length > 0 ? parts : [{ text: prompt }];
+
+	const response = await requestUrl({
+		url: buildVertexImageUrl(provider, model),
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+		body: JSON.stringify({
+			contents: [{ role: "user", parts: contentParts }],
+			generationConfig: { responseModalities: ["IMAGE"] },
+		}),
+	});
+	const raw = typeof response.text === "string" ? response.text : null;
+	const payload = response.json ?? (raw ? JSON.parse(raw) : null);
+	const imageResult = extractGeminiInlineImage(payload);
+	if (!imageResult) {
+		logDebug("Image data not found in Vertex response.");
+	}
+	return { image: imageResult, raw: raw ?? (payload ? safeStringify(payload) : null) };
 };
 
 export const createImage = async (

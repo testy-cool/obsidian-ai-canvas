@@ -10,6 +10,7 @@ export default defineConfig({
 		hookTimeout: 30000,
 		alias: {
 			'obsidian': new URL('./test/__mocks__/obsidian.ts', import.meta.url).pathname,
+			'src': new URL('./src', import.meta.url).pathname,
 		},
 	},
 });
