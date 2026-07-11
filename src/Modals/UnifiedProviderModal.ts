@@ -311,11 +311,10 @@ export class UnifiedProviderModal extends Modal {
       serviceAccountJson: p.serviceAccountJson,
     };
 
-    const defaultParams = getDefaultProviderParams(provider.type);
-
     const models: LLMModel[] = [...this.selectedModelIds].map((modelId) => {
       const existing = this.existingModels.find((m) => m.model === modelId);
       const price = this.pricingData?.get(modelId);
+      const defaultParams = getDefaultProviderParams(modelId, provider.type);
       return {
         id: `${provider.id}-${modelId}`,
         providerId: provider.id,

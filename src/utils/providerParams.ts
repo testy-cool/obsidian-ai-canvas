@@ -52,52 +52,84 @@ export function getParamsForProvider(providerType: string): ProviderParamDef[] {
 }
 
 /**
- * Detect provider params from model ID when provider type has no specific params.
- * Useful for proxy providers (Bifrost, LiteLLM) where type is "Custom" but
- * the model is actually a Gemini/OpenAI/Anthropic model.
+ * Detect the model family from the model ID's leaf segment (after any
+ * route prefix like "openai/" or "models/"). Returns a provider label
+ * from PROVIDER_PARAM_DEFS.providerTypes, or null when unrecognized.
  */
-export function getParamsForModel(
-  modelId: string,
-  providerType: string
-): ProviderParamDef[] {
-  const byProvider = getParamsForProvider(providerType);
-  if (byProvider.length) return byProvider;
-
+function detectModelFamily(modelId: unknown): string | null {
+  if (typeof modelId !== "string" || !modelId) return null;
   const lower = modelId.toLowerCase();
-  if (lower.includes("gemini")) return getParamsForProvider("Gemini");
-  if (lower.includes("claude")) return getParamsForProvider("Anthropic");
-  if (/(?:^|[\/-])o[134]\b/.test(lower)) return getParamsForProvider("OpenAI");
-
-  return [];
+  const segment = lower.split("/").pop() ?? lower;
+  if (segment.startsWith("gemini")) return "Gemini";
+  if (segment.includes("claude")) return "Anthropic";
+  if (/^gpt-5/.test(segment)) return "OpenAI";
+  if (/(?:^|-)o[134](?:-|\.|$)/.test(segment)) return "OpenAI";
+  return null;
 }
 
 /**
- * Returns the detected provider type label for display purposes.
+ * Model-ID detection wins when it matches a known family; the provider
+ * type is the fallback. This makes proxy providers (Bifrost, LiteLLM)
+ * work regardless of whether they are typed "Custom" or "OpenAI".
  */
 export function detectProviderLabel(
-  modelId: string,
+  modelId: unknown,
   providerType: string
 ): string {
-  const byProvider = getParamsForProvider(providerType);
-  if (byProvider.length) return providerType;
+  return detectModelFamily(modelId) ?? providerType;
+}
 
-  const lower = modelId.toLowerCase();
-  if (lower.includes("gemini")) return "Gemini";
-  if (lower.includes("claude")) return "Anthropic";
-  if (/(?:^|[\/-])o[134]\b/.test(lower)) return "OpenAI";
-
-  return providerType;
+export function getParamsForModel(
+  modelId: unknown,
+  providerType: string
+): ProviderParamDef[] {
+  return getParamsForProvider(detectProviderLabel(modelId, providerType));
 }
 
 export function getDefaultProviderParams(
+  modelId: unknown,
   providerType: string
 ): Record<string, unknown> {
-  const defs = getParamsForProvider(providerType);
   const defaults: Record<string, unknown> = {};
-  for (const def of defs) {
+  for (const def of getParamsForModel(modelId, providerType)) {
     if (def.default !== undefined) {
       defaults[def.key] = def.default;
     }
   }
   return defaults;
+}
+
+/** Body-field mapping for OpenAI-compatible chat requests (Bifrost/LiteLLM shape). */
+const OPENAI_COMPAT_PARAM_MAP: Record<string, string> = {
+  serviceTier: "service_tier",
+  reasoningEffort: "reasoning_effort",
+};
+
+/**
+ * Mutates an OpenAI-compatible request body with the model's provider
+ * params. Returns true when the body was modified.
+ */
+export function applyOpenAICompatParams(
+  body: Record<string, any>,
+  params: Record<string, unknown> | undefined
+): boolean {
+  if (!params) return false;
+  let modified = false;
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    if (key === "serviceTier" && value === "standard") continue;
+    if (key === "thinking") {
+      if (value === true) {
+        body.thinking = { type: "enabled" };
+        modified = true;
+      }
+      continue;
+    }
+    const target = OPENAI_COMPAT_PARAM_MAP[key];
+    if (target) {
+      body[target] = value;
+      modified = true;
+    }
+  }
+  return modified;
 }
