@@ -144,7 +144,7 @@ export const buildCodexArgs = (opts: {
 	return args;
 };
 
-/** Flatten chat messages into a single prompt (codex exec takes one prompt via stdin). */
+/** Flatten chat messages into a single prompt (codex exec takes one prompt via stdin). Intentionally keeps only text parts; tool-call/tool-result parts are dropped (Codex provider has no tool support). */
 const flattenMessages = (messages: ModelMessage[]): string =>
 	messages
 		.map((m) => {
@@ -218,6 +218,7 @@ export const streamCodexResponse = async (
 
 		let buffer = "";
 		child.stdout.on("data", (chunk: Buffer) => {
+			if (settled) return;
 			buffer += chunk.toString();
 			const lines = buffer.split("\n");
 			buffer = lines.pop() ?? "";
@@ -226,6 +227,7 @@ export const streamCodexResponse = async (
 				const parsed = parseCodexEvent(line);
 				if (!parsed) continue;
 				if (parsed.error) {
+					child.kill("SIGKILL");
 					settle(new Error(parsed.error));
 					return;
 				}
