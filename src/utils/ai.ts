@@ -413,6 +413,7 @@ export const streamResponse = async (
 					cb((part as any).text || (part as any).textDelta, null, null, null);
 					break;
 				case 'tool-call':
+					deliveredOutput = true;
 					console.log("[AI Canvas] Tool call:", (part as any).toolName, (part as any).args);
 					cb(null, null, {
 						type: 'tool-call',
@@ -422,6 +423,7 @@ export const streamResponse = async (
 					}, null);
 					break;
 				case 'tool-result':
+					deliveredOutput = true;
 					console.log("[AI Canvas] Tool result:", (part as any).toolName, "length:", String((part as any).result)?.length);
 					cb(null, null, {
 						type: 'tool-result',
