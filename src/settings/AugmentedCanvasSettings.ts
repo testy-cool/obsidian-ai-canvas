@@ -148,6 +148,11 @@ export interface LLMProvider {
 	 * Service account JSON credentials (for Vertex AI)
 	 */
 	serviceAccountJson?: string;
+
+	/**
+	 * Path to a local CLI binary (for Codex provider)
+	 */
+	binaryPath?: string;
 }
 
 export interface ObservabilitySettings {

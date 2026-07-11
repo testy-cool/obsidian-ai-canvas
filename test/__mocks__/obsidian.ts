@@ -68,3 +68,14 @@ export class ItemView {}
 export function requestUrl(options: any) {
 	return Promise.resolve({ json: {}, text: '' });
 }
+
+// Mutable so individual tests can flip isDesktopApp to exercise the mobile/
+// desktop branches of code that gates on it (e.g. codexCli.ts).
+export const Platform = {
+	isDesktop: true,
+	isMobile: false,
+	isDesktopApp: true,
+	isMobileApp: false,
+	isIosApp: false,
+	isAndroidApp: false,
+};
