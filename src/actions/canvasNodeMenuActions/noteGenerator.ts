@@ -330,7 +330,10 @@ export function noteGenerator(
 		const model = resolveModel(provider);
 		const isGpt = provider?.type === "OpenAI";
 		const supportsVisionInput =
-			provider?.type === "Gemini" || provider?.type === "Google";
+			provider?.type === "Gemini" ||
+			provider?.type === "Google" ||
+			provider?.type === "Vertex" ||
+			provider?.type === "Azure";
 		const canCountTokens = isGpt && typeof encodingForModel === "function";
 		const modelName = model?.model || settings.apiModel;
 
