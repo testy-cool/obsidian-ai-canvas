@@ -16,6 +16,7 @@ const PRESETS: ProviderPreset[] = [
   { id: "anthropic", type: "Anthropic", baseUrl: "https://api.anthropic.com/v1" },
   { id: "groq", type: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
   { id: "openrouter", type: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
+  { id: "azure", type: "Azure", baseUrl: "" },
   { id: "gemini", type: "Gemini", baseUrl: GEMINI_BASE_URL },
   { id: "vertex", type: "Vertex", baseUrl: "" },
   { id: "ollama", type: "Ollama", baseUrl: "http://localhost:11434/v1" },
@@ -111,12 +112,21 @@ export class UnifiedProviderModal extends Modal {
 
     // --- Base URL (hidden for Gemini/Vertex) ---
     if (!isGeminiType(this.provider.type ?? "") && !isVertexType(this.provider.type ?? "")) {
+      const isAzure = this.provider.type === "Azure";
       new Setting(contentEl)
         .setName("Base URL")
-        .setDesc("OpenAI-compatible endpoint.")
+        .setDesc(
+          isAzure
+            ? "Azure OpenAI resource endpoint — no path, no api-version"
+            : "OpenAI-compatible endpoint."
+        )
         .addText((text) => {
           text
-            .setPlaceholder("https://api.example.com/v1")
+            .setPlaceholder(
+              isAzure
+                ? "https://<resource>.services.ai.azure.com"
+                : "https://api.example.com/v1"
+            )
             .setValue(this.provider.baseUrl ?? "")
             .onChange((val) => (this.provider.baseUrl = val));
         });

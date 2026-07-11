@@ -52,6 +52,8 @@ export const fetchProviderModels = async (
 		["gemini", "google"].includes(provider.id.toLowerCase());
 	const isVertex =
 		provider.type === "Vertex" || provider.id.toLowerCase() === "vertex";
+	const isAzure =
+		provider.type === "Azure" || provider.id.toLowerCase() === "azure";
 
 	const headers: Record<string, string> = {};
 	if (apiKey) {
@@ -62,6 +64,24 @@ export const fetchProviderModels = async (
 		// Vertex AI doesn't have a simple model listing API
 		// Use the "Custom model" field to add models manually (e.g., gemini-1.5-pro-002)
 		return [];
+	}
+
+	if (isAzure) {
+		if (!provider.baseUrl) {
+			throw new Error("Provider base URL is not set.");
+		}
+
+		const azureModelsUrl = `${normalizeBaseUrl(provider.baseUrl)}/openai/v1/models`;
+		const azureHeaders: Record<string, string> = {
+			"api-key": apiKey ?? provider.apiKey,
+		};
+		const response = await requestUrl({
+			url: azureModelsUrl,
+			method: "GET",
+			headers: azureHeaders,
+		});
+		const payload = response.json ?? JSON.parse(response.text);
+		return parseModelIds(payload);
 	}
 
 	if (isGoogle) {

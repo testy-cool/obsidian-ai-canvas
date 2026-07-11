@@ -229,6 +229,15 @@ const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>)
 				apiKey: provider.apiKey,
 				fetch: createScopedGeminiFetch(providerParams),
 			});
+		case "Azure": {
+			const azureBase = provider.baseUrl.replace(/\/+$/, "").replace(/\/openai\/v1$/, "");
+			return createOpenAI({
+				apiKey: provider.apiKey,
+				baseURL: `${azureBase}/openai/v1`,
+				headers: { "api-key": provider.apiKey },
+				fetch: createOpenAICompatFetch(providerParams),
+			});
+		}
 		case "OpenAI":
 		case "OpenRouter":
 		case "Groq":
@@ -236,7 +245,6 @@ const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>)
 		case "Ollama":
 		case "Custom":
 		case "LiteLLM":
-		case "Azure":
 		case "Together":
 		case "Perplexity":
 		case "Claude":
