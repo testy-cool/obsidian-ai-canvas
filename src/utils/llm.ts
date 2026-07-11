@@ -208,6 +208,53 @@ export const createVertexImage = async (
 	return { image: imageResult, raw: raw ?? (payload ? safeStringify(payload) : null) };
 };
 
+export const buildAzureImageRequest = (
+	baseUrl: string,
+	model: string | undefined,
+	prompt: string,
+	quality: string
+): { url: string; body: Record<string, unknown> } => {
+	const base = baseUrl.replace(/\/+$/, "").replace(/\/openai\/v1$/, "");
+	return {
+		url: `${base}/openai/v1/images/generations`,
+		body: {
+			model: model || "gpt-image-2",
+			prompt,
+			size: "1536x1024",
+			quality,
+			output_format: "png",
+		},
+	};
+};
+
+export const createAzureImage = async (
+	provider: LLMProvider,
+	prompt: string,
+	{ model, quality }: { model?: string; quality: "low" | "medium" | "high" }
+): Promise<ImageGenerationOutput> => {
+	if (!provider.apiKey) {
+		throw new Error("Azure image generation requires an API key.");
+	}
+	const { url, body } = buildAzureImageRequest(provider.baseUrl, model, prompt, quality);
+	const response = await requestUrl({
+		url,
+		method: "POST",
+		headers: { "Content-Type": "application/json", "api-key": provider.apiKey },
+		body: JSON.stringify(body),
+		throw: false,
+	});
+	const raw = typeof response.text === "string" ? response.text : null;
+	const payload = response.json ?? (raw ? JSON.parse(raw) : null);
+	if (response.status >= 400) {
+		throw new Error(`Azure image generation failed (${response.status}): ${payload?.error?.message ?? raw}`);
+	}
+	const b64 = payload?.data?.[0]?.b64_json;
+	return {
+		image: b64 ? { base64: b64, mimeType: "image/png" } : null,
+		raw: raw ?? (payload ? safeStringify(payload) : null),
+	};
+};
+
 export const createImage = async (
 	apiKey: string,
 	prompt: string,

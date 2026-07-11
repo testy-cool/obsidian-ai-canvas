@@ -572,6 +572,12 @@ export default class SettingsTab extends PluginSettingTab {
         return id === "vertex" || type === "vertex";
     }
 
+    private isAzureProvider(provider: LLMProvider) {
+        const id = provider.id.trim().toLowerCase();
+        const type = provider.type.trim().toLowerCase();
+        return id === "azure" || type === "azure";
+    }
+
     private ensureActiveModelForProvider(providerId?: string) {
         if (!providerId) return;
 
@@ -685,6 +691,26 @@ export default class SettingsTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
+
+		const imageProvider = this.plugin.settings.providers.find(
+			provider => provider.id === imageProviderId
+		);
+		if (imageProvider && this.isAzureProvider(imageProvider)) {
+			new Setting(containerEl)
+				.setName("Quality")
+				.setDesc("Azure gpt-image-2 quality: low ~15s, medium ~40s, high ~2min")
+				.addDropdown(dropdown => {
+					dropdown.addOption("low", "Low");
+					dropdown.addOption("medium", "Medium");
+					dropdown.addOption("high", "High");
+					dropdown
+						.setValue(this.plugin.settings.azureImageQuality || "medium")
+						.onChange(async value => {
+							this.plugin.settings.azureImageQuality = value as "low" | "medium" | "high";
+							await this.plugin.saveSettings();
+						});
+				});
+		}
 	}
 
 	private renderNamingSettings(containerEl: HTMLElement) {

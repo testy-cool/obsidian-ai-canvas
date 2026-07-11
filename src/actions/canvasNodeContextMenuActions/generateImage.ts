@@ -1,6 +1,6 @@
 import { App, ItemView, Notice, TFile, TFolder } from "obsidian";
 import { AugmentedCanvasSettings, LLMProvider } from "src/settings/AugmentedCanvasSettings";
-import { createGeminiImage, createImage, createVertexImage } from "src/utils/llm";
+import { createAzureImage, createGeminiImage, createImage, createVertexImage } from "src/utils/llm";
 import { Canvas, CanvasNode } from "src/obsidian/canvas-internal";
 import { addEdge, getIncomingEdgeDirection } from "src/obsidian/canvas-patches";
 import { addImageNode, randomHexString } from "src/utils";
@@ -125,6 +125,7 @@ export async function handleGenerateImage(
 		? { "x-goog-api-key": apiKey }
 		: undefined;
 	const isVertex = imageProvider?.type === "Vertex";
+	const isAzure = imageProvider?.type === "Azure";
 
 	if (!apiKey && !isVertex) {
 		new Notice("Please set your API key in the plugin settings");
@@ -192,7 +193,12 @@ export async function handleGenerateImage(
 		);
 		void activeItem.requestFrame?.();
 
-		const imageOutput = isVertex
+		const imageOutput = isAzure
+			? await createAzureImage(imageProvider!, nodeContent, {
+					model: model,
+					quality: settings.azureImageQuality || "medium",
+			  })
+			: isVertex
 			? await createVertexImage(imageProvider!, nodeContent, {
 					model: model,
 					parts: options?.parts,

@@ -255,6 +255,11 @@ export interface AugmentedCanvasSettings {
 	imageModelId: string;
 
 	/**
+	 * Quality tier for Azure image generation.
+	 */
+	azureImageQuality: "low" | "medium" | "high";
+
+	/**
 	 * The Youtube API Key
 	 */
 	youtubeApiKey: string;
@@ -431,6 +436,7 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	imagesPath: undefined,
 	imageProviderId: "",
 	imageModelId: "",
+	azureImageQuality: "medium",
 	youtubeApiKey: "",
 	providers: DEFAULT_PROVIDERS,
 	models: DEFAULT_MODELS,

@@ -1,5 +1,24 @@
 import { describe, it, expect } from "vitest";
-import { buildVertexImageUrl } from "../src/utils/llm";
+import { buildVertexImageUrl, buildAzureImageRequest } from "../src/utils/llm";
+
+describe("buildAzureImageRequest", () => {
+	it("builds the v1 generations request", () => {
+		const { url, body } = buildAzureImageRequest(
+			"https://sfera-2425-resource.services.ai.azure.com/",
+			undefined,
+			"a red fox",
+			"medium"
+		);
+		expect(url).toBe("https://sfera-2425-resource.services.ai.azure.com/openai/v1/images/generations");
+		expect(body).toEqual({
+			model: "gpt-image-2",
+			prompt: "a red fox",
+			size: "1536x1024",
+			quality: "medium",
+			output_format: "png",
+		});
+	});
+});
 
 describe("buildVertexImageUrl", () => {
 	it("builds the aiplatform generateContent URL", () => {
