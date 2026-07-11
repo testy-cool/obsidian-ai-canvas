@@ -297,6 +297,8 @@ export const generateCardTitle = async (
 				model: resolved.model.model,
 				max_tokens: 64,
 				temperature: settings.temperature,
+				providerParams: resolved.model.providerParams,
+				timeoutMs: resolved.model.timeoutMs,
 			}
 		);
 
@@ -363,6 +365,8 @@ export const generateGroupName = async (
 				model: resolved.model.model,
 				max_tokens: 64,
 				temperature: settings.temperature,
+				providerParams: resolved.model.providerParams,
+				timeoutMs: resolved.model.timeoutMs,
 			}
 		);
 

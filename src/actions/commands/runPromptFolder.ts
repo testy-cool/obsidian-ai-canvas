@@ -82,6 +82,8 @@ export const runPromptFolder = async (
 			model: model.model,
 			max_tokens: settings.maxResponseTokens || undefined,
 			// max_tokens: getTokenLimit(settings) - tokenCount - 1,
+			providerParams: model.providerParams,
+			timeoutMs: model.timeoutMs,
 		},
 		(delta: string | null) => {
 			// * Last call

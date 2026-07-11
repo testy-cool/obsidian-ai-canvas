@@ -68,6 +68,8 @@ ${RELEVANT_QUESTION_SYSTEM_PROMPT}
 			max_tokens: settings.maxResponseTokens || undefined,
 			temperature: settings.temperature,
 			isJSON: true,
+			providerParams: model.providerParams,
+			timeoutMs: model.timeoutMs,
 		}
 	);
 	// console.log({ aiResponse });

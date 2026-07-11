@@ -684,6 +684,8 @@ export function noteGenerator(
 						max_tokens: settings.maxResponseTokens || undefined,
 						tools: mcpTools,
 						maxSteps: settings.mcpMaxSteps || 5,
+						providerParams: model.providerParams,
+						timeoutMs: model.timeoutMs,
 					},
 					(delta: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => {
 						if (firstDelta) {

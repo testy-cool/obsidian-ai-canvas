@@ -20,19 +20,9 @@ export const streamResponse = async (
 export const getResponse = async (
 	provider: LLMProvider,
 	messages: Message[],
-	{
-		model,
-		max_tokens,
-		temperature,
-		isJSON,
-	}: {
-		model?: string;
-		max_tokens?: number;
-		temperature?: number;
-		isJSON?: boolean;
-	} = {}
+	options: Parameters<typeof getResponseFromAI>[2] = {}
 ) => {
-	return getResponseFromAI(provider, messages, { model, max_tokens, temperature, isJSON });
+	return getResponseFromAI(provider, messages, options);
 };
 
 let count = 0;
