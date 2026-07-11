@@ -283,11 +283,14 @@ export default class AugmentedCanvasPlugin extends Plugin {
 				id === "gemini" || id === "google" || type === "gemini" || type === "google";
 			return { provider, isGeminiFamily };
 		};
+		const resolveConfiguredImageModel = () =>
+			settings.models.find((m) => m.id === settings.imageModelId)?.model ||
+			settings.imageModelId;
 		const describeImageTarget = () => {
 			const target = resolveConfiguredImageProvider();
 			if (!target) return "Generate image";
 			const model =
-				settings.imageModelId ||
+				resolveConfiguredImageModel() ||
 				(target.isGeminiFamily ? "nano-banana-pro-preview" : target.provider.type);
 			return `Generate image (${model.replace(/^models\//i, "")})`;
 		};
@@ -422,7 +425,8 @@ export default class AugmentedCanvasPlugin extends Plugin {
 								if (target.isGeminiFamily) {
 									// Gemini keeps the context-aware flow: ancestor notes
 									// and images feed the prompt via noteGenerator.
-									const modelId = settings.imageModelId || "nano-banana-pro-preview";
+									const modelId =
+										resolveConfiguredImageModel() || "nano-banana-pro-preview";
 									const imageModel = {
 										id: modelId,
 										providerId: target.provider.id,

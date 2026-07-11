@@ -257,13 +257,15 @@ const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>)
 		case "DeepSeek":
 		case "xAI":
 		case "Other":
+		default:
+			// Unknown types land here too: the provider modal writes the
+			// user-chosen display name into `type` (e.g. "bifrost"), and any
+			// provider with a base URL is OpenAI-compatible in this plugin.
 			return createOpenAI({
 				apiKey: provider.apiKey,
 				baseURL: provider.baseUrl,
 				fetch: createOpenAICompatFetch(providerParams),
 			});
-		default:
-			throw new Error(`Unsupported provider: ${provider.type}`);
 	}
 };
 

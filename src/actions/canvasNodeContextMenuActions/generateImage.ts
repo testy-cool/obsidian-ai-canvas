@@ -120,7 +120,14 @@ export async function handleGenerateImage(
 		settings.providers.find(provider => provider.id === settings.activeProvider);
 	const apiKey = imageProvider?.apiKey || settings.apiKey;
 	const baseUrl = getImageBaseUrl(imageProvider);
-	const model = options?.model || settings.imageModelId || undefined;
+	// imageModelId stores the LLMModel id (`${providerId}-${model}`); resolve it
+	// to the real model name before it reaches any API. Fall back to the raw
+	// value for legacy settings that stored the bare model name.
+	const imageModelEntry = settings.models.find(
+		m => m.id === settings.imageModelId
+	);
+	const model =
+		options?.model || imageModelEntry?.model || settings.imageModelId || undefined;
 	const headers = isGeminiProvider(imageProvider) && apiKey
 		? { "x-goog-api-key": apiKey }
 		: undefined;
