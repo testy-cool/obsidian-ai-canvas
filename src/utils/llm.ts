@@ -4,6 +4,7 @@ import { logDebug } from "src/logDebug";
 import { getResponse as getResponseFromAI, streamResponse as streamResponseFromAI, StreamOptions, ToolEvent, getVertexAccessToken } from "./ai";
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
 import { ModelMessage } from "@ai-sdk/provider-utils";
+import { randomHexString } from "src/utils";
 
 export type Message = ModelMessage;
 export type { StreamOptions, ToolEvent };
@@ -247,6 +248,110 @@ export const createAzureImage = async (
 	const payload = response.json ?? (raw ? JSON.parse(raw) : null);
 	if (response.status >= 400) {
 		throw new Error(`Azure image generation failed (${response.status}): ${payload?.error?.message ?? raw}`);
+	}
+	const b64 = payload?.data?.[0]?.b64_json;
+	return {
+		image: b64 ? { base64: b64, mimeType: "image/png" } : null,
+		raw: raw ?? (payload ? safeStringify(payload) : null),
+	};
+};
+
+export interface AzureReferenceImage {
+	/** Base64-encoded image bytes (no data: prefix). */
+	data: string;
+	mimeType: string;
+}
+
+/**
+ * Multipart body for the Azure images/edits endpoint. Reference images are
+ * sent as image[] file parts with input_fidelity=high so faces and identity
+ * survive the edit (same request shape as the proven Hermes Azure plugin).
+ */
+export const buildAzureImageEditBody = (
+	model: string | undefined,
+	prompt: string,
+	quality: string,
+	images: AzureReferenceImage[],
+	boundary: string
+): ArrayBuffer => {
+	const encoder = new TextEncoder();
+	const chunks: Uint8Array[] = [];
+	const pushText = (text: string) => chunks.push(encoder.encode(text));
+
+	const fields: Record<string, string> = {
+		model: model || "gpt-image-2",
+		prompt,
+		size: "1536x1024",
+		n: "1",
+		quality,
+		output_format: "png",
+		input_fidelity: "high",
+	};
+	for (const [name, value] of Object.entries(fields)) {
+		pushText(
+			`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`
+		);
+	}
+
+	images.forEach((image, index) => {
+		const isJpeg = /jpe?g/i.test(image.mimeType);
+		const ext = isJpeg ? "jpg" : "png";
+		pushText(
+			`--${boundary}\r\nContent-Disposition: form-data; name="image[]"; filename="reference-${index}.${ext}"\r\nContent-Type: ${image.mimeType}\r\n\r\n`
+		);
+		const binary = atob(image.data);
+		const bytes = new Uint8Array(binary.length);
+		for (let i = 0; i < binary.length; i++) {
+			bytes[i] = binary.charCodeAt(i);
+		}
+		chunks.push(bytes);
+		pushText("\r\n");
+	});
+	pushText(`--${boundary}--\r\n`);
+
+	const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+	const out = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		out.set(chunk, offset);
+		offset += chunk.length;
+	}
+	return out.buffer;
+};
+
+export const createAzureImageEdit = async (
+	provider: LLMProvider,
+	prompt: string,
+	{
+		model,
+		quality,
+		images,
+	}: {
+		model?: string;
+		quality: "low" | "medium" | "high";
+		images: AzureReferenceImage[];
+	}
+): Promise<ImageGenerationOutput> => {
+	if (!provider.apiKey) {
+		throw new Error("Azure image generation requires an API key.");
+	}
+	const base = provider.baseUrl.replace(/\/+$/, "").replace(/\/openai\/v1$/, "");
+	const boundary = `----ObsidianAzureImage${randomHexString(16)}`;
+	const body = buildAzureImageEditBody(model, prompt, quality, images, boundary);
+	const response = await requestUrl({
+		url: `${base}/openai/v1/images/edits`,
+		method: "POST",
+		headers: {
+			"Content-Type": `multipart/form-data; boundary=${boundary}`,
+			"api-key": provider.apiKey,
+		},
+		body,
+		throw: false,
+	});
+	const raw = typeof response.text === "string" ? response.text : null;
+	const payload = response.json ?? (raw ? JSON.parse(raw) : null);
+	if (response.status >= 400) {
+		throw new Error(`Azure image edit failed (${response.status}): ${payload?.error?.message ?? raw}`);
 	}
 	const b64 = payload?.data?.[0]?.b64_json;
 	return {

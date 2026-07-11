@@ -422,11 +422,18 @@ export default class AugmentedCanvasPlugin extends Plugin {
 									new Notice("No image provider configured. Set one in Image Generation settings.");
 									return;
 								}
-								if (target.isGeminiFamily) {
-									// Gemini keeps the context-aware flow: ancestor notes
-									// and images feed the prompt via noteGenerator.
+								const isAzureImageProvider =
+									target.provider.type === "Azure";
+								if (target.isGeminiFamily || isAzureImageProvider) {
+									// Gemini and Azure keep the context-aware flow:
+									// ancestor notes and images feed the prompt via
+									// noteGenerator (Azure sends them as reference
+									// images on the edits endpoint).
 									const modelId =
-										resolveConfiguredImageModel() || "nano-banana-pro-preview";
+										resolveConfiguredImageModel() ||
+										(target.isGeminiFamily
+											? "nano-banana-pro-preview"
+											: "gpt-image-2");
 									const imageModel = {
 										id: modelId,
 										providerId: target.provider.id,

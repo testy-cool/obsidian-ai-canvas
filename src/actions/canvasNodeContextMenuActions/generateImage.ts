@@ -1,6 +1,6 @@
 import { App, ItemView, Notice, TFile, TFolder } from "obsidian";
 import { AugmentedCanvasSettings, LLMProvider } from "src/settings/AugmentedCanvasSettings";
-import { createAzureImage, createGeminiImage, createImage, createVertexImage } from "src/utils/llm";
+import { createAzureImage, createAzureImageEdit, createGeminiImage, createImage, createVertexImage } from "src/utils/llm";
 import { Canvas, CanvasNode } from "src/obsidian/canvas-internal";
 import { addEdge, getIncomingEdgeDirection } from "src/obsidian/canvas-patches";
 import { addImageNode, randomHexString } from "src/utils";
@@ -205,11 +205,26 @@ export async function handleGenerateImage(
 		);
 		void activeItem.requestFrame?.();
 
+		// Ancestor image nodes arrive as inlineData parts; for Azure they become
+		// reference images on the edits endpoint so identity survives the edit.
+		const azureReferenceImages = (options?.parts ?? [])
+			.filter(part => part.inlineData?.data)
+			.map(part => ({
+				data: part.inlineData!.data,
+				mimeType: part.inlineData!.mimeType || "image/png",
+			}));
+
 		const imageOutput = isAzure
-			? await createAzureImage(imageProvider!, nodeContent, {
-					model: model,
-					quality: settings.azureImageQuality || "medium",
-			  })
+			? azureReferenceImages.length
+				? await createAzureImageEdit(imageProvider!, nodeContent, {
+						model: model,
+						quality: settings.azureImageQuality || "medium",
+						images: azureReferenceImages,
+				  })
+				: await createAzureImage(imageProvider!, nodeContent, {
+						model: model,
+						quality: settings.azureImageQuality || "medium",
+				  })
 			: isVertex
 			? await createVertexImage(imageProvider!, nodeContent, {
 					model: model,

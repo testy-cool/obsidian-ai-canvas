@@ -1,5 +1,46 @@
 import { describe, it, expect } from "vitest";
-import { buildVertexImageUrl, buildAzureImageRequest } from "../src/utils/llm";
+import {
+	buildVertexImageUrl,
+	buildAzureImageRequest,
+	buildAzureImageEditBody,
+} from "../src/utils/llm";
+
+describe("buildAzureImageEditBody", () => {
+	const png = Buffer.from("fakepngbytes").toString("base64");
+
+	it("builds a multipart body with fidelity fields and image parts", () => {
+		const body = buildAzureImageEditBody(
+			undefined,
+			"dress him sharply",
+			"medium",
+			[{ data: png, mimeType: "image/png" }],
+			"BOUNDARY"
+		);
+		const text = Buffer.from(body).toString("latin1");
+		expect(text).toContain('name="model"\r\n\r\ngpt-image-2');
+		expect(text).toContain('name="prompt"\r\n\r\ndress him sharply');
+		expect(text).toContain('name="quality"\r\n\r\nmedium');
+		expect(text).toContain('name="input_fidelity"\r\n\r\nhigh');
+		expect(text).toContain('name="output_format"\r\n\r\npng');
+		expect(text).toContain('name="image[]"; filename="reference-0.png"');
+		expect(text).toContain("Content-Type: image/png");
+		expect(text).toContain("fakepngbytes");
+		expect(text.endsWith("--BOUNDARY--\r\n")).toBe(true);
+	});
+
+	it("names jpeg references with a jpg extension", () => {
+		const body = buildAzureImageEditBody(
+			"gpt-image-2",
+			"p",
+			"low",
+			[{ data: png, mimeType: "image/jpeg" }],
+			"B"
+		);
+		const text = Buffer.from(body).toString("latin1");
+		expect(text).toContain('filename="reference-0.jpg"');
+		expect(text).toContain("Content-Type: image/jpeg");
+	});
+});
 
 describe("buildAzureImageRequest", () => {
 	it("builds the v1 generations request", () => {

@@ -110,8 +110,14 @@ const extractYouTubeUrls = (text: string) => {
 
 const isImageModel = (providerType: string, modelId: string) => {
 	const normalizedType = providerType.toLowerCase();
-	if (normalizedType !== "gemini" && normalizedType !== "google") return false;
 	const normalizedModel = modelId.toLowerCase();
+	if (normalizedType === "azure") {
+		return (
+			normalizedModel.includes("gpt-image") ||
+			normalizedModel.includes("dall-e")
+		);
+	}
+	if (normalizedType !== "gemini" && normalizedType !== "google") return false;
 	return (
 		normalizedModel.includes("nano-banana") ||
 		normalizedModel.includes("imagen") ||
