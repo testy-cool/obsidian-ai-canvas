@@ -214,6 +214,14 @@ export async function handleGenerateImage(
 				mimeType: part.inlineData!.mimeType || "image/png",
 			}));
 
+		if (isAzure) {
+			new Notice(
+				azureReferenceImages.length
+					? `Sending ${azureReferenceImages.length} reference image(s) to Azure (edits, high fidelity)`
+					: "No reference images found — plain Azure generation"
+			);
+		}
+
 		const imageOutput = isAzure
 			? azureReferenceImages.length
 				? await createAzureImageEdit(imageProvider!, nodeContent, {
