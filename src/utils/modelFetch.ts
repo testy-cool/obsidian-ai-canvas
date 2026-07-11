@@ -71,7 +71,8 @@ export const fetchProviderModels = async (
 			throw new Error("Provider base URL is not set.");
 		}
 
-		const azureModelsUrl = `${normalizeBaseUrl(provider.baseUrl)}/openai/v1/models`;
+		const azureBase = normalizeBaseUrl(provider.baseUrl).replace(/\/openai\/v1$/, "");
+		const azureModelsUrl = `${azureBase}/openai/v1/models`;
 		const azureHeaders: Record<string, string> = {
 			"api-key": apiKey ?? provider.apiKey,
 		};

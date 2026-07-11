@@ -500,6 +500,19 @@ export const streamResponse = async (
 	}
 };
 
+/**
+ * Codex habitually wraps JSON replies in a ```json fence. Strip a leading
+ * ```json / ``` fence line and a trailing ``` fence before parsing.
+ */
+const stripJsonFence = (text: string): string => {
+	let trimmed = text.trim();
+	if (trimmed.startsWith("```")) {
+		trimmed = trimmed.replace(/^```(?:json)?[ \t]*\r?\n?/, "");
+		trimmed = trimmed.replace(/\r?\n?```[ \t]*$/, "");
+	}
+	return trimmed.trim();
+};
+
 export const getResponse = async (
 	provider: LLMProvider,
 	messages: ModelMessage[],
@@ -526,7 +539,7 @@ export const getResponse = async (
 		await streamCodexResponse(provider, messages, { model, providerParams, timeoutMs, onComplete }, (chunk) => {
 			if (chunk) text += chunk;
 		});
-		return isJSON ? (() => { try { return JSON.parse(text); } catch { return {}; } })() : text;
+		return isJSON ? (() => { try { return JSON.parse(stripJsonFence(text)); } catch { return {}; } })() : text;
 	}
 
 	logDebug("Calling AI (non-stream):", {
@@ -546,6 +559,7 @@ export const getResponse = async (
 
 	// Default timeout: 600s for flex tier, 60s otherwise
 	const isFlexTier = providerParams?.serviceTier === "flex";
+	const wantsFlexFallback = isFlexTier && providerParams?.flexFallback === true;
 	const effectiveTimeout = timeoutMs ?? (isFlexTier ? 600_000 : 60_000);
 	const abortController = new AbortController();
 	const timer = setTimeout(() => abortController.abort(), effectiveTimeout);
@@ -572,7 +586,6 @@ export const getResponse = async (
 			fullError: error,
 		});
 		if (!canUseSearch && !canUseUrlContext) {
-			const wantsFlexFallback = isFlexTier && providerParams?.flexFallback === true;
 			if (wantsFlexFallback) {
 				logDebug("[AI] Flex tier failed, retrying at standard tier");
 				clearTimeout(timer);
@@ -592,7 +605,34 @@ export const getResponse = async (
 			throw error;
 		}
 		logDebug("Google features failed, retrying without them.", { error });
-		textResult = await runGenerate(false, false);
+		try {
+			textResult = await runGenerate(false, false);
+		} catch (retryError: any) {
+			logDebug("AI generate retry error:", {
+				message: retryError?.message,
+				cause: retryError?.cause,
+				responseBody: retryError?.responseBody,
+				data: retryError?.data,
+				fullError: retryError,
+			});
+			if (wantsFlexFallback) {
+				logDebug("[AI] Flex tier failed, retrying at standard tier");
+				clearTimeout(timer);
+				return getResponse(provider, messages, {
+					model, max_tokens, temperature, isJSON, timeoutMs, onComplete,
+					providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false },
+				});
+			}
+			if (onComplete) {
+				onComplete({
+					inputTokens: 0,
+					outputTokens: 0,
+					totalText: "",
+					error: retryError?.message ?? "Unknown generate error",
+				});
+			}
+			throw retryError;
+		}
 	} finally {
 		clearTimeout(timer);
 	}

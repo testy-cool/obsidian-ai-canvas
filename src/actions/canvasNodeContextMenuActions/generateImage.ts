@@ -137,6 +137,11 @@ export async function handleGenerateImage(
 		return;
 	}
 
+	if (isAzure && !imageProvider?.apiKey) {
+		new Notice("Azure image generation needs an API key on the Azure provider.");
+		return;
+	}
+
 	// Get active canvas
 	const canvasView = app.workspace.getActiveViewOfType(ItemView) as any;
 	if (!canvasView || !canvasView.canvas) {
