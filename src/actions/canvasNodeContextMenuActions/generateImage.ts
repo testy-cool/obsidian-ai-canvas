@@ -175,10 +175,22 @@ export async function handleGenerateImage(
 	const edgeLabel = trimmedEdgeLabel ? trimmedEdgeLabel : undefined;
 	// console.log({ canvasView, nodeContent });
 
+	// Per provider/model (and Azure quality tier) so "last time" is comparable.
+	const durationKey = `${imageProvider?.id ?? "default"}/${model ?? "default"}${
+		isAzure ? `@${settings.azureImageQuality || "medium"}` : ""
+	}`;
+	const lastMs = settings.lastImageGenDurations?.[durationKey];
+	const lastLabel = lastMs ? ` (last: ${Math.round(lastMs / 1000)}s)` : "";
+
 	// Generate image from the selected node
-	new Notice("Generating image...");
+	new Notice(`Generating image...${lastLabel}`);
 	let placeholderNode: CanvasNode | null = null;
+	let placeholderTimer: number | null = null;
 	const clearPlaceholder = () => {
+		if (placeholderTimer !== null) {
+			window.clearInterval(placeholderTimer);
+			placeholderTimer = null;
+		}
 		if (!placeholderNode) return;
 		activeItem.removeNode(placeholderNode);
 		placeholderNode = null;
@@ -200,10 +212,19 @@ export async function handleGenerateImage(
 		placeholderNode = createImagePlaceholderNode(
 			activeItem,
 			node,
-			placeholderLabel,
+			`${placeholderLabel}${lastLabel}`,
 			edgeLabel
 		);
 		void activeItem.requestFrame?.();
+
+		const startedAt = Date.now();
+		placeholderTimer = window.setInterval(() => {
+			if (!placeholderNode) return;
+			const elapsed = Math.round((Date.now() - startedAt) / 1000);
+			void placeholderNode.setText(
+				`${placeholderLabel} ${elapsed}s${lastLabel}`
+			);
+		}, 1000);
 
 		// Ancestor image nodes arrive as inlineData parts; for Azure they become
 		// reference images on the edits endpoint so identity survives the edit.
@@ -254,6 +275,18 @@ export async function handleGenerateImage(
 						headers: headers,
 					}
 			  );
+
+		const elapsedMs = Date.now() - startedAt;
+		const elapsedSecs = Math.round(elapsedMs / 1000);
+		settings.lastImageGenDurations = {
+			...(settings.lastImageGenDurations ?? {}),
+			[durationKey]: elapsedMs,
+		};
+		void (app as any).plugins?.getPlugin?.("obsidian-ai-canvas")?.saveSettings?.();
+		// The duration stays visible on the generated edge.
+		const edgeLabelWithTime = edgeLabel
+			? `${edgeLabel} · ${elapsedSecs}s`
+			: `${elapsedSecs}s`;
 
 		const modelForFile = model?.replace(/^models\//i, "").trim();
 		const fileNamePrefix = modelForFile
@@ -368,7 +401,7 @@ export async function handleGenerateImage(
 				imageFile,
 				node,
 				undefined,
-				edgeLabel,
+				edgeLabelWithTime,
 				placementNode
 			);
 			clearPlaceholder();
@@ -383,7 +416,7 @@ export async function handleGenerateImage(
 			"",
 			node,
 			mimeType,
-			edgeLabel,
+			edgeLabelWithTime,
 			placementNode
 		);
 		clearPlaceholder();
