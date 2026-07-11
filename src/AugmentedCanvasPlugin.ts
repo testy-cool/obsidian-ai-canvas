@@ -271,18 +271,26 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	patchCanvasMenu() {
 		const app = this.app;
 		const settings = this.settings;
-		const resolveGeminiProvider = () =>
-			settings.providers.find((provider) => {
-				const id = provider.id?.toLowerCase() || "";
-				const type = provider.type?.toLowerCase() || "";
-				return id === "gemini" || id === "google" || type === "gemini" || type === "google";
-			});
-		const createNanoBananaModel = (providerId: string) => ({
-			id: "nano-banana-pro-preview",
-			providerId: providerId,
-			model: "nano-banana-pro-preview",
-			enabled: true,
-		});
+		const resolveConfiguredImageProvider = () => {
+			const providerId = settings.imageProviderId || settings.activeProvider;
+			const provider =
+				settings.providers.find((p) => p.id === providerId) ||
+				settings.providers.find((p) => p.id === settings.activeProvider);
+			if (!provider) return null;
+			const id = provider.id?.toLowerCase() || "";
+			const type = provider.type?.toLowerCase() || "";
+			const isGeminiFamily =
+				id === "gemini" || id === "google" || type === "gemini" || type === "google";
+			return { provider, isGeminiFamily };
+		};
+		const describeImageTarget = () => {
+			const target = resolveConfiguredImageProvider();
+			if (!target) return "Generate image";
+			const model =
+				settings.imageModelId ||
+				(target.isGeminiFamily ? "nano-banana-pro-preview" : target.provider.type);
+			return `Generate image (${model.replace(/^models\//i, "")})`;
+		};
 
 		const patchMenu = () => {
 			const canvasView = this.app.workspace
@@ -400,27 +408,43 @@ export default class AugmentedCanvasPlugin extends Plugin {
 								"button",
 								"clickable-icon ai-menu-item"
 							);
-							setTooltip(buttonEl_GenerateImage, "Generate image (NanoBanana)", {
+							setTooltip(buttonEl_GenerateImage, describeImageTarget(), {
 								placement: "top",
 							});
 							setIcon(buttonEl_GenerateImage, "lucide-image");
 							this.menuEl.appendChild(buttonEl_GenerateImage);
 							buttonEl_GenerateImage.addEventListener("click", () => {
-								const geminiProvider = resolveGeminiProvider();
-								if (!geminiProvider) {
-									new Notice("No Gemini provider configured for NanoBanana.");
+								const target = resolveConfiguredImageProvider();
+								if (!target) {
+									new Notice("No image provider configured. Set one in Image Generation settings.");
 									return;
 								}
-								const nanoModel = createNanoBananaModel(geminiProvider.id);
-								const { generateNote } = noteGenerator(
+								if (target.isGeminiFamily) {
+									// Gemini keeps the context-aware flow: ancestor notes
+									// and images feed the prompt via noteGenerator.
+									const modelId = settings.imageModelId || "nano-banana-pro-preview";
+									const imageModel = {
+										id: modelId,
+										providerId: target.provider.id,
+										model: modelId,
+										enabled: true,
+									};
+									const { generateNote } = noteGenerator(
+										app,
+										settings,
+										selectedNode as unknown as CanvasNode,
+										undefined,
+										target.provider,
+										imageModel
+									);
+									void generateNote();
+									return;
+								}
+								void handleGenerateImage(
 									app,
 									settings,
-									selectedNode as unknown as CanvasNode,
-									undefined,
-									geminiProvider,
-									nanoModel
+									selectedNode as unknown as CanvasNode
 								);
-								void generateNote();
 							});
 
 							const nodeType =
