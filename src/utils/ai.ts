@@ -6,6 +6,7 @@ import { logDebug } from "src/logDebug";
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
 import { requestUrl } from "obsidian";
 import { getToolSchema, convertToGeminiSchema } from "./mcpClient";
+import { applyOpenAICompatParams } from "./providerParams";
 
 // Cache for access tokens: serviceAccountEmail -> { token, expiresAt }
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -63,6 +64,35 @@ const createScopedGeminiFetch = (providerParams?: Record<string, unknown>): type
 			}
 		}
 
+		return originalFetch(input, init);
+	};
+};
+
+/**
+ * Fetch wrapper for OpenAI-compatible providers: injects provider params
+ * (service_tier, reasoning_effort, thinking) into JSON request bodies.
+ * Returns undefined when there is nothing to inject so the SDK default
+ * fetch is used.
+ */
+const createOpenAICompatFetch = (
+	providerParams?: Record<string, unknown>
+): typeof fetch | undefined => {
+	const probe: Record<string, any> = {};
+	if (!applyOpenAICompatParams(probe, providerParams)) return undefined;
+
+	const originalFetch = globalThis.fetch;
+	return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+		if (init?.body && typeof init.body === "string") {
+			try {
+				const body = JSON.parse(init.body);
+				if (applyOpenAICompatParams(body, providerParams)) {
+					init.body = JSON.stringify(body);
+					logDebug("[AI] Injected provider params into OpenAI-compat body");
+				}
+			} catch (e) {
+				// Not JSON, pass through
+			}
+		}
 		return originalFetch(input, init);
 	};
 };
@@ -221,6 +251,7 @@ const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>)
 			return createOpenAI({
 				apiKey: provider.apiKey,
 				baseURL: provider.baseUrl,
+				fetch: createOpenAICompatFetch(providerParams),
 			});
 		default:
 			throw new Error(`Unsupported provider: ${provider.type}`);
@@ -269,7 +300,7 @@ export const streamResponse = async (
 		onComplete,
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
-) => {
+): Promise<void> => {
 	const mcpToolCount = mcpTools ? Object.keys(mcpTools).length : 0;
 	console.log("[AI Canvas] Stream request:", {
 		model,
@@ -287,6 +318,7 @@ export const streamResponse = async (
 
 	// Default timeout: 600s for flex tier, 60s otherwise
 	const isFlexTier = providerParams?.serviceTier === "flex";
+	const wantsFlexFallback = isFlexTier && providerParams?.flexFallback === true;
 	const effectiveTimeout = timeoutMs ?? (isFlexTier ? 600_000 : 60_000);
 
 	// Build tools - can't mix url_context with MCP tools (Gemini limitation)
@@ -342,6 +374,7 @@ export const streamResponse = async (
 	};
 
 	let result;
+	let deliveredOutput = false;
 
 	try {
 		result = await runStream(canUseSearch, canUseUrlContext);
@@ -353,6 +386,18 @@ export const streamResponse = async (
 			data: error?.data,
 		});
 		if (!canUseSearch && !canUseUrlContext) {
+			if (wantsFlexFallback && !deliveredOutput) {
+				logDebug("[AI] Flex tier failed, retrying at standard tier");
+				return streamResponse(
+					provider,
+					messages,
+					{
+						max_tokens, model, temperature, tools: mcpTools, maxSteps, timeoutMs, onComplete,
+						providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false },
+					},
+					cb
+				);
+			}
 			throw error;
 		}
 		console.log("[AI Canvas] Retrying without Google features...");
@@ -364,6 +409,7 @@ export const streamResponse = async (
 			console.log("[AI Canvas] Stream event:", part.type, part.type === 'text-delta' ? (part as any).textDelta?.substring(0, 50) : '');
 			switch (part.type) {
 				case 'text-delta':
+					deliveredOutput = true;
 					cb((part as any).text || (part as any).textDelta, null, null, null);
 					break;
 				case 'tool-call':
@@ -413,6 +459,18 @@ export const streamResponse = async (
 			data: streamError?.data,
 			fullError: streamError,
 		});
+		if (wantsFlexFallback && !deliveredOutput) {
+			logDebug("[AI] Flex tier failed, retrying at standard tier");
+			return streamResponse(
+				provider,
+				messages,
+				{
+					max_tokens, model, temperature, tools: mcpTools, maxSteps, timeoutMs, onComplete,
+					providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false },
+				},
+				cb
+			);
+		}
 		if (onComplete) {
 			onComplete({
 				inputTokens: 0,
@@ -447,7 +505,7 @@ export const getResponse = async (
 		timeoutMs?: number;
 		onComplete?: (result: { inputTokens: number; outputTokens: number; totalText: string; error?: string }) => void;
 	} = {}
-) => {
+): Promise<any> => {
 	logDebug("Calling AI (non-stream):", {
 		messages,
 		model,
@@ -491,6 +549,15 @@ export const getResponse = async (
 			fullError: error,
 		});
 		if (!canUseSearch && !canUseUrlContext) {
+			const wantsFlexFallback = isFlexTier && providerParams?.flexFallback === true;
+			if (wantsFlexFallback) {
+				logDebug("[AI] Flex tier failed, retrying at standard tier");
+				clearTimeout(timer);
+				return getResponse(provider, messages, {
+					model, max_tokens, temperature, isJSON, timeoutMs, onComplete,
+					providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false },
+				});
+			}
 			if (onComplete) {
 				onComplete({
 					inputTokens: 0,
