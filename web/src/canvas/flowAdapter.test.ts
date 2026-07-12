@@ -46,6 +46,22 @@ describe("React Flow adapter", () => {
 		expect(edge.markerEnd).toEqual(expect.objectContaining({ type: "arrowclosed" }));
 	});
 
+	it("maps saved browser edge pattern and thickness into the rendered path", () => {
+		const [edge] = canvasToFlowEdges({
+			nodes: canvas.nodes,
+			edges: [{
+				...canvas.edges[0],
+				web_line_style: "dashed",
+				web_line_width: 4,
+			}],
+		});
+		expect(edge.style).toMatchObject({
+			strokeDasharray: "10 7",
+			strokeLinecap: "round",
+			strokeWidth: 4,
+		});
+	});
+
 	it("writes moved and resized flow nodes back without dropping node data", () => {
 		const nodes = canvasToFlowNodes(canvas).map((node) => node.id === "note" ? {
 			...node,

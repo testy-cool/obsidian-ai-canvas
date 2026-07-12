@@ -266,13 +266,20 @@ button {
 	position: relative;
 	width: 100%;
 	height: 100%;
-	overflow: hidden;
+	overflow: visible;
 	border: 1px solid color-mix(in srgb, var(--node-accent, var(--background-modifier-border)) 74%, var(--background-modifier-border));
 	border-radius: 9px;
 	color: var(--text-normal);
 	background: color-mix(in srgb, var(--canvas-card) 93%, var(--node-accent, transparent) 7%);
 	box-shadow: 0 5px 16px var(--shadow-color), inset 0 2px 0 color-mix(in srgb, var(--node-accent, transparent) 80%, transparent);
 	transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.canvas-card__surface {
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	border-radius: inherit;
 }
 
 .canvas-card:hover {
@@ -431,12 +438,20 @@ button {
 }
 
 .canvas-handle {
-	width: 11px !important;
-	height: 11px !important;
+	z-index: 6;
+	width: 13px !important;
+	height: 13px !important;
 	border: 2px solid var(--background-primary) !important;
 	background: var(--interactive-accent) !important;
 	opacity: 0;
-	transition: opacity 100ms ease, transform 100ms ease;
+	transition: opacity 100ms ease, box-shadow 100ms ease;
+}
+
+.canvas-handle::after {
+	position: absolute;
+	inset: -9px;
+	border-radius: 50%;
+	content: "";
 }
 
 .canvas-card:hover .canvas-handle,
@@ -444,7 +459,7 @@ button {
 	opacity: 1;
 }
 
-.canvas-handle:hover { transform: scale(1.35); }
+.canvas-handle:hover { box-shadow: 0 0 0 5px color-mix(in srgb, var(--interactive-accent) 24%, transparent); }
 
 .canvas-resizer-line { border-color: transparent !important; }
 .canvas-resizer-handle { width: 9px !important; height: 9px !important; border: 2px solid var(--background-primary) !important; border-radius: 2px !important; background: var(--interactive-accent) !important; }
@@ -472,10 +487,11 @@ button {
 .toolbar-divider { width: 1px; height: 22px; margin: 0 2px; background: var(--background-modifier-border); }
 
 .react-flow__edge-path { transition: stroke 100ms ease, stroke-width 100ms ease; }
-.react-flow__edge.selected .react-flow__edge-path { stroke: var(--interactive-accent) !important; stroke-width: 3px !important; }
+.react-flow__edge.selected .react-flow__edge-path { filter: drop-shadow(0 0 3px var(--interactive-accent)); }
 
 .canvas-edge-label {
 	position: absolute;
+	z-index: 30;
 	display: flex;
 	align-items: center;
 	gap: 4px;
@@ -490,9 +506,26 @@ button {
 	pointer-events: all;
 }
 
-.canvas-edge-label.is-selected { border-color: var(--interactive-accent); }
+.canvas-edge-label.is-selected { display: block; width: 342px; max-width: calc(100vw - 24px); padding: 7px; border-color: var(--interactive-accent); white-space: normal; }
 .canvas-edge-label input { width: 110px; min-width: 0; padding: 3px 5px; border: 0; outline: 0; color: var(--text-normal); background: var(--background-primary); font-size: 13px; }
 .canvas-edge-label button { width: 24px; height: 24px; }
+
+.canvas-edge-editor { display: grid; gap: 7px; }
+.canvas-edge-editor__label { display: flex; align-items: center; gap: 4px; }
+.canvas-edge-editor__label input { flex: 1 1 auto; width: auto; height: 28px; }
+.canvas-edge-editor__appearance { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.canvas-edge-colors,
+.edge-style-buttons { display: flex; align-items: center; gap: 3px; }
+.canvas-edge-colors .color-dot { width: 17px; height: 17px; border: 1px solid color-mix(in srgb, var(--text-muted) 60%, transparent); border-radius: 50%; }
+.canvas-edge-colors .color-dot.is-active { outline: 2px solid var(--text-normal); outline-offset: 1px; }
+.edge-style-divider { flex: 0 0 1px; height: 22px; margin: 0 1px; background: var(--background-modifier-border); }
+.edge-style-buttons + .edge-style-buttons { margin-left: 2px; padding-left: 6px; border-left: 1px solid var(--background-modifier-border); }
+.canvas-edge-label .edge-style-button { display: grid; place-items: center; width: 26px; height: 24px; border: 1px solid transparent; border-radius: 4px; }
+.canvas-edge-label .edge-style-button.is-active { border-color: color-mix(in srgb, var(--interactive-accent) 60%, transparent); color: var(--text-normal); background: color-mix(in srgb, var(--interactive-accent) 15%, transparent); }
+.edge-line-swatch { width: 17px; border-top: 2px solid currentColor; }
+.edge-line-swatch--dashed { border-top-style: dashed; }
+.edge-line-swatch--dotted { border-top-style: dotted; }
+.edge-width-swatch { width: 18px; min-height: 1.5px; border-radius: 999px; background: currentColor; }
 
 .canvas-tool-rail {
 	position: absolute;

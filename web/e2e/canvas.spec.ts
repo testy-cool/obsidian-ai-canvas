@@ -94,6 +94,63 @@ test("offers connected node types when an arrow is dropped on empty canvas", asy
 	await expect(page.locator(".react-flow__edge")).toHaveCount(edgeCount + 1);
 });
 
+test("starts an edge drag from the expanded area around a connection dot", async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.goto("/");
+	const card = page.locator("[data-canvas-node-id='spec-link']");
+	await card.hover();
+	const handle = card.locator(".react-flow__handle-top");
+	const box = await handle.boundingBox();
+	expect(box).not.toBeNull();
+	const grabPoint = { x: box!.x + box!.width / 2, y: box!.y - 6 };
+	const hitsHandle = await page.evaluate(({ x, y }) => {
+		const target = document.elementFromPoint(x, y);
+		return target instanceof Element && Boolean(target.closest(".canvas-handle"));
+	}, grabPoint);
+	expect(hitsHandle).toBe(true);
+
+	await page.mouse.move(grabPoint.x, grabPoint.y);
+	await page.mouse.down();
+	await page.mouse.move(1180, 865, { steps: 12 });
+	await page.mouse.up();
+	await expect(page.getByRole("menu", { name: "Create connected card" })).toBeVisible();
+});
+
+test("changes a selected edge color, pattern, and thickness", async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.goto("/");
+	const edge = page.locator("[data-testid='rf__edge-welcome-context']");
+	await edge.locator(".react-flow__edge-interaction").click({ force: true });
+	await expect(page.getByRole("textbox", { name: "Edge label" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Use dashed edge" })).toBeVisible();
+	await page.getByRole("button", { name: "Use edge color 4" }).click();
+	await page.getByRole("button", { name: "Use dashed edge" }).click();
+	await page.getByRole("button", { name: "Use thick edge" }).click();
+
+	await expect(edge.locator(".react-flow__edge-path")).toHaveAttribute("style", /stroke-dasharray: 10,? 7;.*stroke-width: 4/);
+	await expect.poll(() => page.evaluate(() => {
+		const draft = JSON.parse(localStorage.getItem("obsidian-ai-canvas:web-draft") ?? "null");
+		return draft?.canvas?.edges?.find((candidate: { id?: string }) => candidate.id === "welcome-context") ?? null;
+	})).toMatchObject({ color: "4", web_line_style: "dashed", web_line_width: 4 });
+	await page.screenshot({ path: "/tmp/obsidian-ai-canvas-edge-style.png", fullPage: true });
+});
+
+test("keeps the selected edge appearance editor inside a narrow viewport", async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto("/");
+	const edge = page.locator("[data-testid='rf__edge-welcome-context']");
+	await edge.locator(".react-flow__edge-interaction").click({ force: true });
+	const editor = page.locator(".canvas-edge-label.is-selected");
+	await expect(editor).toBeVisible();
+	const bounds = await editor.boundingBox();
+	expect(bounds).not.toBeNull();
+	expect(bounds!.x).toBeGreaterThanOrEqual(0);
+	expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+	const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+	expect(overflow).toBeLessThanOrEqual(0);
+	await page.screenshot({ path: "/tmp/obsidian-ai-canvas-edge-style-mobile.png", fullPage: true });
+});
+
 test("scrolls the AI provider settings body on a short viewport", async ({ page }) => {
 	await page.setViewportSize({ width: 800, height: 600 });
 	await page.goto("/");

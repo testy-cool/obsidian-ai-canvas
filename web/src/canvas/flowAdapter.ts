@@ -26,6 +26,12 @@ const edgeColor = (color: string | undefined): string => {
 	return /^[1-6]$/.test(color) ? `var(--canvas-color-${color})` : color;
 };
 
+const edgeLineStyle = (value: unknown): "solid" | "dashed" | "dotted" =>
+	value === "dashed" || value === "dotted" ? value : "solid";
+
+const edgeLineWidth = (value: unknown): number =>
+	typeof value === "number" && [1.5, 2, 4].includes(value) ? value : 2;
+
 export const canvasToFlowNodes = (canvas: JsonCanvasData): CanvasFlowNode[] => {
 	return [...canvas.nodes]
 		.sort((left, right) => Number(right.type === "group") - Number(left.type === "group"))
@@ -42,6 +48,7 @@ export const canvasToFlowNodes = (canvas: JsonCanvasData): CanvasFlowNode[] => {
 export const canvasToFlowEdges = (canvas: JsonCanvasData): CanvasFlowEdge[] => {
 	return canvas.edges.map((canvasEdge) => {
 		const color = edgeColor(canvasEdge.color);
+		const lineStyle = edgeLineStyle(canvasEdge.web_line_style);
 		return {
 			id: canvasEdge.id,
 			source: canvasEdge.fromNode,
@@ -50,7 +57,12 @@ export const canvasToFlowEdges = (canvas: JsonCanvasData): CanvasFlowEdge[] => {
 			targetHandle: canvasEdge.toSide,
 			label: canvasEdge.label,
 			type: "canvasEdge",
-			style: { stroke: color, strokeWidth: 2 },
+			style: {
+				stroke: color,
+				strokeDasharray: lineStyle === "dashed" ? "10 7" : lineStyle === "dotted" ? "1 7" : undefined,
+				strokeLinecap: "round" as const,
+				strokeWidth: edgeLineWidth(canvasEdge.web_line_width),
+			},
 			markerStart: canvasEdge.fromEnd === "arrow"
 				? { type: MarkerType.ArrowClosed, color }
 				: undefined,

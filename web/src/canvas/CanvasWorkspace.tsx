@@ -160,10 +160,14 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 		},
 	})), [deleteNode, duplicateNode, onAskAi, onGenerateImage, onViewPrompt, patchNode, resizeNode]);
 
-	const decorateEdges = useCallback((source: JsonCanvasData) => canvasToFlowEdges(source).map((edge) => ({
-		...edge,
-		data: { ...edge.data!, onPatch: patchEdge, onDelete: deleteEdge },
-	})), [deleteEdge, patchEdge]);
+	const decorateEdges = useCallback((source: JsonCanvasData) => {
+		const selectedIds = new Set(edgesRef.current.filter(({ selected }) => selected).map(({ id }) => id));
+		return canvasToFlowEdges(source).map((edge) => ({
+			...edge,
+			selected: selectedIds.has(edge.id),
+			data: { ...edge.data!, onPatch: patchEdge, onDelete: deleteEdge },
+		}));
+	}, [deleteEdge, patchEdge]);
 
 	useEffect(() => {
 		const nextNodes = decorateNodes(canvas);

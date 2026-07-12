@@ -1,6 +1,7 @@
 export type CanvasColor = string;
 export type CanvasSide = "top" | "right" | "bottom" | "left";
 export type CanvasEnd = "none" | "arrow";
+export type CanvasLineStyle = "solid" | "dashed" | "dotted";
 
 export interface JsonCanvasNodeBase {
 	id: string;
@@ -53,6 +54,8 @@ export interface JsonCanvasEdge {
 	toEnd?: CanvasEnd;
 	color?: CanvasColor;
 	label?: string;
+	web_line_style?: CanvasLineStyle;
+	web_line_width?: number;
 	[key: string]: unknown;
 }
 

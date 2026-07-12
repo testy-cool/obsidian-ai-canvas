@@ -103,65 +103,67 @@ function CanvasCardNodeComponent({ id, data, selected }: NodeProps<CanvasFlowNod
 				<button type="button" aria-label="Delete card" onClick={() => data.onDelete?.(id)}><Trash2 size={16} /></button>
 			</NodeToolbar>
 
-			{node.type === "text" ? (
-				editing ? (
-					<textarea
-						className="canvas-card__editor nodrag nowheel"
-						aria-label="Edit card text"
-						autoFocus
-						value={draft}
-						onChange={(event) => setDraft(event.target.value)}
-						onBlur={saveDraft}
-						onKeyDown={(event) => {
-							if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveDraft();
-							if (event.key === "Escape") {
-								setDraft(String(node.text ?? ""));
-								setEditing(false);
-							}
-						}}
-					/>
-				) : (
-					htmlDocument ? (
-						<iframe
-							className="canvas-card__html-preview"
-							title="HTML preview"
-							sandbox=""
-							srcDoc={htmlDocument}
+			<div className="canvas-card__surface">
+				{node.type === "text" ? (
+					editing ? (
+						<textarea
+							className="canvas-card__editor nodrag nowheel"
+							aria-label="Edit card text"
+							autoFocus
+							value={draft}
+							onChange={(event) => setDraft(event.target.value)}
+							onBlur={saveDraft}
+							onKeyDown={(event) => {
+								if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveDraft();
+								if (event.key === "Escape") {
+									setDraft(String(node.text ?? ""));
+									setEditing(false);
+								}
+							}}
 						/>
 					) : (
-						<div className="canvas-card__markdown" dangerouslySetInnerHTML={{ __html: markdown }} />
+						htmlDocument ? (
+							<iframe
+								className="canvas-card__html-preview"
+								title="HTML preview"
+								sandbox=""
+								srcDoc={htmlDocument}
+							/>
+						) : (
+							<div className="canvas-card__markdown" dangerouslySetInnerHTML={{ __html: markdown }} />
+						)
 					)
-				)
-			) : null}
+				) : null}
 
-			{node.type === "file" ? (
-				<div className="canvas-card__file">
-					{typeof node.web_asset === "string" ? (
-						<img src={node.web_asset} alt={String(node.file ?? "Canvas attachment")} draggable={false} />
-					) : typeof node.web_file_text === "string" ? (
-						<div className="canvas-card__markdown" dangerouslySetInnerHTML={{ __html: safeMarkdown(node.web_file_text) }} />
-					) : (
-						<div className="file-fallback">
-							{/\.(png|jpe?g|gif|webp|svg|avif)$/i.test(String(node.file)) ? <ImageIcon size={34} /> : <FileText size={34} />}
-							<strong>{String(node.file ?? "File")}</strong>
-							{node.subpath ? <span>{String(node.subpath)}</span> : null}
-						</div>
-					)}
-					<div className="canvas-card__file-caption">{String(node.file ?? "File")}</div>
-				</div>
-			) : null}
+				{node.type === "file" ? (
+					<div className="canvas-card__file">
+						{typeof node.web_asset === "string" ? (
+							<img src={node.web_asset} alt={String(node.file ?? "Canvas attachment")} draggable={false} />
+						) : typeof node.web_file_text === "string" ? (
+							<div className="canvas-card__markdown" dangerouslySetInnerHTML={{ __html: safeMarkdown(node.web_file_text) }} />
+						) : (
+							<div className="file-fallback">
+								{/\.(png|jpe?g|gif|webp|svg|avif)$/i.test(String(node.file)) ? <ImageIcon size={34} /> : <FileText size={34} />}
+								<strong>{String(node.file ?? "File")}</strong>
+								{node.subpath ? <span>{String(node.subpath)}</span> : null}
+							</div>
+						)}
+						<div className="canvas-card__file-caption">{String(node.file ?? "File")}</div>
+					</div>
+				) : null}
 
-			{node.type === "link" ? (
-				<a className="canvas-card__link" href={String(node.url)} target="_blank" rel="noreferrer" draggable={false}>
-					<span className="link-orbit"><ExternalLink size={22} /></span>
-					<span className="link-host">{hostname(String(node.url))}</span>
-					<span className="link-url">{String(node.url)}</span>
-				</a>
-			) : null}
+				{node.type === "link" ? (
+					<a className="canvas-card__link" href={String(node.url)} target="_blank" rel="noreferrer" draggable={false}>
+						<span className="link-orbit"><ExternalLink size={22} /></span>
+						<span className="link-host">{hostname(String(node.url))}</span>
+						<span className="link-url">{String(node.url)}</span>
+					</a>
+				) : null}
 
-			{!["text", "file", "link"].includes(node.type) ? (
-				<div className="file-fallback"><FileText size={34} /><strong>{node.type}</strong><span>Unsupported custom node</span></div>
-			) : null}
+				{!["text", "file", "link"].includes(node.type) ? (
+					<div className="file-fallback"><FileText size={34} /><strong>{node.type}</strong><span>Unsupported custom node</span></div>
+				) : null}
+			</div>
 		</article>
 	);
 }
