@@ -18,7 +18,11 @@ import {
 	DEFAULT_SETTINGS,
 } from "../../settings/AugmentedCanvasSettings";
 // import { Logger } from "./util/logging";
-import { visitNodeAndAncestors } from "../../obsidian/canvasUtil";
+import {
+	collectNodeAndAncestors,
+	isPromptContextNodeIncluded,
+	visitNodeAndAncestors,
+} from "../../obsidian/canvasUtil";
 import { readNodeContent, readNodeMediaData } from "../../obsidian/fileUtil";
 import { handleGenerateImage } from "../canvasNodeContextMenuActions/generateImage";
 import { getResponse, streamResponse, ToolEvent } from "../../utils/llm";
@@ -26,6 +30,10 @@ import { addModelIndicator, getYouTubeVideoId } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { getAllMCPTools } from "../../utils/mcpClient";
 import { extractHtmlCodeBlocks, addHtmlPreviewToNode } from "../../utils/htmlPreview";
+import {
+	PromptContextModal,
+	type PromptContextOption,
+} from "../../Modals/PromptContextModal";
 
 /**
  * Color for assistant notes: 6 == purple
@@ -296,11 +304,15 @@ export function noteGenerator(
 	const isSystemPromptNode = (text: string) =>
 		text.trim().startsWith("SYSTEM PROMPT");
 
-	const getSystemPrompt = async (node: CanvasNode) => {
+	const getSystemPrompt = async (
+		node: CanvasNode,
+		selectedNodeIds?: ReadonlySet<string>
+	) => {
 		// TODO
 		let foundPrompt: string | null = null;
 
 		await visitNodeAndAncestors(node, async (n: CanvasNode) => {
+			if (!isPromptContextNodeIncluded(n.id, selectedNodeIds)) return true;
 			const text = await readNodeContent(n);
 			if (text && isSystemPromptNode(text)) {
 				foundPrompt = text.replace("SYSTEM PROMPT", "").trim();
@@ -318,9 +330,11 @@ export function noteGenerator(
 		{
 			systemPrompt,
 			prompt,
+			selectedNodeIds,
 		}: {
 			systemPrompt?: string;
 			prompt?: string;
+			selectedNodeIds?: ReadonlySet<string>;
 		} = {}
 	) => {
 		const messages: any[] = [];
@@ -342,7 +356,8 @@ export function noteGenerator(
 
 			// Note: We are not checking for system prompt longer than context window.
 			// That scenario makes no sense, though.
-			const systemPrompt2 = systemPrompt || (await getSystemPrompt(node));
+			const systemPrompt2 =
+				systemPrompt || (await getSystemPrompt(node, selectedNodeIds));
 			if (systemPrompt2) {
 				tokenCount += encoding.encode(systemPrompt2).length;
 			}
@@ -354,6 +369,7 @@ export function noteGenerator(
 			edgeLabel?: string
 		) => {
 			if (settings.maxDepth && depth > settings.maxDepth) return false;
+			if (!isPromptContextNodeIncluded(node.id, selectedNodeIds)) return true;
 
 			const nodeData = node.getData();
 			let nodeText = (await readNodeContent(node))?.trim() || "";
@@ -510,7 +526,8 @@ export function noteGenerator(
 
 		await visitNodeAndAncestors(node, visit);
 
-		const systemPrompt2 = systemPrompt || (await getSystemPrompt(node));
+		const systemPrompt2 =
+			systemPrompt || (await getSystemPrompt(node, selectedNodeIds));
 		if (systemPrompt2)
 			messages.unshift({
 				role: "system",
@@ -526,7 +543,10 @@ export function noteGenerator(
 		return { messages, tokenCount };
 	};
 
-	const generateNote = async (question?: string) => {
+	const generateNote = async (
+		question?: string,
+		selectedNodeIds?: ReadonlySet<string>
+	) => {
 		const provider = resolveProvider();
 		if (!provider) {
 			new Notice("No active provider found. Please check your settings.");
@@ -567,9 +587,39 @@ export function noteGenerator(
 			await canvas.requestSave();
 			await sleep(200);
 
+			if (!selectedNodeIds) {
+				const contextEntries = await collectNodeAndAncestors(node);
+				if (contextEntries.length > 1) {
+					const contextOptions: PromptContextOption[] = await Promise.all(
+						contextEntries.map(async ({ node: contextNode, depth }) => {
+							const canvasNode = contextNode as CanvasNode;
+							const nodeData = canvasNode.getData() as {
+								type?: string;
+								file?: string;
+								url?: string;
+							};
+							const text = (await readNodeContent(canvasNode))?.trim();
+							const fallback =
+								nodeData.file ||
+								nodeData.url ||
+								`${nodeData.type || "Canvas"} card`;
+							const preview = (text || fallback)
+								.replace(/\s+/g, " ")
+								.slice(0, 220);
+							return { id: canvasNode.id, depth, preview };
+						})
+					);
+					new PromptContextModal(app, contextOptions, (selection) => {
+						void generateNote(question, selection);
+					}).open();
+					return;
+				}
+			}
+
 			const trimmedQuestion = question?.trim();
 			const { messages, tokenCount } = await buildMessages(node, {
 				prompt: question,
+				selectedNodeIds,
 			});
 
 			if (isImageModel(provider.type, model.model)) {

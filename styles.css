@@ -20,6 +20,110 @@
 	padding: 12px;
 }
 
+.image-generation-prompt-modal {
+	box-sizing: border-box;
+	width: min(680px, calc(100vw - 48px));
+	max-width: 100%;
+}
+
+.image-generation-prompt-description {
+	margin: 0 0 12px;
+	font-size: 14px;
+	line-height: 1.5;
+	color: var(--text-muted);
+}
+
+.image-generation-prompt-text {
+	box-sizing: border-box;
+	display: block;
+	width: 100%;
+	min-height: 260px;
+	max-height: min(60vh, 640px);
+	padding: 14px;
+	resize: vertical;
+	overflow: auto;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+	font-family: "DejaVu Sans Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 14px;
+	line-height: 1.55;
+	scrollbar-width: thin;
+}
+
+.image-generation-prompt-actions {
+	display: flex;
+	justify-content: flex-end;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	margin-top: 16px;
+}
+
+.image-generation-prompt-actions button {
+	font-size: 14px;
+}
+
+.prompt-context-modal {
+	box-sizing: border-box;
+	width: min(760px, calc(100vw - 48px));
+	max-width: 100%;
+}
+
+.prompt-context-description,
+.prompt-context-summary {
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.prompt-context-description {
+	margin: 0 0 12px;
+	color: var(--text-muted);
+}
+
+.prompt-context-summary {
+	margin-bottom: 12px;
+	font-weight: 600;
+}
+
+.prompt-context-toolbar,
+.prompt-context-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+}
+
+.prompt-context-toolbar {
+	margin-bottom: 12px;
+}
+
+.prompt-context-list {
+	max-height: min(52vh, 560px);
+	overflow: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	scrollbar-width: thin;
+}
+
+.prompt-context-option {
+	padding: 12px 14px;
+}
+
+.prompt-context-option .setting-item-name,
+.prompt-context-option .setting-item-description,
+.prompt-context-toolbar button,
+.prompt-context-actions button {
+	font-size: 14px;
+}
+
+.prompt-context-option .setting-item-description {
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+}
+
+.prompt-context-actions {
+	justify-content: flex-end;
+	margin-top: 16px;
+}
+
 /*  */
 
 .augmented-canvas-setting-item {

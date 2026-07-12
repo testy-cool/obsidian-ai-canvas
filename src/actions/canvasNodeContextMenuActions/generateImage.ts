@@ -402,7 +402,10 @@ export async function handleGenerateImage(
 				node,
 				undefined,
 				edgeLabelWithTime,
-				placementNode
+				{
+					placementNode,
+					imagePrompt: nodeContent,
+				}
 			);
 			clearPlaceholder();
 			return;
@@ -417,7 +420,10 @@ export async function handleGenerateImage(
 			node,
 			mimeType,
 			edgeLabelWithTime,
-			placementNode
+			{
+				placementNode,
+				imagePrompt: nodeContent,
+			}
 		);
 		clearPlaceholder();
 	} catch (error) {

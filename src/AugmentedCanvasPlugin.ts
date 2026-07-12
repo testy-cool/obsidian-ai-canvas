@@ -4,6 +4,7 @@ import {
 	ItemView,
 	Menu,
 	MenuItem,
+	Modal,
 	Notice,
 	Plugin,
 	TFolder,
@@ -48,6 +49,7 @@ import { insertWebsiteContent } from "./actions/commands/websiteContent";
 import { noteGenerator } from "./actions/canvasNodeMenuActions/noteGenerator";
 import { setupHtmlPreviewPersistence } from "./utils/htmlPreview";
 import { ObservabilityClient } from "./utils/observability";
+import { getImageGenerationPrompt } from "./utils/imageGenerationPrompt";
 
 // @ts-expect-error
 import promptsCsvText from "./data/prompts.csv.txt";
@@ -530,7 +532,52 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		// * no event name to add to Canvas context menu ("canvas-menu" does not exist)
 		this.registerEvent(
 			this.app.workspace.on("canvas:node-menu", (menu, node) => {
+				const imagePrompt = getImageGenerationPrompt(
+					(node as unknown as CanvasNode).getData() as Record<string, unknown>
+				);
 				menu.addSeparator();
+				if (imagePrompt) {
+					menu.addItem((item) => {
+						item.setTitle("View image prompt")
+							.setIcon("lucide-file-text")
+							.onClick(() => {
+								const modal = new Modal(this.app);
+								modal.setTitle("Image generation prompt");
+								modal.contentEl.addClass("image-generation-prompt-modal");
+								modal.contentEl.createEl("p", {
+									text: "Exact text sent to the image API for this card.",
+									cls: "image-generation-prompt-description",
+								});
+
+								const promptEl = modal.contentEl.createEl("textarea", {
+									cls: "image-generation-prompt-text",
+								});
+								promptEl.value = imagePrompt;
+								promptEl.readOnly = true;
+								promptEl.spellcheck = false;
+								promptEl.setAttribute("aria-label", "Image generation prompt");
+
+								const actionsEl = modal.contentEl.createDiv({
+									cls: "image-generation-prompt-actions",
+								});
+								const closeButton = actionsEl.createEl("button", { text: "Close" });
+								closeButton.addEventListener("click", () => modal.close());
+								const copyButton = actionsEl.createEl("button", {
+									text: "Copy prompt",
+									cls: "mod-cta",
+								});
+								copyButton.addEventListener("click", async () => {
+									try {
+										await navigator.clipboard.writeText(imagePrompt);
+										new Notice("Image prompt copied to clipboard");
+									} catch {
+										new Notice("Could not copy the image prompt");
+									}
+								});
+								modal.open();
+							});
+					});
+				}
 				menu.addItem((item) => {
 					item.setTitle("Copy node ID")
 						.setIcon("lucide-copy")

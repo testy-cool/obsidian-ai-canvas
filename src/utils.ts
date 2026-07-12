@@ -12,7 +12,13 @@ import { CanvasView, addEdge, getIncomingEdgeDirection } from "./obsidian/canvas
 import { readFileContent, readNodeContent } from "./obsidian/fileUtil";
 import { CanvasNode } from "./obsidian/canvas-internal";
 import { AugmentedCanvasSettings } from "./settings/AugmentedCanvasSettings";
+import { setImageGenerationPrompt } from "./utils/imageGenerationPrompt";
 // from obsidian-chat-stream
+
+interface AddImageNodeOptions {
+	placementNode?: CanvasNode;
+	imagePrompt?: string;
+}
 
 /**
  * Generate a string of random hexadecimal chars
@@ -126,8 +132,9 @@ export function addImageNode(
 	parentNode: any,
 	mimeType?: string,
 	edgeLabel?: string,
-	placementNode?: CanvasNode
+	options: AddImageNodeOptions = {}
 ) {
+	const { placementNode, imagePrompt } = options;
 	const referenceNode = placementNode || parentNode;
 	const IMAGE_WIDTH = referenceNode?.width || parentNode.width || 300;
 	const IMAGE_HEIGHT = referenceNode?.height || IMAGE_WIDTH * (1024 / 1792) + 20;
@@ -175,6 +182,9 @@ export function addImageNode(
 				height: IMAGE_HEIGHT
 			}
 		});
+		if (imagePrompt?.trim()) {
+			setImageGenerationPrompt(node, imagePrompt);
+		}
 		
 		canvas.addNode(node);
 		addEdge(
@@ -195,6 +205,7 @@ export function addImageNode(
 				isGenerated: true,
 			}
 		);
+		void canvas.requestSave?.();
 		return node;
 	} else if (buffer) {
 		const blob = new Blob([buffer], { type: mimeType || "image/png" });
@@ -213,6 +224,9 @@ export function addImageNode(
 				height: IMAGE_HEIGHT
 			}
 		});
+		if (imagePrompt?.trim()) {
+			setImageGenerationPrompt(node, imagePrompt);
+		}
 		
 		canvas.addNode(node);
 		addEdge(
@@ -233,6 +247,7 @@ export function addImageNode(
 				isGenerated: true,
 			}
 		);
+		void canvas.requestSave?.();
 		return node;
 	}
 	

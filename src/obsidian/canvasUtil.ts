@@ -10,6 +10,12 @@ export type NodeVisitor = (
 	edgeLabel?: string
 ) => Promise<boolean>;
 
+export type NodeAndAncestor = {
+	node: HasId;
+	depth: number;
+	edgeLabel?: string;
+};
+
 /**
  * Get parents for canvas node
  */
@@ -67,4 +73,29 @@ export async function visitNodeAndAncestors(
 			}
 		}
 	}
+}
+
+export async function collectNodeAndAncestors(
+	start: HasId,
+	getNodeParents: (
+		node: HasId
+	) => { node: HasId; edgeLabel: string }[] = nodeParents
+): Promise<NodeAndAncestor[]> {
+	const entries: NodeAndAncestor[] = [];
+	await visitNodeAndAncestors(
+		start,
+		async (node, depth, edgeLabel) => {
+			entries.push({ node, depth, edgeLabel });
+			return true;
+		},
+		getNodeParents
+	);
+	return entries;
+}
+
+export function isPromptContextNodeIncluded(
+	nodeId: string,
+	selectedNodeIds?: ReadonlySet<string>
+): boolean {
+	return selectedNodeIds ? selectedNodeIds.has(nodeId) : true;
 }
