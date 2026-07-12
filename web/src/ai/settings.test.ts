@@ -22,6 +22,16 @@ describe("AI settings storage", () => {
 		expect(loadAiSettings(storage)).toEqual(settings);
 	});
 
+	it("restores Azure OpenAI as the selected protocol", () => {
+		const storage = memoryStorage();
+		storage.value = JSON.stringify({
+			...DEFAULT_AI_SETTINGS,
+			protocol: "azure",
+			baseUrl: "https://resource.openai.azure.com/openai/v1",
+		});
+		expect(loadAiSettings(storage).protocol).toBe("azure");
+	});
+
 	it("falls back to defaults for malformed stored values", () => {
 		const storage = memoryStorage();
 		storage.value = "not-json";

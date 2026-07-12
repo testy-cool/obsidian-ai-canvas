@@ -1,4 +1,4 @@
-export type AiProtocol = "openai-compatible" | "gemini";
+export type AiProtocol = "openai-compatible" | "gemini" | "azure";
 
 export interface BrowserAiSettings {
 	protocol: AiProtocol;
@@ -36,7 +36,7 @@ export const loadAiSettings = (storage: BrowserStorage): BrowserAiSettings => {
 		if (!raw) return { ...DEFAULT_AI_SETTINGS };
 		const value: unknown = JSON.parse(raw);
 		if (!isRecord(value)) return { ...DEFAULT_AI_SETTINGS };
-		const protocol = value.protocol === "gemini" || value.protocol === "openai-compatible"
+		const protocol = value.protocol === "gemini" || value.protocol === "openai-compatible" || value.protocol === "azure"
 			? value.protocol
 			: DEFAULT_AI_SETTINGS.protocol;
 		return {

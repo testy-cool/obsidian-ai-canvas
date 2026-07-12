@@ -5,12 +5,97 @@ export interface AiHttpRequest {
 	init: RequestInit;
 }
 
+export interface ProviderModel {
+	id: string;
+	displayName: string;
+	supportedGenerationMethods: string[];
+}
+
 const normalizeBaseUrl = (value: string): string => value.trim().replace(/\/+$/, "");
+
+const compatibleHeaders = (settings: BrowserAiSettings): Record<string, string> => ({
+	...(settings.protocol === "azure"
+		? { "api-key": settings.apiKey }
+		: { Authorization: `Bearer ${settings.apiKey}` }),
+	"Content-Type": "application/json",
+});
 
 const validateSettings = (settings: BrowserAiSettings) => {
 	if (!settings.baseUrl.trim()) throw new Error("AI provider base URL is required");
 	if (!settings.model.trim()) throw new Error("AI model ID is required");
 	if (!settings.apiKey.trim()) throw new Error("AI provider API key is required");
+};
+
+const validateProviderAccess = (settings: BrowserAiSettings) => {
+	if (!settings.baseUrl.trim()) throw new Error("AI provider base URL is required");
+	if (!settings.apiKey.trim()) throw new Error("AI provider API key is required");
+};
+
+export const buildModelListRequest = (settings: BrowserAiSettings): AiHttpRequest => {
+	validateProviderAccess(settings);
+	const baseUrl = normalizeBaseUrl(settings.baseUrl);
+	if (settings.protocol === "gemini") {
+		return {
+			url: `${baseUrl.endsWith("/models") ? baseUrl : `${baseUrl}/models`}?key=${encodeURIComponent(settings.apiKey)}`,
+			init: { method: "GET", headers: { Accept: "application/json" } },
+		};
+	}
+	const providerRoot = baseUrl.replace(/\/(?:chat\/completions|images\/generations)$/i, "");
+	return {
+		url: providerRoot.endsWith("/models") ? providerRoot : `${providerRoot}/models`,
+		init: {
+			method: "GET",
+			headers: {
+				...(settings.protocol === "azure"
+					? { "api-key": settings.apiKey }
+					: { Authorization: `Bearer ${settings.apiKey}` }),
+				Accept: "application/json",
+			},
+		},
+	};
+};
+
+export const requestProviderModels = async (
+	settings: BrowserAiSettings,
+	fetcher: typeof fetch = fetch
+): Promise<ProviderModel[]> => {
+	const request = buildModelListRequest(settings);
+	let response: Response;
+	try {
+		response = await fetcher(request.url, request.init);
+	} catch (error) {
+		throw new Error(`Could not fetch models from this provider. It must allow browser CORS requests. ${error instanceof Error ? error.message : String(error)}`);
+	}
+	const raw = await response.text();
+	let payload: any;
+	try {
+		payload = raw ? JSON.parse(raw) : {};
+	} catch {
+		payload = { raw };
+	}
+	if (!response.ok) {
+		throw new Error(payload?.error?.message || payload?.message || raw || `Model request failed with status ${response.status}`);
+	}
+	const models: ProviderModel[] = settings.protocol === "gemini"
+		? (Array.isArray(payload?.models) ? payload.models : []).flatMap((model: any) => {
+			if (typeof model?.name !== "string" || !model.name.trim()) return [];
+			const methods = Array.isArray(model.supportedGenerationMethods)
+				? model.supportedGenerationMethods.filter((method: unknown): method is string => typeof method === "string")
+				: [];
+			return [{
+				id: model.name,
+				displayName: typeof model.displayName === "string" && model.displayName.trim()
+					? model.displayName.trim()
+					: model.name,
+				supportedGenerationMethods: methods,
+			}];
+		})
+		: (Array.isArray(payload?.data) ? payload.data : []).flatMap((model: any) => {
+			if (typeof model?.id !== "string" || !model.id.trim()) return [];
+			return [{ id: model.id.trim(), displayName: model.id.trim(), supportedGenerationMethods: [] }];
+		});
+	const unique = new Map(models.map((model) => [model.id, model]));
+	return [...unique.values()].sort((left, right) => left.displayName.localeCompare(right.displayName));
 };
 
 export const buildTextRequest = (settings: BrowserAiSettings, prompt: string): AiHttpRequest => {
@@ -38,10 +123,7 @@ export const buildTextRequest = (settings: BrowserAiSettings, prompt: string): A
 		url: baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`,
 		init: {
 			method: "POST",
-			headers: {
-				Authorization: `Bearer ${settings.apiKey}`,
-				"Content-Type": "application/json",
-			},
+			headers: compatibleHeaders(settings),
 			body: JSON.stringify({
 				model: settings.model.trim(),
 				messages: [
@@ -125,14 +207,14 @@ export const buildImageRequest = (settings: BrowserAiSettings, prompt: string): 
 		};
 	}
 
+	const imageUrl = baseUrl.endsWith("/images/generations") ? baseUrl : `${baseUrl}/images/generations`;
 	return {
-		url: baseUrl.endsWith("/images/generations") ? baseUrl : `${baseUrl}/images/generations`,
+		url: settings.protocol === "azure" && !/[?&]api-version=/i.test(imageUrl)
+			? `${imageUrl}${imageUrl.includes("?") ? "&" : "?"}api-version=preview`
+			: imageUrl,
 		init: {
 			method: "POST",
-			headers: {
-				Authorization: `Bearer ${settings.apiKey}`,
-				"Content-Type": "application/json",
-			},
+			headers: compatibleHeaders(settings),
 			body: JSON.stringify({
 				model: settings.imageModel.trim(),
 				prompt,

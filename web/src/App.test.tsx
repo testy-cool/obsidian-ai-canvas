@@ -1,11 +1,14 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { saveCanvasDraft } from "./state/draftStorage";
 
 describe("browser canvas app", () => {
-	beforeEach(() => localStorage.clear());
+	beforeEach(() => {
+		vi.restoreAllMocks();
+		localStorage.clear();
+	});
 
 	it("opens as a complete canvas workspace", async () => {
 		const { container } = render(<App />);
@@ -67,6 +70,134 @@ describe("browser canvas app", () => {
 		await user.click(screen.getByRole("button", { name: "Configure AI" }));
 		expect(screen.getByRole("dialog", { name: "AI provider" })).toBeVisible();
 		expect(screen.getByRole("textbox", { name: "Model ID" })).toHaveValue("");
+	});
+
+	it("offers Azure OpenAI as a provider", async () => {
+		const user = userEvent.setup();
+		render(<App />);
+		await user.click(screen.getByRole("button", { name: "Configure AI" }));
+		expect(screen.getByRole("option", { name: "Azure OpenAI" })).toBeVisible();
+	});
+
+	it("replaces a known Azure endpoint when switching to Gemini", async () => {
+		const user = userEvent.setup();
+		render(<App />);
+		await user.click(screen.getByRole("button", { name: "Configure AI" }));
+		const protocol = screen.getByRole("combobox", { name: "API protocol" });
+		const baseUrl = screen.getByRole("textbox", { name: "Base URL" });
+		await user.selectOptions(protocol, "azure");
+		await user.type(baseUrl, "https://resource.openai.azure.com/openai/v1");
+		await user.selectOptions(protocol, "gemini");
+		expect(baseUrl).toHaveValue("https://generativelanguage.googleapis.com/v1beta");
+	});
+
+	it("fetches models from the selected provider", async () => {
+		const user = userEvent.setup();
+		const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+			data: [{ id: "provider-text-model" }, { id: "provider-image-model" }],
+		}), { status: 200, headers: { "Content-Type": "application/json" } }));
+		render(<App />);
+		await user.click(screen.getByRole("button", { name: "Configure AI" }));
+		await user.clear(screen.getByRole("textbox", { name: "Base URL" }));
+		await user.type(screen.getByRole("textbox", { name: "Base URL" }), "https://provider.example/v1");
+		await user.type(screen.getByLabelText("API key"), "secret");
+		await user.click(screen.getByRole("button", { name: "Fetch models" }));
+
+		await waitFor(() => expect(screen.getByText("2 models found")).toBeVisible());
+		expect(document.querySelector("datalist option[value='provider-text-model']")).toHaveTextContent("provider-text-model");
+		expect(fetcher).toHaveBeenCalledWith("https://provider.example/v1/models", expect.objectContaining({
+			headers: expect.objectContaining({ Authorization: "Bearer secret" }),
+		}));
+	});
+
+	it("fetches Gemini models from the native models endpoint", async () => {
+		const user = userEvent.setup();
+		const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+			models: [{
+				name: "models/gemini-provider-model",
+				displayName: "Gemini provider model",
+				supportedGenerationMethods: ["generateContent"],
+			}],
+		}), { status: 200, headers: { "Content-Type": "application/json" } }));
+		render(<App />);
+		await user.click(screen.getByRole("button", { name: "Configure AI" }));
+		await user.selectOptions(screen.getByRole("combobox", { name: "API protocol" }), "gemini");
+		await user.type(screen.getByLabelText("API key"), "gemini-secret");
+		await user.click(screen.getByRole("button", { name: "Fetch models" }));
+
+		await waitFor(() => expect(screen.getByText("1 model found")).toBeVisible());
+		expect(document.querySelector("datalist option[value='models/gemini-provider-model']")).toHaveTextContent("Gemini provider model");
+		expect(fetcher).toHaveBeenCalledWith(
+			"https://generativelanguage.googleapis.com/v1beta/models?key=gemini-secret",
+			expect.objectContaining({ method: "GET" })
+		);
+	});
+
+	it("fetches Azure models with the api-key header", async () => {
+		const user = userEvent.setup();
+		const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+			data: [{ id: "azure-deployment" }],
+		}), { status: 200, headers: { "Content-Type": "application/json" } }));
+		render(<App />);
+		await user.click(screen.getByRole("button", { name: "Configure AI" }));
+		await user.selectOptions(screen.getByRole("combobox", { name: "API protocol" }), "azure");
+		await user.clear(screen.getByRole("textbox", { name: "Base URL" }));
+		await user.type(screen.getByRole("textbox", { name: "Base URL" }), "https://resource.openai.azure.com/openai/v1");
+		await user.type(screen.getByLabelText("API key"), "azure-secret");
+		await user.click(screen.getByRole("button", { name: "Fetch models" }));
+
+		await waitFor(() => expect(screen.getByText("1 model found")).toBeVisible());
+		expect(fetcher).toHaveBeenCalledWith(
+			"https://resource.openai.azure.com/openai/v1/models",
+			expect.objectContaining({ headers: expect.objectContaining({ "api-key": "azure-secret" }) })
+		);
+	});
+
+	it("ignores model results from a provider that is no longer selected", async () => {
+		const user = userEvent.setup();
+		let resolveFetch: (response: Response) => void = () => undefined;
+		const pendingResponse = new Promise<Response>((resolve) => { resolveFetch = resolve; });
+		vi.spyOn(globalThis, "fetch").mockReturnValue(pendingResponse);
+		render(<App />);
+		await user.click(screen.getByRole("button", { name: "Configure AI" }));
+		await user.type(screen.getByLabelText("API key"), "openai-secret");
+		await user.click(screen.getByRole("button", { name: "Fetch models" }));
+		await user.selectOptions(screen.getByRole("combobox", { name: "API protocol" }), "gemini");
+
+		await act(async () => {
+			resolveFetch(new Response(JSON.stringify({ data: [{ id: "stale-openai-model" }] }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}));
+			await pendingResponse;
+			await Promise.resolve();
+		});
+
+		expect(screen.queryByText("1 model found")).not.toBeInTheDocument();
+		expect(document.querySelector("datalist option[value='stale-openai-model']")).not.toBeInTheDocument();
+	});
+
+	it("renders a whole fenced HTML document in a sandboxed card preview", async () => {
+		saveCanvasDraft(localStorage, {
+			name: "HTML canvas",
+			canvas: {
+				nodes: [{
+					id: "html-card",
+					type: "text",
+					text: "```<html>\n<head><style>body{background:#123}</style></head><body><h1>Rendered document</h1></body></html>```",
+					x: 0,
+					y: 0,
+					width: 420,
+					height: 280,
+				}],
+				edges: [],
+			},
+		});
+		render(<App />);
+
+		const preview = await screen.findByTitle("HTML preview");
+		expect(preview).toHaveAttribute("sandbox", "");
+		expect(preview).toHaveAttribute("srcdoc", expect.stringContaining("<h1>Rendered document</h1>"));
 	});
 
 	it("shows selectable ancestor context and the exact prompt before an AI request", async () => {

@@ -36,6 +36,11 @@ const safeMarkdown = (source: string): string => {
 	return DOMPurify.sanitize(typeof rendered === "string" ? rendered : source);
 };
 
+const fencedHtmlDocument = (source: string): string | null => {
+	const match = /^```(<html>[\s\S]*<\/html>)\s*```$/i.exec(source.trim());
+	return match?.[1] ?? null;
+};
+
 const hostname = (value: string): string => {
 	try {
 		return new URL(value).hostname.replace(/^www\./, "");
@@ -48,6 +53,10 @@ function CanvasCardNodeComponent({ id, data, selected }: NodeProps<CanvasFlowNod
 	const node = data.canvasNode;
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState(node.type === "text" ? String(node.text ?? "") : "");
+	const htmlDocument = useMemo(
+		() => fencedHtmlDocument(node.type === "text" ? String(node.text ?? "") : ""),
+		[node]
+	);
 	const markdown = useMemo(
 		() => safeMarkdown(node.type === "text" ? String(node.text ?? "") : ""),
 		[node]
@@ -112,7 +121,16 @@ function CanvasCardNodeComponent({ id, data, selected }: NodeProps<CanvasFlowNod
 						}}
 					/>
 				) : (
-					<div className="canvas-card__markdown" dangerouslySetInnerHTML={{ __html: markdown }} />
+					htmlDocument ? (
+						<iframe
+							className="canvas-card__html-preview"
+							title="HTML preview"
+							sandbox=""
+							srcDoc={htmlDocument}
+						/>
+					) : (
+						<div className="canvas-card__markdown" dangerouslySetInnerHTML={{ __html: markdown }} />
+					)
 				)
 			) : null}
 
@@ -134,7 +152,7 @@ function CanvasCardNodeComponent({ id, data, selected }: NodeProps<CanvasFlowNod
 			) : null}
 
 			{node.type === "link" ? (
-				<a className="canvas-card__link nodrag" href={String(node.url)} target="_blank" rel="noreferrer">
+				<a className="canvas-card__link" href={String(node.url)} target="_blank" rel="noreferrer" draggable={false}>
 					<span className="link-orbit"><ExternalLink size={22} /></span>
 					<span className="link-host">{hostname(String(node.url))}</span>
 					<span className="link-url">{String(node.url)}</span>

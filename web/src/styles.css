@@ -308,6 +308,15 @@ button {
 .canvas-card__markdown code { padding: 2px 5px; border-radius: 4px; background: var(--background-tertiary); font-family: "DejaVu Sans Mono", ui-monospace, monospace; font-size: 14px; }
 .canvas-card__markdown blockquote { margin-left: 0; padding-left: 14px; border-left: 3px solid var(--interactive-accent); color: var(--text-muted); }
 
+.canvas-card__html-preview {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	background: white;
+	pointer-events: none;
+}
+
 .canvas-card__editor {
 	width: 100%;
 	height: 100%;
@@ -561,6 +570,8 @@ button {
 }
 
 .modal-card {
+	display: flex;
+	flex-direction: column;
 	width: min(460px, 100%);
 	max-height: min(720px, calc(100dvh - 48px));
 	overflow: hidden;
@@ -572,10 +583,10 @@ button {
 }
 
 .modal-card--wide { width: min(720px, 100%); }
-.modal-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 18px 13px 22px; border-bottom: 1px solid var(--background-modifier-border); }
+.modal-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 18px 13px 22px; border-bottom: 1px solid var(--background-modifier-border); }
 .modal-header h2 { margin: 0; font-size: 18px; letter-spacing: -0.015em; }
-.modal-body { padding: 20px 22px; overflow: auto; }
-.modal-footer { display: flex; justify-content: flex-end; gap: 11px; padding: 13px 22px 18px; }
+.modal-body { flex: 1 1 auto; min-height: 0; padding: 20px 22px; overflow: auto; }
+.modal-footer { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: 11px; padding: 13px 22px 18px; }
 .modal-lede { margin: 0 0 12px; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
 
 .field-label { display: grid; gap: 8px; color: var(--text-muted); font-size: 14px; font-weight: 600; }
@@ -615,6 +626,13 @@ button {
 .secret-input input { padding-right: 44px; }
 .secret-input button { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 5px; color: var(--text-muted); background: transparent; }
 .secret-input button:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+.provider-model-fetch { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.provider-model-fetch button:disabled { opacity: .55; cursor: progress; }
+.provider-model-status { min-width: 0; overflow-wrap: anywhere; color: var(--text-muted); font-size: 14px; }
+.provider-model-status.is-error { color: var(--canvas-color-1); }
+.azure-provider-note { margin: 16px 0 0; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+.azure-provider-note code { padding: 2px 5px; border-radius: 4px; background: var(--background-tertiary); font-family: "DejaVu Sans Mono", ui-monospace, monospace; font-size: 13px; }
+.is-spinning { animation: spin 900ms linear infinite; }
 .local-key-note { display: flex; align-items: flex-start; gap: 9px; margin-top: 17px; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
 .local-key-note svg { flex: 0 0 auto; color: var(--canvas-color-4); }
 

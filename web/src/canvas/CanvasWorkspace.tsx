@@ -21,6 +21,7 @@ import {
 	useReactFlow,
 	type Connection,
 	type EdgeChange,
+	type FinalConnectionState,
 	type NodeChange,
 } from "@xyflow/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -100,6 +101,23 @@ interface NewCanvasNode {
 	[key: string]: unknown;
 }
 
+interface ConnectionDropState {
+	screenX: number;
+	screenY: number;
+	flowX: number;
+	flowY: number;
+	fromNodeId: string;
+	fromSide?: CanvasSide;
+}
+
+const oppositeSide = (side: CanvasSide | undefined): CanvasSide | undefined => {
+	if (side === "top") return "bottom";
+	if (side === "right") return "left";
+	if (side === "bottom") return "top";
+	if (side === "left") return "right";
+	return undefined;
+};
+
 function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onViewPrompt, onError }: CanvasWorkspaceProps) {
 	const canvasRef = useRef(canvas);
 	const nodesRef = useRef<CanvasFlowNode[]>([]);
@@ -112,6 +130,8 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 	const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<string>>(new Set());
 	const [linkDialog, setLinkDialog] = useState(false);
 	const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+	const [connectionDropMenu, setConnectionDropMenu] = useState<ConnectionDropState | null>(null);
+	const [pendingCreation, setPendingCreation] = useState<ConnectionDropState | null>(null);
 	const { screenToFlowPosition, fitView } = useReactFlow();
 
 	useEffect(() => {
@@ -183,15 +203,32 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 		setSelectedEdgeIds((current) => sameIds(current, edgeIds) ? current : new Set(edgeIds));
 	}, []);
 
-	const addNodeAtCenter = useCallback((node: NewCanvasNode) => {
-		const position = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-		commit(addCanvasNode(canvasRef.current, {
+	const createCanvasNode = useCallback((node: NewCanvasNode, connectionDrop?: ConnectionDropState | null) => {
+		const position = connectionDrop
+			? { x: connectionDrop.flowX, y: connectionDrop.flowY }
+			: screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+		const nodeId = makeId("node");
+		let next = addCanvasNode(canvasRef.current, {
 			...node,
-			id: makeId("node"),
+			id: nodeId,
 			x: position.x - node.width / 2,
-			y: position.y - node.height / 2,
-		} as JsonCanvasNode));
+			y: connectionDrop ? position.y - 24 : position.y - node.height / 2,
+		} as JsonCanvasNode);
+		if (connectionDrop) {
+			next = addCanvasEdge(next, {
+				id: makeId("edge"),
+				fromNode: connectionDrop.fromNodeId,
+				fromSide: connectionDrop.fromSide,
+				fromEnd: "none",
+				toNode: nodeId,
+				toSide: oppositeSide(connectionDrop.fromSide),
+				toEnd: "arrow",
+			});
+		}
+		commit(next);
 	}, [commit, screenToFlowPosition]);
+
+	const addNodeAtCenter = useCallback((node: NewCanvasNode) => createCanvasNode(node), [createCanvasNode]);
 
 	const connect = useCallback((connection: Connection) => {
 		if (!connection.source || !connection.target) return;
@@ -207,6 +244,24 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 			toEnd: "arrow",
 		}));
 	}, [commit]);
+
+	const finishConnection = useCallback((event: MouseEvent | TouchEvent, connectionState: FinalConnectionState) => {
+		if (connectionState.isValid || !connectionState.fromNode || connectionState.toNode) return;
+		const pointer = "changedTouches" in event ? event.changedTouches[0] : event;
+		if (!pointer) return;
+		const fromHandleId = connectionState.fromHandle?.id;
+		const fromSide = fromHandleId && SIDES.has(fromHandleId) ? fromHandleId as CanvasSide : undefined;
+		const flowPosition = screenToFlowPosition({ x: pointer.clientX, y: pointer.clientY });
+		setContextMenu(null);
+		setConnectionDropMenu({
+			screenX: Math.min(pointer.clientX, Math.max(12, window.innerWidth - 230)),
+			screenY: Math.min(pointer.clientY, Math.max(12, window.innerHeight - 160)),
+			flowX: flowPosition.x,
+			flowY: flowPosition.y,
+			fromNodeId: connectionState.fromNode.id,
+			fromSide,
+		});
+	}, [screenToFlowPosition]);
 
 	const removeSelection = useCallback(() => {
 		if (!selectedNodeIds.size && !selectedEdgeIds.size) return;
@@ -258,7 +313,10 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 				event.preventDefault();
 				pasteSelection();
 			}
-			if (event.key === "Escape") setContextMenu(null);
+			if (event.key === "Escape") {
+				setContextMenu(null);
+				setConnectionDropMenu(null);
+			}
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
@@ -279,7 +337,7 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 		commit(next);
 	}, [commit]);
 
-	const attachFile = async (file: File) => {
+	const attachFile = async (file: File, connectionDrop?: ConnectionDropState | null) => {
 		try {
 			const isImage = file.type.startsWith("image/");
 			const isText = file.type.startsWith("text/") || /\.(md|txt|json|csv)$/i.test(file.name);
@@ -288,7 +346,7 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 				: isText
 					? { web_file_text: await file.text(), web_asset_type: file.type }
 					: {};
-			addNodeAtCenter({ type: "file", file: file.name, width: isImage ? 460 : 380, height: isImage ? 320 : 240, ...custom });
+			createCanvasNode({ type: "file", file: file.name, width: isImage ? 460 : 380, height: isImage ? 320 : 240, ...custom }, connectionDrop);
 		} catch (error) {
 			onError(error instanceof Error ? error.message : String(error));
 		}
@@ -318,6 +376,7 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 				onNodesChange={changeNodes}
 				onEdgesChange={changeEdges}
 				onConnect={connect}
+				onConnectEnd={finishConnection}
 				onNodeDragStop={finishNodeDrag}
 				onReconnect={(oldEdge, connection) => {
 					if (!connection.source || !connection.target) return;
@@ -331,9 +390,13 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 				onSelectionChange={changeSelection}
 				onNodeContextMenu={(event, node) => {
 					event.preventDefault();
+					setConnectionDropMenu(null);
 					setContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
 				}}
-				onPaneClick={() => setContextMenu(null)}
+				onPaneClick={() => {
+					setContextMenu(null);
+					setConnectionDropMenu(null);
+				}}
 				connectionMode={ConnectionMode.Loose}
 				deleteKeyCode={null}
 				selectionKeyCode="Shift"
@@ -352,8 +415,8 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 
 			<nav className="canvas-tool-rail" aria-label="Canvas tools">
 				<button type="button" aria-label="Add text card" data-tooltip="Text card" onClick={() => addNodeAtCenter({ type: "text", text: "Start writing…", width: 360, height: 220 })}><MessageSquarePlus size={20} /></button>
-				<button type="button" aria-label="Add file card" data-tooltip="File or image" onClick={() => attachmentInput.current?.click()}><ImagePlus size={20} /></button>
-				<button type="button" aria-label="Add link card" data-tooltip="Web link" onClick={() => setLinkDialog(true)}><Link2 size={20} /></button>
+				<button type="button" aria-label="Add file card" data-tooltip="File or image" onClick={() => { setPendingCreation(null); attachmentInput.current?.click(); }}><ImagePlus size={20} /></button>
+				<button type="button" aria-label="Add link card" data-tooltip="Web link" onClick={() => { setPendingCreation(null); setLinkDialog(true); }}><Link2 size={20} /></button>
 				<span className="rail-divider" />
 				<button type="button" aria-label="Create group" data-tooltip={selectedNodeIds.size ? "Group selection" : "Group"} onClick={createGroup}><FolderKanban size={20} /></button>
 				<button type="button" aria-label="Fit canvas to screen" data-tooltip="Fit view" onClick={() => fitView({ padding: 0.2, duration: 280 })}><BoxSelect size={20} /></button>
@@ -366,7 +429,8 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 				aria-label="Choose a canvas attachment"
 				onChange={(event) => {
 					const file = event.target.files?.[0];
-					if (file) void attachFile(file);
+					if (file) void attachFile(file, pendingCreation);
+					setPendingCreation(null);
 					event.target.value = "";
 				}}
 			/>
@@ -377,12 +441,38 @@ function CanvasWorkspaceInner({ canvas, onCommit, onAskAi, onGenerateImage, onVi
 					label="URL"
 					placeholder="https://example.com"
 					submitLabel="Add link"
-					onClose={() => setLinkDialog(false)}
+					onClose={() => { setLinkDialog(false); setPendingCreation(null); }}
 					onSubmit={(url) => {
-						addNodeAtCenter({ type: "link", url: /^https?:\/\//i.test(url) ? url : `https://${url}`, width: 360, height: 180 });
+						createCanvasNode({ type: "link", url: /^https?:\/\//i.test(url) ? url : `https://${url}`, width: 360, height: 180 }, pendingCreation);
 						setLinkDialog(false);
+						setPendingCreation(null);
 					}}
 				/>
+			) : null}
+
+			{connectionDropMenu ? (
+				<div
+					className="context-menu connection-drop-menu"
+					role="menu"
+					aria-label="Create connected card"
+					style={{ left: connectionDropMenu.screenX, top: connectionDropMenu.screenY }}
+					onMouseDown={(event) => event.stopPropagation()}
+				>
+					<button type="button" role="menuitem" onClick={() => {
+						createCanvasNode({ type: "text", text: "Start writing…", width: 360, height: 220 }, connectionDropMenu);
+						setConnectionDropMenu(null);
+					}}><MessageSquarePlus size={16} /> Text card</button>
+					<button type="button" role="menuitem" onClick={() => {
+						setPendingCreation(connectionDropMenu);
+						setConnectionDropMenu(null);
+						setLinkDialog(true);
+					}}><Link2 size={16} /> Link card</button>
+					<button type="button" role="menuitem" onClick={() => {
+						setPendingCreation(connectionDropMenu);
+						setConnectionDropMenu(null);
+						attachmentInput.current?.click();
+					}}><ImagePlus size={16} /> File or image</button>
+				</div>
 			) : null}
 
 			{contextMenu && contextNode ? (

@@ -46,6 +46,35 @@ describe("browser AI client", () => {
 		});
 	});
 
+	it("uses Azure OpenAI v1 API-key authentication for chat", () => {
+		const azure = {
+			...openAi,
+			protocol: "azure",
+			baseUrl: "https://resource.openai.azure.com/openai/v1/",
+		} as unknown as BrowserAiSettings;
+		const request = buildTextRequest(azure, "Canvas context");
+		expect(request.url).toBe("https://resource.openai.azure.com/openai/v1/chat/completions");
+		expect(request.init.headers).toEqual({
+			"api-key": "secret",
+			"Content-Type": "application/json",
+		});
+	});
+
+	it("uses the Azure image preview endpoint with the configured deployment ID", () => {
+		const azure = {
+			...openAi,
+			protocol: "azure",
+			baseUrl: "https://resource.openai.azure.com/openai/v1",
+		} as unknown as BrowserAiSettings;
+		const request = buildImageRequest(azure, "Exact image prompt");
+		expect(request.url).toBe("https://resource.openai.azure.com/openai/v1/images/generations?api-version=preview");
+		expect(request.init.headers).toEqual({
+			"api-key": "secret",
+			"Content-Type": "application/json",
+		});
+		expect(JSON.parse(String(request.init.body))).toMatchObject({ model: "provider-image-id" });
+	});
+
 	it("extracts text from a successful compatible response", async () => {
 		const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
 			choices: [{ message: { content: "Generated answer" } }],
