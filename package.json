@@ -1,11 +1,15 @@
 {
 	"name": "obsidian-ai-canvas",
-	"version": "0.2.13",
+	"version": "0.3.0",
 	"description": "Transform your Canvas into an AI workspace. Chat with notes, generate content, use MCP tools, and connect to any LLM provider.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"web:dev": "pnpm --dir web dev",
+		"web:build": "pnpm --dir web build",
+		"web:test": "pnpm --dir web test",
+		"web:test:e2e": "pnpm --dir web test:e2e",
 		"deploy": "pnpm run build && node deploy.mjs",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"test": "vitest run",

@@ -12,6 +12,10 @@ node_modules
 
 # Exclude sourcemaps
 *.map
+*.tsbuildinfo
+web/dist/
+web/playwright-report/
+web/test-results/
 
 # obsidian
 data.json
