@@ -172,11 +172,7 @@ export function restoreHtmlPreviews(canvas: any, autoExpand: boolean = false): v
 
 	canvas.nodes.forEach((node: CanvasNode) => {
 		const nodeData = node.getData?.();
-		const isAiTextNode = nodeData?.type === "text" && (
-			nodeData?.chat_role === "assistant" ||
-			(nodeData?.ai_model && nodeData?.ai_provider)
-		);
-		if (isAiTextNode) {
+		if (nodeData?.type === "text") {
 			const text = node.text || "";
 			const htmlBlocks = extractHtmlCodeBlocks(text);
 			if (htmlBlocks.length > 0 && !node.contentEl?.querySelector(".html-preview-container")) {
