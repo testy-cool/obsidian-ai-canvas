@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 
-const pluginDir = "D:/Workspaces/Obsidian/Dump/.obsidian/plugins/obsidian-ai-canvas";
+const pluginDir = "/home/testycool/Obsidian-New/.obsidian/plugins/obsidian-ai-canvas";
 
 if (!fs.existsSync(pluginDir)) {
 	fs.mkdirSync(pluginDir, { recursive: true });
