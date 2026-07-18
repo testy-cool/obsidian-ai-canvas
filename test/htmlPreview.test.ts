@@ -7,6 +7,7 @@ import {
 class FakeElement {
 	className = "";
 	children: FakeElement[] = [];
+	parentElement: FakeElement | null = null;
 	sandbox = { add: vi.fn() };
 	srcdoc = "";
 	style: Record<string, string> = {};
@@ -16,6 +17,7 @@ class FakeElement {
 
 	createEl(tagName: string, options?: { cls?: string; text?: string }) {
 		const child = new FakeElement(tagName);
+		child.parentElement = this;
 		child.className = options?.cls || "";
 		child.textContent = options?.text || "";
 		this.children.push(child);
@@ -121,5 +123,22 @@ describe("extractHtmlCodeBlocks", () => {
 		restoreHtmlPreviews({ nodes: new Map([["node", node]]) });
 
 		expect(contentEl.querySelector(".html-preview-container")).toBeNull();
+	});
+
+	it("marks preview hosts so Canvas clipping cannot hide the iframe", () => {
+		installFakeDocument();
+		const nodeContainer = new FakeElement();
+		const contentEl = new FakeElement();
+		contentEl.parentElement = nodeContainer;
+		const node = {
+			text: "```html\n<html><h1>Lala</h1></html>\n```",
+			contentEl,
+			getData: () => ({ type: "text" }),
+		};
+
+		restoreHtmlPreviews({ nodes: new Map([["node", node]]) }, true);
+
+		expect(contentEl.className.split(" ")).toContain("html-preview-host");
+		expect(nodeContainer.className.split(" ")).toContain("html-preview-node-container");
 	});
 });

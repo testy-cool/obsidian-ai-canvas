@@ -78,6 +78,11 @@ export function addHtmlPreviewToNode(
 		return null;
 	}
 
+	// Canvas keeps node content at the card height with overflow hidden. Let the
+	// preview extend below the markdown content without changing saved node size.
+	node.contentEl.addClass("html-preview-host");
+	node.contentEl.parentElement?.addClass("html-preview-node-container");
+
 	// Remove existing preview if present
 	const existing = node.contentEl.querySelector(".html-preview-container");
 	if (existing) {

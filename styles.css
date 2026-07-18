@@ -771,6 +771,15 @@
 }
 
 /* HTML Preview */
+.html-preview-host {
+	overflow: visible !important;
+}
+
+.html-preview-node-container {
+	contain: none !important;
+	overflow: visible !important;
+}
+
 .html-preview-container {
 	margin-top: 12px;
 }
