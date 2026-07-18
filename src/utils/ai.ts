@@ -75,6 +75,14 @@ const createScopedGeminiFetch = (providerParams?: Record<string, unknown>): type
  * Returns undefined when there is nothing to inject so the SDK default
  * fetch is used.
  */
+/**
+ * OpenAI-compatible gateways only reliably implement /v1/chat/completions,
+ * but @ai-sdk/openai v3 routes `provider(modelId)` to the Responses API.
+ * Wrap the provider so plain calls resolve to the chat model instead.
+ */
+const asChatProvider = (provider: ReturnType<typeof createOpenAI>) =>
+	((modelId: string) => provider.chat(modelId)) as unknown as typeof provider;
+
 const createOpenAICompatFetch = (
 	providerParams?: Record<string, unknown>
 ): typeof fetch | undefined => {
@@ -232,12 +240,12 @@ const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>)
 			});
 		case "Azure": {
 			const azureBase = provider.baseUrl.replace(/\/+$/, "").replace(/\/openai\/v1$/, "");
-			return createOpenAI({
+			return asChatProvider(createOpenAI({
 				apiKey: provider.apiKey,
 				baseURL: `${azureBase}/openai/v1`,
 				headers: { "api-key": provider.apiKey },
 				fetch: createOpenAICompatFetch(providerParams),
-			});
+			}));
 		}
 		case "OpenAI":
 		case "OpenRouter":
@@ -261,11 +269,11 @@ const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>)
 			// Unknown types land here too: the provider modal writes the
 			// user-chosen display name into `type` (e.g. "bifrost"), and any
 			// provider with a base URL is OpenAI-compatible in this plugin.
-			return createOpenAI({
+			return asChatProvider(createOpenAI({
 				apiKey: provider.apiKey,
 				baseURL: provider.baseUrl,
 				fetch: createOpenAICompatFetch(providerParams),
-			});
+			}));
 	}
 };
 
