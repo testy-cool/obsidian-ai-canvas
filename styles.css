@@ -863,3 +863,33 @@
 	display: block;
 	background: white;
 }
+
+/* Provider modal model checklist — keep large model lists scrollable */
+.unified-provider-modal .model-checklist {
+	max-height: 320px;
+	overflow-y: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	padding: 4px 8px;
+	margin-bottom: 8px;
+}
+
+.unified-provider-modal .model-check-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 2px 0;
+}
+
+.unified-provider-modal .model-check-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.unified-provider-modal .model-check-more {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 0;
+}

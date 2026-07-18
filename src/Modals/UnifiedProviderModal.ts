@@ -38,11 +38,14 @@ function isCodexType(type: string): boolean {
 }
 
 export class UnifiedProviderModal extends Modal {
+  private static readonly MODEL_PAGE_SIZE = 50;
+
   private provider: Partial<LLMProvider>;
   private selectedModelIds: Set<string> = new Set();
   private fetchedModelIds: string[] = [];
   private customModelInput = "";
   private filterText = "";
+  private renderLimit = UnifiedProviderModal.MODEL_PAGE_SIZE;
   private modelListEl: HTMLElement | null = null;
   private editing: boolean;
   private pricingData: Map<string, { inputCostPerMillion: number; outputCostPerMillion: number }> | undefined;
@@ -224,6 +227,7 @@ export class UnifiedProviderModal extends Modal {
 
           const models = await fetchProviderModels(this.provider as LLMProvider);
           this.fetchedModelIds = models;
+          this.renderLimit = UnifiedProviderModal.MODEL_PAGE_SIZE;
           connStatus?.setText(`Found ${models.length} models`);
           connStatus?.addClass("mod-success");
           connStatus?.removeClass("mod-warning");
@@ -257,21 +261,22 @@ export class UnifiedProviderModal extends Modal {
     new Setting(contentEl).addText((text) => {
       text.setPlaceholder("Filter models...").onChange((val) => {
         this.filterText = val.toLowerCase();
+        this.renderLimit = UnifiedProviderModal.MODEL_PAGE_SIZE;
         this.renderModelList();
       });
     });
 
-    // Select all / Clear buttons
+    // Select all / Clear buttons — act on the currently filtered set
     const actionsSetting = new Setting(contentEl);
     actionsSetting.addButton((btn) => {
       btn.setButtonText("Select all").onClick(() => {
-        this.selectedModelIds = new Set(this.fetchedModelIds);
+        for (const id of this.getFilteredModelIds()) this.selectedModelIds.add(id);
         this.renderModelList();
       });
     });
     actionsSetting.addButton((btn) => {
       btn.setButtonText("Clear").onClick(() => {
-        this.selectedModelIds.clear();
+        for (const id of this.getFilteredModelIds()) this.selectedModelIds.delete(id);
         this.renderModelList();
       });
     });
@@ -311,13 +316,17 @@ export class UnifiedProviderModal extends Modal {
     saveBtn.addEventListener("click", () => this.save());
   }
 
+  private getFilteredModelIds(): string[] {
+    return this.fetchedModelIds.filter((id) =>
+      this.filterText ? id.toLowerCase().includes(this.filterText) : true
+    );
+  }
+
   private renderModelList(): void {
     if (!this.modelListEl) return;
     this.modelListEl.empty();
 
-    const filtered = this.fetchedModelIds.filter((id) =>
-      this.filterText ? id.toLowerCase().includes(this.filterText) : true
-    );
+    const filtered = this.getFilteredModelIds();
 
     if (filtered.length === 0 && this.fetchedModelIds.length === 0) {
       this.modelListEl.createEl("div", {
@@ -327,40 +336,70 @@ export class UnifiedProviderModal extends Modal {
       return;
     }
 
-    for (const modelId of filtered) {
+    // Selected models first so enabled ones stay visible under the render cap
+    const sorted = [...filtered].sort(
+      (a, b) =>
+        Number(this.selectedModelIds.has(b)) - Number(this.selectedModelIds.has(a))
+    );
+
+    const visible = sorted.slice(0, this.renderLimit);
+    for (const modelId of visible) {
       const itemWrap = this.modelListEl.createDiv({ cls: "model-check-item-wrap" });
-      const row = itemWrap.createDiv({ cls: "model-check-item" });
-      const cb = row.createEl("input", { type: "checkbox" });
-      cb.checked = this.selectedModelIds.has(modelId);
-      cb.addEventListener("change", () => {
-        if (cb.checked) {
-          this.selectedModelIds.add(modelId);
-        } else {
-          this.selectedModelIds.delete(modelId);
-        }
+      this.renderModelRow(itemWrap, modelId);
+    }
+
+    const hidden = sorted.length - visible.length;
+    if (hidden > 0) {
+      const moreWrap = this.modelListEl.createDiv({ cls: "model-check-more" });
+      moreWrap.createEl("span", {
+        text: `Showing ${visible.length} of ${sorted.length} models — filter to narrow down, or`,
+        cls: "setting-item-description",
+      });
+      const moreBtn = moreWrap.createEl("button", {
+        text: `show ${Math.min(hidden, UnifiedProviderModal.MODEL_PAGE_SIZE)} more`,
+      });
+      moreBtn.addEventListener("click", () => {
+        this.renderLimit += UnifiedProviderModal.MODEL_PAGE_SIZE;
         this.renderModelList();
       });
-      row.createEl("span", { text: modelId, cls: "model-check-label" });
+    }
+  }
 
-      const defs = getParamsForModel(modelId, this.provider.type ?? "");
-      if (this.selectedModelIds.has(modelId) && defs.length) {
-        const gearBtn = row.createEl("button", {
-          text: "⚙",
-          cls: "clickable-icon",
-        });
-        gearBtn.addEventListener("click", () => {
-          if (this.expandedParams.has(modelId)) {
-            this.expandedParams.delete(modelId);
-          } else {
-            this.expandedParams.add(modelId);
-          }
-          this.renderModelList();
-        });
+  private renderModelRow(itemWrap: HTMLElement, modelId: string): void {
+    itemWrap.empty();
+    const row = itemWrap.createDiv({ cls: "model-check-item" });
+    const cb = row.createEl("input", { type: "checkbox" });
+    cb.checked = this.selectedModelIds.has(modelId);
+    cb.addEventListener("change", () => {
+      if (cb.checked) {
+        this.selectedModelIds.add(modelId);
+      } else {
+        this.selectedModelIds.delete(modelId);
+      }
+      // Re-render only this row: a full list rebuild on every click makes
+      // Obsidian churn through thousands of DOM nodes on large providers.
+      this.renderModelRow(itemWrap, modelId);
+    });
+    row.createEl("span", { text: modelId, cls: "model-check-label" });
 
+    const defs = getParamsForModel(modelId, this.provider.type ?? "");
+    if (this.selectedModelIds.has(modelId) && defs.length) {
+      const gearBtn = row.createEl("button", {
+        text: "⚙",
+        cls: "clickable-icon",
+      });
+      gearBtn.addEventListener("click", () => {
         if (this.expandedParams.has(modelId)) {
-          const paramsContainer = itemWrap.createDiv({ cls: "model-params-editor" });
-          this.renderParamsEditor(paramsContainer, modelId);
+          this.expandedParams.delete(modelId);
+        } else {
+          this.expandedParams.add(modelId);
         }
+        this.renderModelRow(itemWrap, modelId);
+      });
+
+      if (this.expandedParams.has(modelId)) {
+        const paramsContainer = itemWrap.createDiv({ cls: "model-params-editor" });
+        this.renderParamsEditor(paramsContainer, modelId);
       }
     }
   }
