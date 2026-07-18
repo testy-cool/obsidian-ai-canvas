@@ -286,6 +286,16 @@ const supportsSearchGrounding = (modelId: string) =>
 const supportsUrlContext = (modelId: string) =>
 	/^(?:models\/)?gemini-(?:2\.5|3)-/.test(modelId);
 
+const enrichHttpError = (error: any, fallback: string): string => {
+	let body = error?.responseBody;
+	try { body = typeof body === "string" ? JSON.parse(body) : body; } catch {}
+	const message = error?.statusCode && body?.error?.message
+		? `HTTP ${error.statusCode}: ${body.error.message}`
+		: error?.message ?? fallback;
+	if (error && message !== error.message) error.message = message;
+	return message;
+};
+
 export interface StreamOptions {
 	max_tokens?: number;
 	model?: string;
@@ -402,6 +412,7 @@ export const streamResponse = async (
 	try {
 		result = await runStream(canUseSearch, canUseUrlContext);
 	} catch (error: any) {
+		enrichHttpError(error, "Unknown stream error");
 		console.error("[AI Canvas] Stream error:", {
 			message: error?.message,
 			cause: error?.cause,
@@ -477,6 +488,7 @@ export const streamResponse = async (
 			});
 		}
 	} catch (streamError: any) {
+		const errorMessage = enrichHttpError(streamError, "Unknown stream error");
 		logDebug("Error during streaming:", {
 			message: streamError?.message,
 			cause: streamError?.cause,
@@ -501,7 +513,7 @@ export const streamResponse = async (
 				inputTokens: 0,
 				outputTokens: 0,
 				totalText: "",
-				error: streamError?.message ?? "Unknown stream error",
+				error: errorMessage,
 			});
 		}
 		throw streamError;
@@ -588,6 +600,7 @@ export const getResponse = async (
 	try {
 		textResult = await runGenerate(canUseSearch, canUseUrlContext);
 	} catch (error: any) {
+		const errorMessage = enrichHttpError(error, "Unknown generate error");
 		logDebug("AI generate error:", {
 			message: error?.message,
 			cause: error?.cause,
@@ -609,7 +622,7 @@ export const getResponse = async (
 					inputTokens: 0,
 					outputTokens: 0,
 					totalText: "",
-					error: error?.message ?? "Unknown generate error",
+					error: errorMessage,
 				});
 			}
 			throw error;
@@ -618,6 +631,7 @@ export const getResponse = async (
 		try {
 			textResult = await runGenerate(false, false);
 		} catch (retryError: any) {
+			const retryErrorMessage = enrichHttpError(retryError, "Unknown generate error");
 			logDebug("AI generate retry error:", {
 				message: retryError?.message,
 				cause: retryError?.cause,
@@ -638,7 +652,7 @@ export const getResponse = async (
 					inputTokens: 0,
 					outputTokens: 0,
 					totalText: "",
-					error: retryError?.message ?? "Unknown generate error",
+					error: retryErrorMessage,
 				});
 			}
 			throw retryError;

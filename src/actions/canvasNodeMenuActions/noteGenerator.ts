@@ -915,6 +915,9 @@ export function noteGenerator(
 				if (error.data?.error?.message) {
 					errorDetail = error.data.error.message;
 				}
+				if (error.statusCode && error.message?.startsWith(`HTTP ${error.statusCode}:`)) {
+					errorDetail = error.message;
+				}
 
 				new Notice(`Error calling the AI: ${errorDetail}`, 10000);
 

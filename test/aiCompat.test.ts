@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LLMProvider } from "../src/settings/AugmentedCanvasSettings";
-import { getResponse } from "../src/utils/ai";
+import { getResponse, streamResponse } from "../src/utils/ai";
 
 const originalFetch = globalThis.fetch;
 
@@ -33,6 +33,22 @@ const installFetchStub = () => {
 		});
 	});
 	return requests;
+};
+
+const installErrorFetchStub = () => {
+	globalThis.fetch = vi.fn(async () =>
+		new Response(
+			JSON.stringify({
+				error: {
+					message: "Provider 'gemini' is not allowed for this virtual key",
+				},
+			}),
+			{
+				status: 403,
+				headers: { "Content-Type": "application/json" },
+			}
+		)
+	);
 };
 
 const makeProvider = (overrides: Partial<LLMProvider> = {}): LLMProvider => ({
@@ -122,5 +138,44 @@ describe("OpenAI-compatible request wiring", () => {
 			"https://azure.example.test/openai/v1/chat/completions"
 		);
 		expect(requests[0].headers.get("api-key")).toBe("azure-test-key");
+	});
+});
+
+describe("provider HTTP errors", () => {
+	it("surfaces the gateway message from non-streaming calls", async () => {
+		installErrorFetchStub();
+		const onComplete = vi.fn();
+		const expected =
+			"HTTP 403: Provider 'gemini' is not allowed for this virtual key";
+
+		await expect(
+			getResponse(
+				makeProvider(),
+				[{ role: "user", content: "hello" }] as any,
+				{ model: "test-model", onComplete }
+			)
+		).rejects.toThrow(expected);
+		expect(onComplete).toHaveBeenCalledWith(
+			expect.objectContaining({ error: expected })
+		);
+	});
+
+	it("surfaces the gateway message from streaming calls", async () => {
+		installErrorFetchStub();
+		const onComplete = vi.fn();
+		const expected =
+			"HTTP 403: Provider 'gemini' is not allowed for this virtual key";
+
+		await expect(
+			streamResponse(
+				makeProvider(),
+				[{ role: "user", content: "hello" }] as any,
+				{ model: "test-model", onComplete },
+				vi.fn()
+			)
+		).rejects.toThrow(expected);
+		expect(onComplete).toHaveBeenCalledWith(
+			expect.objectContaining({ error: expected })
+		);
 	});
 });
