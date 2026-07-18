@@ -19,6 +19,19 @@ async function mcpRequest(method: string, params: any = {}, id: number = 1) {
 	return JSON.parse(text);
 }
 
+const liveMcpAvailable = await (async () => {
+	try {
+		await mcpRequest('initialize', {
+			protocolVersion: '2024-11-05',
+			capabilities: {},
+			clientInfo: { name: 'test-probe', version: '1.0' },
+		}, 0);
+		return true;
+	} catch {
+		return false;
+	}
+})();
+
 // Schema converter (same as mcpClient.ts)
 function convertToGeminiSchema(schema: any): any {
 	if (!schema) return { type: 'OBJECT', properties: {} };
@@ -37,7 +50,7 @@ function convertToGeminiSchema(schema: any): any {
 	return result;
 }
 
-describe('MCP Server Connection', () => {
+describe.skipIf(!liveMcpAvailable)('MCP Server Connection', () => {
 	it('initializes session successfully', async () => {
 		const response = await mcpRequest('initialize', {
 			protocolVersion: '2024-11-05',
@@ -81,7 +94,7 @@ describe('MCP Server Connection', () => {
 	});
 });
 
-describe('MCP Tool Execution', () => {
+describe.skipIf(!liveMcpAvailable)('MCP Tool Execution', () => {
 	let scraperToolName: string;
 
 	beforeAll(async () => {
@@ -169,7 +182,7 @@ describe('Gemini Schema Conversion', () => {
 		expect(output.description).toBe('A URL to scrape');
 	});
 
-	it('handles MCP scraper schema correctly', async () => {
+	it.skipIf(!liveMcpAvailable)('handles MCP scraper schema correctly', async () => {
 		await mcpRequest('initialize', {
 			protocolVersion: '2024-11-05',
 			capabilities: {},
