@@ -26,6 +26,7 @@ import {
 import {
 	AugmentedCanvasSettings,
 	DEFAULT_SETTINGS,
+	migrateAutoPreviewHtmlSettings,
 	SystemPrompt,
 } from "./settings/AugmentedCanvasSettings";
 import SettingsTab from "./settings/SettingsTab";
@@ -147,6 +148,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	
 		// Merge settings with defaults
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
+		const htmlPreviewSettingsMigrated = migrateAutoPreviewHtmlSettings(this.settings);
 
 		const legacyDefaultIds = new Set([
 			"openai",
@@ -267,6 +269,10 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		// Ensure models have new optional fields
 		for (const model of this.settings.models) {
 			if (model.maxRetries === undefined) model.maxRetries = 2;
+		}
+
+		if (htmlPreviewSettingsMigrated) {
+			await this.saveSettings();
 		}
 	}
 

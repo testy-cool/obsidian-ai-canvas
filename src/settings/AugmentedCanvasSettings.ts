@@ -338,12 +338,22 @@ export interface AugmentedCanvasSettings {
 	 * Auto-expand HTML previews when AI generates HTML code blocks
 	 */
 	autoPreviewHtml: boolean;
+	autoPreviewHtmlMigrated?: boolean;
 
 	/**
 	 * Last observed image generation duration in ms, keyed by
 	 * provider/model (and quality tier for Azure).
 	 */
 	lastImageGenDurations?: Record<string, number>;
+}
+
+export function migrateAutoPreviewHtmlSettings(
+	settings: Pick<AugmentedCanvasSettings, "autoPreviewHtml" | "autoPreviewHtmlMigrated">
+): boolean {
+	if (settings.autoPreviewHtmlMigrated !== undefined) return false;
+	if (settings.autoPreviewHtml === false) settings.autoPreviewHtml = true;
+	settings.autoPreviewHtmlMigrated = true;
+	return true;
 }
 
 const DEFAULT_SYSTEM_PROMPT = `
@@ -464,8 +474,7 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	mcpEnabled: true,
 	mcpMaxSteps: 5,
 	mcpRequireApproval: false,
-	autoPreviewHtml: false,
+	autoPreviewHtml: true,
 	lastImageGenDurations: {}
 };
-
 
