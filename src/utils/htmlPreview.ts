@@ -15,11 +15,8 @@ export function extractHtmlCodeBlocks(text: string): HtmlCodeBlock[] {
 	const regex = /```html\s*([\s\S]*?)```/gi;
 	let match;
 
-	console.log("[HTML Preview] Extracting from text:", text?.substring(0, 200));
-
 	while ((match = regex.exec(text)) !== null) {
 		const content = match[1].trim();
-		console.log("[HTML Preview] Found match, content length:", content?.length);
 		if (content) {
 			blocks.push({
 				content,
@@ -29,7 +26,6 @@ export function extractHtmlCodeBlocks(text: string): HtmlCodeBlock[] {
 		}
 	}
 
-	console.log("[HTML Preview] Total blocks found:", blocks.length);
 	return blocks;
 }
 
@@ -78,23 +74,17 @@ export function addHtmlPreviewToNode(
 	htmlBlocks: HtmlCodeBlock[],
 	autoExpand?: boolean
 ): HTMLElement | null {
-	console.log("[HTML Preview] addHtmlPreviewToNode called, blocks:", htmlBlocks.length, "contentEl:", !!node.contentEl);
-
 	if (!htmlBlocks.length || !node.contentEl) {
-		console.log("[HTML Preview] Early return - no blocks or no contentEl");
 		return null;
 	}
 
 	// Remove existing preview if present
 	const existing = node.contentEl.querySelector(".html-preview-container");
 	if (existing) {
-		console.log("[HTML Preview] Removing existing preview");
 		existing.remove();
 	}
 
-	console.log("[HTML Preview] Creating container in contentEl");
 	const container = node.contentEl.createEl("div", { cls: "html-preview-container" });
-	console.log("[HTML Preview] Container created:", !!container);
 
 	htmlBlocks.forEach((block, index) => {
 		const details = container.createEl("details", { cls: "html-preview-details" });
@@ -182,11 +172,14 @@ export function restoreHtmlPreviews(canvas: any, autoExpand: boolean = false): v
 
 	canvas.nodes.forEach((node: CanvasNode) => {
 		const nodeData = node.getData?.();
-		// Only process AI-generated text nodes
-		if (nodeData?.type === "text" && nodeData?.chat_role === "assistant") {
+		const isAiTextNode = nodeData?.type === "text" && (
+			nodeData?.chat_role === "assistant" ||
+			(nodeData?.ai_model && nodeData?.ai_provider)
+		);
+		if (isAiTextNode) {
 			const text = node.text || "";
 			const htmlBlocks = extractHtmlCodeBlocks(text);
-			if (htmlBlocks.length > 0) {
+			if (htmlBlocks.length > 0 && !node.contentEl?.querySelector(".html-preview-container")) {
 				addHtmlPreviewToNode(node, htmlBlocks, autoExpand);
 			}
 		}
@@ -197,28 +190,53 @@ export function restoreHtmlPreviews(canvas: any, autoExpand: boolean = false): v
  * Set up canvas event listeners to restore HTML previews
  */
 export function setupHtmlPreviewPersistence(app: any, getAutoExpand: () => boolean): () => void {
-	const restoreForActiveCanvas = () => {
-		const maybeCanvasView = app.workspace.getActiveViewOfType(
-			app.workspace.activeLeaf?.view?.constructor
-		);
-		const canvas = maybeCanvasView?.["canvas"];
-		if (canvas) {
-			// Use a small delay to ensure DOM is ready
-			setTimeout(() => {
-				restoreHtmlPreviews(canvas, getAutoExpand());
-			}, 150);
+	let restoreTimer: ReturnType<typeof setTimeout> | undefined;
+	let observer: MutationObserver | undefined;
+	let observedRoot: HTMLElement | null = null;
+
+	const getActiveCanvas = () => {
+		const view = app.workspace.activeLeaf?.view;
+		return view?.getViewType?.() === "canvas" ? view.canvas : null;
+	};
+
+	const runRestore = () => {
+		restoreTimer = undefined;
+		const canvas = getActiveCanvas();
+		if (!canvas) return;
+
+		if (canvas.wrapperEl && canvas.wrapperEl !== observedRoot) {
+			observer?.disconnect();
+			observer = new MutationObserver(() => scheduleRestore());
+			observer.observe(canvas.wrapperEl, { childList: true, subtree: true });
+			observedRoot = canvas.wrapperEl;
 		}
+
+		restoreHtmlPreviews(canvas, getAutoExpand());
+	};
+
+	const scheduleRestore = () => {
+		if (restoreTimer) clearTimeout(restoreTimer);
+		restoreTimer = setTimeout(runRestore, 100);
+	};
+
+	const restoreForActiveCanvas = () => {
+		observer?.disconnect();
+		observedRoot = null;
+		scheduleRestore();
 	};
 
 	// Restore previews when switching to canvas view
 	app.workspace.on("active-leaf-change", restoreForActiveCanvas);
 
 	// Restore previews when canvas is loaded
-	app.workspace.on("layout-change", restoreForActiveCanvas);
+	app.workspace.on("layout-change", scheduleRestore);
+	scheduleRestore();
 
 	// Return cleanup function
 	return () => {
+		if (restoreTimer) clearTimeout(restoreTimer);
+		observer?.disconnect();
 		app.workspace.off("active-leaf-change", restoreForActiveCanvas);
-		app.workspace.off("layout-change", restoreForActiveCanvas);
+		app.workspace.off("layout-change", scheduleRestore);
 	};
 }
