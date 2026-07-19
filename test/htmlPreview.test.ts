@@ -173,6 +173,43 @@ describe("extractHtmlCodeBlocks", () => {
 		expect(contentEl.querySelector(".html-preview-container")).toBeNull();
 	});
 
+	it("removes preview UI and restores markdown when the html fence is deleted", () => {
+		installFakeDocument();
+		const { node, contentEl, markdownEl } = createTextNode(
+			"removed-fence",
+			"```html\n<h1>Temporary preview</h1>\n```"
+		);
+
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
+		node.text = "The card is plain markdown now";
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
+
+		expect(contentEl.querySelector(".html-preview-container")).toBeNull();
+		expect(contentEl.querySelector("iframe")).toBeNull();
+		expect(contentEl.className.split(" ")).not.toContain("html-preview-card");
+		expect(markdownEl.className.split(" ")).not.toContain("html-preview-code-hidden");
+		expect(markdownEl.className.split(" ")).not.toContain("html-preview-code-pane");
+	});
+
+	it("reattaches preview UI with the default mode after a fence returns", () => {
+		installFakeDocument();
+		const fencedText = "```html\n<h1>Back again</h1>\n```";
+		const { node, contentEl, markdownEl } = createTextNode("returning-fence", fencedText);
+
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
+		findButton(contentEl, "Show code")?.click();
+		node.text = "No HTML here";
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
+		node.text = fencedText;
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
+
+		expect(contentEl.querySelector(".html-preview-container")).not.toBeNull();
+		expect(contentEl.querySelector("iframe")).not.toBeNull();
+		expect(markdownEl.className.split(" ")).toContain("html-preview-code-hidden");
+		expect(findButton(contentEl, "Render HTML")?.className.split(" "))
+			.toContain("is-active");
+	});
+
 	it("starts fenced cards in Code mode when automatic rendering is disabled", () => {
 		installFakeDocument();
 		const { node, contentEl, markdownEl } = createTextNode(

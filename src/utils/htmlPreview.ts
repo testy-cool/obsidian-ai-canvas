@@ -74,6 +74,16 @@ function setClass(element: HTMLElement, className: string, enabled: boolean): vo
 	else element.removeClass(className);
 }
 
+function removeHtmlPreviewFromNode(node: CanvasNode): void {
+	node.contentEl?.querySelector(".html-preview-card-ui")?.remove();
+	node.contentEl?.removeClass("html-preview-card");
+	node.contentEl?.querySelectorAll<HTMLElement>(".markdown-embed-content").forEach(host => {
+		host.removeClass("html-preview-code-hidden");
+		host.removeClass("html-preview-code-pane");
+	});
+	htmlPreviewModes.delete(node.id);
+}
+
 /**
  * Add HTML preview UI to a canvas node
  */
@@ -218,7 +228,9 @@ export function restoreHtmlPreviews(canvas: any, defaultRender: boolean = false)
 		if (nodeData?.type === "text") {
 			const text = node.text || "";
 			const htmlBlocks = extractHtmlCodeBlocks(text);
-			if (htmlBlocks.length > 0 && !node.contentEl?.querySelector(".html-preview-card-ui")) {
+			if (htmlBlocks.length === 0) {
+				removeHtmlPreviewFromNode(node);
+			} else if (!node.contentEl?.querySelector(".html-preview-card-ui")) {
 				addHtmlPreviewToNode(node, htmlBlocks, defaultRender);
 			}
 		}
