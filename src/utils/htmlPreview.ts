@@ -57,6 +57,18 @@ type HtmlPreviewMode = "render" | "code";
 
 const htmlPreviewModes = new Map<string, HtmlPreviewMode>();
 
+interface HtmlPreviewWindow {
+	setMenuBarVisibility(visible: boolean): void;
+	setTitle(title: string): void;
+	loadURL(url: string): Promise<void>;
+	show(): void;
+	close(): void;
+	isDestroyed(): boolean;
+	on(event: "closed", listener: () => void): void;
+}
+
+const htmlPreviewWindows = new Set<HtmlPreviewWindow>();
+
 function setClass(element: HTMLElement, className: string, enabled: boolean): void {
 	if (enabled) element.addClass(className);
 	else element.removeClass(className);
@@ -136,7 +148,9 @@ export function addHtmlPreviewToNode(
 	openBtn.addEventListener("click", (event) => {
 		event.preventDefault();
 		event.stopPropagation();
-		openHtmlInNewWindow(htmlBlocks[0].content);
+		void openHtmlInNewWindow(htmlBlocks[0].content).catch(error => {
+			console.error("[HTML Preview] Failed to open preview window", error);
+		});
 	});
 
 	const initialMode = htmlPreviewModes.get(node.id) ?? (defaultRender ? "render" : "code");
@@ -148,12 +162,49 @@ export function addHtmlPreviewToNode(
 /**
  * Open HTML content in a new browser window
  */
-function openHtmlInNewWindow(htmlContent: string): void {
-	const newWindow = window.open("", "_blank");
-	if (newWindow) {
-		newWindow.document.write(htmlContent);
-		newWindow.document.close();
+async function openHtmlInNewWindow(htmlContent: string): Promise<void> {
+	const electronRequire = (globalThis as typeof globalThis & {
+		require(moduleName: string): {
+			BrowserWindow: new (options: Record<string, unknown>) => HtmlPreviewWindow;
+		};
+	}).require;
+	const { BrowserWindow } = electronRequire("@electron/remote");
+	const previewWindow = new BrowserWindow({
+		width: 900,
+		height: 700,
+		show: false,
+		title: "HTML Preview",
+		webPreferences: {
+			nodeIntegration: false,
+			contextIsolation: true,
+			sandbox: true,
+		},
+	});
+
+	htmlPreviewWindows.add(previewWindow);
+	previewWindow.on("closed", () => htmlPreviewWindows.delete(previewWindow));
+	previewWindow.setMenuBarVisibility(false);
+
+	try {
+		await previewWindow.loadURL(
+			`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`
+		);
+		if (!previewWindow.isDestroyed()) {
+			previewWindow.setTitle("HTML Preview");
+			previewWindow.show();
+		}
+	} catch (error) {
+		htmlPreviewWindows.delete(previewWindow);
+		if (!previewWindow.isDestroyed()) previewWindow.close();
+		throw error;
 	}
+}
+
+function closeHtmlPreviewWindows(): void {
+	htmlPreviewWindows.forEach(previewWindow => {
+		if (!previewWindow.isDestroyed()) previewWindow.close();
+	});
+	htmlPreviewWindows.clear();
 }
 
 /**
@@ -224,6 +275,7 @@ export function setupHtmlPreviewPersistence(app: any, getDefaultRender: () => bo
 	return () => {
 		if (restoreTimer) clearTimeout(restoreTimer);
 		observer?.disconnect();
+		closeHtmlPreviewWindows();
 		app.workspace.off("active-leaf-change", restoreForActiveCanvas);
 		app.workspace.off("layout-change", scheduleRestore);
 	};

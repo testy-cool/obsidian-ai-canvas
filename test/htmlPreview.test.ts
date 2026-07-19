@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	extractHtmlCodeBlocks,
 	restoreHtmlPreviews,
+	setupHtmlPreviewPersistence,
 } from "../src/utils/htmlPreview";
 
 class FakeElement {
@@ -223,6 +224,54 @@ describe("extractHtmlCodeBlocks", () => {
 		expect(reopened.markdownEl.className.split(" ")).not.toContain("html-preview-code-hidden");
 		expect(findButton(reopened.contentEl, "Show code")?.className.split(" "))
 			.toContain("is-active");
+	});
+
+	it("opens the first fence in an isolated Electron window and closes it on cleanup", async () => {
+		installFakeDocument();
+		const html = "<html>\n<h1>Lala</h1>\n</html>";
+		const loadURL = vi.fn().mockResolvedValue(undefined);
+		const show = vi.fn();
+		const close = vi.fn();
+		const previewWindow = {
+			setMenuBarVisibility: vi.fn(),
+			setTitle: vi.fn(),
+			loadURL,
+			show,
+			close,
+			isDestroyed: vi.fn(() => false),
+			on: vi.fn(),
+		};
+		const BrowserWindow = vi.fn(function () { return previewWindow; });
+		const electronRequire = vi.fn(() => ({ BrowserWindow }));
+		vi.stubGlobal("require", electronRequire);
+		vi.stubGlobal("window", { open: vi.fn(() => null) });
+		const { node, contentEl } = createTextNode(
+			"window-card",
+			`\`\`\`html\n${html}\n\`\`\``
+		);
+
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
+		findButton(contentEl, "Open in new window")?.click();
+
+		await vi.waitFor(() => expect(loadURL).toHaveBeenCalledOnce());
+		expect(electronRequire).toHaveBeenCalledWith("@electron/remote");
+		expect(BrowserWindow).toHaveBeenCalledWith(expect.objectContaining({
+			show: false,
+			webPreferences: {
+				nodeIntegration: false,
+				contextIsolation: true,
+				sandbox: true,
+			},
+		}));
+		const url = loadURL.mock.calls[0][0];
+		expect(url).toMatch(/^data:text\/html;charset=utf-8,/);
+		expect(decodeURIComponent(url.slice(url.indexOf(",") + 1))).toBe(html);
+		expect(show).toHaveBeenCalledOnce();
+
+		const workspace = { activeLeaf: null, on: vi.fn(), off: vi.fn() };
+		const cleanup = setupHtmlPreviewPersistence({ workspace }, () => true);
+		cleanup();
+		expect(close).toHaveBeenCalledOnce();
 	});
 
 	it("renders only the first HTML fence", () => {
