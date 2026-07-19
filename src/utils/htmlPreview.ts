@@ -32,18 +32,12 @@ export function extractHtmlCodeBlocks(text: string): HtmlCodeBlock[] {
 /**
  * Create a sandboxed iframe with HTML content
  */
-export function createHtmlPreviewIframe(
-	htmlContent: string,
-	options?: { width?: number; height?: number }
-): HTMLIFrameElement {
+export function createHtmlPreviewIframe(htmlContent: string): HTMLIFrameElement {
 	const iframe = document.createElement("iframe");
-	const width = options?.width ?? 480;
-	const height = options?.height ?? 360;
 
-	iframe.style.width = `${width}px`;
-	iframe.style.height = `${height}px`;
-	iframe.style.border = "1px solid var(--background-modifier-border)";
-	iframe.style.borderRadius = "var(--radius-s)";
+	iframe.style.width = "100%";
+	iframe.style.height = "100%";
+	iframe.style.border = "0";
 	iframe.style.background = "white";
 
 	// Sandbox attributes for security
@@ -58,13 +52,14 @@ export function createHtmlPreviewIframe(
 	return iframe;
 }
 
-type SizePreset = "S" | "M" | "L";
+type HtmlPreviewMode = "render" | "code";
 
-const SIZE_PRESETS: Record<SizePreset, { width: number; height: number }> = {
-	S: { width: 320, height: 240 },
-	M: { width: 480, height: 360 },
-	L: { width: 640, height: 480 },
-};
+const htmlPreviewModes = new Map<string, HtmlPreviewMode>();
+
+function setClass(element: HTMLElement, className: string, enabled: boolean): void {
+	if (enabled) element.addClass(className);
+	else element.removeClass(className);
+}
 
 /**
  * Add HTML preview UI to a canvas node
@@ -72,16 +67,15 @@ const SIZE_PRESETS: Record<SizePreset, { width: number; height: number }> = {
 export function addHtmlPreviewToNode(
 	node: CanvasNode,
 	htmlBlocks: HtmlCodeBlock[],
-	autoExpand?: boolean
+	defaultRender?: boolean
 ): HTMLElement | null {
 	if (!htmlBlocks.length || !node.contentEl) {
 		return null;
 	}
 
-	// Canvas keeps node content at the card height with overflow hidden. Let the
-	// preview extend below the markdown content without changing saved node size.
-	node.contentEl.addClass("html-preview-host");
-	node.contentEl.parentElement?.addClass("html-preview-node-container");
+	node.contentEl.removeClass("html-preview-host");
+	node.contentEl.parentElement?.removeClass("html-preview-node-container");
+	node.contentEl.addClass("html-preview-card");
 
 	// Remove existing preview if present
 	const existing = node.contentEl.querySelector(".html-preview-container");
@@ -89,71 +83,59 @@ export function addHtmlPreviewToNode(
 		existing.remove();
 	}
 
-	const container = node.contentEl.createEl("div", { cls: "html-preview-container" });
-
-	htmlBlocks.forEach((block, index) => {
-		const details = container.createEl("details", { cls: "html-preview-details" });
-		if (autoExpand) {
-			details.setAttribute("open", "");
-		}
-
-		const summary = details.createEl("summary", { cls: "html-preview-summary" });
-		const label = htmlBlocks.length > 1 ? `Preview HTML (${index + 1})` : "Preview HTML";
-		summary.createEl("span", { text: label });
-
-		const controlsRow = details.createEl("div", { cls: "html-preview-controls" });
-
-		// Size buttons
-		const sizeContainer = controlsRow.createEl("div", { cls: "html-preview-sizes" });
-		let currentSize: SizePreset = "M";
-		let iframe: HTMLIFrameElement | null = null;
-
-		const updateSize = (size: SizePreset) => {
-			currentSize = size;
-			if (iframe) {
-				iframe.style.width = `${SIZE_PRESETS[size].width}px`;
-				iframe.style.height = `${SIZE_PRESETS[size].height}px`;
-			}
-			// Update button states
-			sizeContainer.querySelectorAll("button").forEach((btn) => {
-				btn.removeClass("html-preview-size-active");
-				if (btn.textContent === size) {
-					btn.addClass("html-preview-size-active");
-				}
-			});
-		};
-
-		(["S", "M", "L"] as SizePreset[]).forEach((size) => {
-			const btn = sizeContainer.createEl("button", {
-				text: size,
-				cls: "html-preview-size-btn",
-			});
-			if (size === currentSize) {
-				btn.addClass("html-preview-size-active");
-			}
-			btn.addEventListener("click", (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				updateSize(size);
-			});
-		});
-
-		// Open in new window button
-		const openBtn = controlsRow.createEl("button", {
-			text: "Open in new window",
-			cls: "html-preview-open-btn",
-		});
-		openBtn.addEventListener("click", (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			openHtmlInNewWindow(block.content);
-		});
-
-		// Iframe container
-		const iframeContainer = details.createEl("div", { cls: "html-preview-iframe-container" });
-		iframe = createHtmlPreviewIframe(block.content, SIZE_PRESETS[currentSize]);
-		iframeContainer.appendChild(iframe);
+	const container = node.contentEl.createEl("div", {
+		cls: "html-preview-container html-preview-card-ui",
 	});
+	const controlsRow = container.createEl("div", { cls: "html-preview-controls" });
+	const modeToggle = controlsRow.createEl("div", { cls: "html-preview-mode-toggle" });
+	const renderBtn = modeToggle.createEl("button", {
+		text: "Render",
+		cls: "html-preview-mode-btn",
+	});
+	const codeBtn = modeToggle.createEl("button", {
+		text: "Code",
+		cls: "html-preview-mode-btn",
+	});
+	const openBtn = controlsRow.createEl("button", {
+		text: "New window",
+		cls: "html-preview-open-btn",
+	});
+	const renderSurface = container.createEl("div", { cls: "html-preview-render-surface" });
+	const iframe = createHtmlPreviewIframe(htmlBlocks[0].content);
+	renderSurface.appendChild(iframe);
+
+	const markdownHosts = Array.from(
+		node.contentEl.querySelectorAll<HTMLElement>(".markdown-embed-content")
+	);
+	const applyMode = (mode: HtmlPreviewMode, remember: boolean) => {
+		const isRender = mode === "render";
+		if (remember) htmlPreviewModes.set(node.id, mode);
+		markdownHosts.forEach(host => setClass(host, "html-preview-code-hidden", isRender));
+		setClass(renderSurface, "html-preview-render-hidden", !isRender);
+		setClass(renderBtn, "html-preview-mode-active", isRender);
+		setClass(codeBtn, "html-preview-mode-active", !isRender);
+		renderBtn.setAttribute("aria-pressed", String(isRender));
+		codeBtn.setAttribute("aria-pressed", String(!isRender));
+	};
+
+	const bindMode = (button: HTMLButtonElement, mode: HtmlPreviewMode) => {
+		button.addEventListener("click", (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			applyMode(mode, true);
+		});
+	};
+	bindMode(renderBtn, "render");
+	bindMode(codeBtn, "code");
+
+	openBtn.addEventListener("click", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		openHtmlInNewWindow(htmlBlocks[0].content);
+	});
+
+	const initialMode = htmlPreviewModes.get(node.id) ?? (defaultRender ? "render" : "code");
+	applyMode(initialMode, false);
 
 	return container;
 }
@@ -172,7 +154,7 @@ function openHtmlInNewWindow(htmlContent: string): void {
 /**
  * Restore HTML previews for all nodes in a canvas
  */
-export function restoreHtmlPreviews(canvas: any, autoExpand: boolean = false): void {
+export function restoreHtmlPreviews(canvas: any, defaultRender: boolean = false): void {
 	if (!canvas?.nodes) return;
 
 	canvas.nodes.forEach((node: CanvasNode) => {
@@ -180,8 +162,8 @@ export function restoreHtmlPreviews(canvas: any, autoExpand: boolean = false): v
 		if (nodeData?.type === "text") {
 			const text = node.text || "";
 			const htmlBlocks = extractHtmlCodeBlocks(text);
-			if (htmlBlocks.length > 0 && !node.contentEl?.querySelector(".html-preview-container")) {
-				addHtmlPreviewToNode(node, htmlBlocks, autoExpand);
+			if (htmlBlocks.length > 0 && !node.contentEl?.querySelector(".html-preview-card-ui")) {
+				addHtmlPreviewToNode(node, htmlBlocks, defaultRender);
 			}
 		}
 	});
@@ -190,7 +172,7 @@ export function restoreHtmlPreviews(canvas: any, autoExpand: boolean = false): v
 /**
  * Set up canvas event listeners to restore HTML previews
  */
-export function setupHtmlPreviewPersistence(app: any, getAutoExpand: () => boolean): () => void {
+export function setupHtmlPreviewPersistence(app: any, getDefaultRender: () => boolean): () => void {
 	let restoreTimer: ReturnType<typeof setTimeout> | undefined;
 	let observer: MutationObserver | undefined;
 	let observedRoot: HTMLElement | null = null;
@@ -212,7 +194,7 @@ export function setupHtmlPreviewPersistence(app: any, getAutoExpand: () => boole
 			observedRoot = canvas.wrapperEl;
 		}
 
-		restoreHtmlPreviews(canvas, getAutoExpand());
+		restoreHtmlPreviews(canvas, getDefaultRender());
 	};
 
 	const scheduleRestore = () => {

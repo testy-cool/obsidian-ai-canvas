@@ -598,8 +598,8 @@ export default class SettingsTab extends PluginSettingTab {
         new Setting(containerEl).setHeading().setName("Generation Settings");
 
         new Setting(containerEl)
-            .setName("Auto-expand HTML previews")
-            .setDesc("Automatically expand HTML preview sections when AI generates HTML code blocks.")
+            .setName("Render HTML previews by default")
+            .setDesc("Open fenced HTML cards in Render mode instead of showing their code.")
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.autoPreviewHtml)
                 .onChange(async (value) => {

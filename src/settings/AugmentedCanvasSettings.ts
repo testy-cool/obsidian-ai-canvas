@@ -335,7 +335,7 @@ export interface AugmentedCanvasSettings {
 	mcpRequireApproval: boolean;
 
 	/**
-	 * Auto-expand HTML previews when AI generates HTML code blocks
+	 * Whether fenced HTML cards open in Render mode by default
 	 */
 	autoPreviewHtml: boolean;
 	autoPreviewHtmlMigrated?: boolean;
@@ -477,4 +477,3 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	autoPreviewHtml: true,
 	lastImageGenDurations: {}
 };
-

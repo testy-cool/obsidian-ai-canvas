@@ -5,8 +5,10 @@ import {
 } from "../src/utils/htmlPreview";
 
 class FakeElement {
+	attributes = new Map<string, string>();
 	className = "";
 	children: FakeElement[] = [];
+	eventListeners = new Map<string, Array<(event: { preventDefault(): void; stopPropagation(): void }) => void>>();
 	parentElement: FakeElement | null = null;
 	sandbox = { add: vi.fn() };
 	srcdoc = "";
@@ -28,6 +30,7 @@ class FakeElement {
 		const className = selector.startsWith(".") ? selector.slice(1) : "";
 		for (const child of this.children) {
 			if (className && child.className.split(" ").includes(className)) return child;
+			if (!className && child.tagName === selector) return child;
 			const nested = child.querySelector(selector);
 			if (nested) return nested;
 		}
@@ -35,19 +38,55 @@ class FakeElement {
 	}
 
 	querySelectorAll(selector: string): FakeElement[] {
-		const matches = this.children.filter(child => child.tagName === selector);
+		const matches = this.children.filter(child => selector.startsWith(".")
+			? child.className.split(" ").includes(selector.slice(1))
+			: child.tagName === selector);
 		return matches.concat(this.children.flatMap(child => child.querySelectorAll(selector)));
 	}
 
-	appendChild(child: FakeElement) { this.children.push(child); }
-	setAttribute() {}
-	addEventListener() {}
+	appendChild(child: FakeElement) {
+		child.parentElement = this;
+		this.children.push(child);
+	}
+	setAttribute(name: string, value: string) { this.attributes.set(name, value); }
+	getAttribute(name: string) { return this.attributes.get(name) ?? null; }
+	addEventListener(type: string, listener: (event: { preventDefault(): void; stopPropagation(): void }) => void) {
+		this.eventListeners.set(type, [...(this.eventListeners.get(type) ?? []), listener]);
+	}
+	click() {
+		const event = { preventDefault: vi.fn(), stopPropagation: vi.fn() };
+		this.eventListeners.get("click")?.forEach(listener => listener(event));
+	}
 	addClass(className: string) { this.className += ` ${className}`; }
 	removeClass(className: string) {
 		this.className = this.className.split(" ").filter(value => value !== className).join(" ");
 	}
-	remove() {}
+	remove() {
+		if (this.parentElement) {
+			this.parentElement.children = this.parentElement.children.filter(child => child !== this);
+		}
+	}
 }
+
+const createTextNode = (id: string, text: string) => {
+	const contentEl = new FakeElement();
+	const markdownEl = new FakeElement();
+	markdownEl.addClass("markdown-embed-content");
+	contentEl.appendChild(markdownEl);
+	return {
+		node: {
+			id,
+			text,
+			contentEl,
+			getData: () => ({ type: "text" }),
+		},
+		contentEl,
+		markdownEl,
+	};
+};
+
+const findButton = (root: FakeElement, label: string) =>
+	root.querySelectorAll("button").find(button => button.textContent === label);
 
 const installFakeDocument = () => {
 	vi.stubGlobal("document", {
@@ -97,48 +136,99 @@ describe("extractHtmlCodeBlocks", () => {
 		expect(blocks).toEqual([]);
 	});
 
-	it("attaches a preview to a plain text node with an html fence", () => {
+	it("starts fenced cards in Render mode and hides the markdown host", () => {
 		installFakeDocument();
-		const contentEl = new FakeElement();
-		const node = {
-			text: "```html\n<main>Saved preview</main>\n```",
-			contentEl,
-			getData: () => ({ type: "text" }),
-		};
+		const { node, contentEl, markdownEl } = createTextNode(
+			"render-default",
+			"```html\n<main>Saved preview</main>\n```"
+		);
 
-		restoreHtmlPreviews({ nodes: new Map([["node", node]]) });
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
 
 		expect(contentEl.querySelector(".html-preview-container")).not.toBeNull();
+		expect(contentEl.querySelector("details")).toBeNull();
+		expect(findButton(contentEl, "New window")).toBeDefined();
+		expect(findButton(contentEl, "S")).toBeUndefined();
+		expect(markdownEl.className.split(" ")).toContain("html-preview-code-hidden");
+		expect(findButton(contentEl, "Render")?.className.split(" ")).toContain("html-preview-mode-active");
+		expect(findButton(contentEl, "Code")?.className.split(" ")).not.toContain("html-preview-mode-active");
+		const iframe = contentEl.querySelector("iframe");
+		expect(iframe?.style).toMatchObject({ width: "100%", height: "100%" });
+		expect(iframe?.sandbox.add).toHaveBeenCalledWith("allow-scripts");
+		expect(iframe?.sandbox.add).not.toHaveBeenCalledWith("allow-same-origin");
 	});
 
 	it("leaves a plain text node without an html fence untouched", () => {
 		installFakeDocument();
-		const contentEl = new FakeElement();
-		const node = {
-			text: "A normal text card",
-			contentEl,
-			getData: () => ({ type: "text" }),
-		};
+		const { node, contentEl } = createTextNode("no-fence", "A normal text card");
 
-		restoreHtmlPreviews({ nodes: new Map([["node", node]]) });
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
 
 		expect(contentEl.querySelector(".html-preview-container")).toBeNull();
 	});
 
-	it("marks preview hosts so Canvas clipping cannot hide the iframe", () => {
+	it("starts fenced cards in Code mode when automatic rendering is disabled", () => {
 		installFakeDocument();
-		const nodeContainer = new FakeElement();
-		const contentEl = new FakeElement();
-		contentEl.parentElement = nodeContainer;
-		const node = {
-			text: "```html\n<html><h1>Lala</h1></html>\n```",
-			contentEl,
-			getData: () => ({ type: "text" }),
-		};
+		const { node, contentEl, markdownEl } = createTextNode(
+			"code-default",
+			"```html\n<html><h1>Lala</h1></html>\n```"
+		);
 
-		restoreHtmlPreviews({ nodes: new Map([["node", node]]) }, true);
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, false);
 
-		expect(contentEl.className.split(" ")).toContain("html-preview-host");
-		expect(nodeContainer.className.split(" ")).toContain("html-preview-node-container");
+		expect(markdownEl.className.split(" ")).not.toContain("html-preview-code-hidden");
+		expect(contentEl.querySelector(".html-preview-render-surface")?.className.split(" "))
+			.toContain("html-preview-render-hidden");
+		expect(findButton(contentEl, "Code")?.className.split(" ")).toContain("html-preview-mode-active");
+	});
+
+	it("switches between the rendered iframe and the markdown code", () => {
+		installFakeDocument();
+		const { node, contentEl, markdownEl } = createTextNode(
+			"toggle-card",
+			"```html\n<h1>Toggle</h1>\n```"
+		);
+
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
+		findButton(contentEl, "Code")?.click();
+
+		expect(markdownEl.className.split(" ")).not.toContain("html-preview-code-hidden");
+		expect(contentEl.querySelector(".html-preview-render-surface")?.className.split(" "))
+			.toContain("html-preview-render-hidden");
+		expect(findButton(contentEl, "Code")?.getAttribute("aria-pressed")).toBe("true");
+
+		findButton(contentEl, "Render")?.click();
+
+		expect(markdownEl.className.split(" ")).toContain("html-preview-code-hidden");
+		expect(contentEl.querySelector(".html-preview-render-surface")?.className.split(" "))
+			.not.toContain("html-preview-render-hidden");
+		expect(findButton(contentEl, "Render")?.getAttribute("aria-pressed")).toBe("true");
+	});
+
+	it("remembers a card's selected mode across reattachment for the session", () => {
+		installFakeDocument();
+		const first = createTextNode("session-card", "```html\n<h1>Session</h1>\n```");
+		restoreHtmlPreviews({ nodes: new Map([[first.node.id, first.node]]) }, true);
+		findButton(first.contentEl, "Code")?.click();
+
+		const reopened = createTextNode("session-card", first.node.text);
+		restoreHtmlPreviews({ nodes: new Map([[reopened.node.id, reopened.node]]) }, true);
+
+		expect(reopened.markdownEl.className.split(" ")).not.toContain("html-preview-code-hidden");
+		expect(findButton(reopened.contentEl, "Code")?.className.split(" "))
+			.toContain("html-preview-mode-active");
+	});
+
+	it("renders only the first HTML fence", () => {
+		installFakeDocument();
+		const { node, contentEl } = createTextNode(
+			"multiple-fences",
+			"```html\n<h1>First</h1>\n```\n```html\n<h1>Second</h1>\n```"
+		);
+
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
+
+		expect(contentEl.querySelectorAll("iframe")).toHaveLength(1);
+		expect(contentEl.querySelector("iframe")?.srcdoc).toBe("<h1>First</h1>");
 	});
 });
