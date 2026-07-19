@@ -69,6 +69,10 @@ export function requestUrl(options: any) {
 	return Promise.resolve({ json: {}, text: '' });
 }
 
+export function setIcon(element: { setAttribute(name: string, value: string): void }, icon: string) {
+	element.setAttribute('data-icon', icon);
+}
+
 // Mutable so individual tests can flip isDesktopApp to exercise the mobile/
 // desktop branches of code that gates on it (e.g. codexCli.ts).
 export const Platform = {

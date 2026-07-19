@@ -1,3 +1,4 @@
+import { setIcon } from "obsidian";
 import { CanvasNode } from "../obsidian/canvas-internal";
 
 export interface HtmlCodeBlock {
@@ -86,20 +87,23 @@ export function addHtmlPreviewToNode(
 	const container = node.contentEl.createEl("div", {
 		cls: "html-preview-container html-preview-card-ui",
 	});
-	const controlsRow = container.createEl("div", { cls: "html-preview-controls" });
-	const modeToggle = controlsRow.createEl("div", { cls: "html-preview-mode-toggle" });
+	const toolbar = container.createEl("div", { cls: "html-preview-toolbar" });
+	const modeToggle = toolbar.createEl("div", { cls: "html-preview-mode-toggle" });
 	const renderBtn = modeToggle.createEl("button", {
-		text: "Render",
-		cls: "html-preview-mode-btn",
+		cls: "clickable-icon html-preview-mode-btn",
 	});
+	renderBtn.setAttribute("aria-label", "Render HTML");
+	setIcon(renderBtn, "eye");
 	const codeBtn = modeToggle.createEl("button", {
-		text: "Code",
-		cls: "html-preview-mode-btn",
+		cls: "clickable-icon html-preview-mode-btn",
 	});
-	const openBtn = controlsRow.createEl("button", {
-		text: "New window",
-		cls: "html-preview-open-btn",
+	codeBtn.setAttribute("aria-label", "Show code");
+	setIcon(codeBtn, "code-2");
+	const openBtn = toolbar.createEl("button", {
+		cls: "clickable-icon html-preview-open-btn",
 	});
+	openBtn.setAttribute("aria-label", "Open in new window");
+	setIcon(openBtn, "external-link");
 	const renderSurface = container.createEl("div", { cls: "html-preview-render-surface" });
 	const iframe = createHtmlPreviewIframe(htmlBlocks[0].content);
 	renderSurface.appendChild(iframe);
@@ -107,13 +111,14 @@ export function addHtmlPreviewToNode(
 	const markdownHosts = Array.from(
 		node.contentEl.querySelectorAll<HTMLElement>(".markdown-embed-content")
 	);
+	markdownHosts.forEach(host => host.addClass("html-preview-code-pane"));
 	const applyMode = (mode: HtmlPreviewMode, remember: boolean) => {
 		const isRender = mode === "render";
 		if (remember) htmlPreviewModes.set(node.id, mode);
 		markdownHosts.forEach(host => setClass(host, "html-preview-code-hidden", isRender));
 		setClass(renderSurface, "html-preview-render-hidden", !isRender);
-		setClass(renderBtn, "html-preview-mode-active", isRender);
-		setClass(codeBtn, "html-preview-mode-active", !isRender);
+		setClass(renderBtn, "is-active", isRender);
+		setClass(codeBtn, "is-active", !isRender);
 		renderBtn.setAttribute("aria-pressed", String(isRender));
 		codeBtn.setAttribute("aria-pressed", String(!isRender));
 	};

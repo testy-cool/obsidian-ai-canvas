@@ -86,7 +86,7 @@ const createTextNode = (id: string, text: string) => {
 };
 
 const findButton = (root: FakeElement, label: string) =>
-	root.querySelectorAll("button").find(button => button.textContent === label);
+	root.querySelectorAll("button").find(button => button.getAttribute("aria-label") === label);
 
 const installFakeDocument = () => {
 	vi.stubGlobal("document", {
@@ -146,12 +146,17 @@ describe("extractHtmlCodeBlocks", () => {
 		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
 
 		expect(contentEl.querySelector(".html-preview-container")).not.toBeNull();
+		expect(contentEl.querySelector(".html-preview-toolbar")).not.toBeNull();
 		expect(contentEl.querySelector("details")).toBeNull();
-		expect(findButton(contentEl, "New window")).toBeDefined();
-		expect(findButton(contentEl, "S")).toBeUndefined();
+		expect(findButton(contentEl, "Open in new window")).toBeDefined();
+		expect(findButton(contentEl, "Render HTML")?.getAttribute("data-icon")).toBe("eye");
+		expect(findButton(contentEl, "Show code")?.getAttribute("data-icon")).toBe("code-2");
+		expect(findButton(contentEl, "Open in new window")?.getAttribute("data-icon"))
+			.toBe("external-link");
+		expect(findButton(contentEl, "Render HTML")?.className.split(" ")).toContain("clickable-icon");
 		expect(markdownEl.className.split(" ")).toContain("html-preview-code-hidden");
-		expect(findButton(contentEl, "Render")?.className.split(" ")).toContain("html-preview-mode-active");
-		expect(findButton(contentEl, "Code")?.className.split(" ")).not.toContain("html-preview-mode-active");
+		expect(findButton(contentEl, "Render HTML")?.className.split(" ")).toContain("is-active");
+		expect(findButton(contentEl, "Show code")?.className.split(" ")).not.toContain("is-active");
 		const iframe = contentEl.querySelector("iframe");
 		expect(iframe?.style).toMatchObject({ width: "100%", height: "100%" });
 		expect(iframe?.sandbox.add).toHaveBeenCalledWith("allow-scripts");
@@ -176,10 +181,11 @@ describe("extractHtmlCodeBlocks", () => {
 
 		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, false);
 
+		expect(contentEl.querySelector(".html-preview-toolbar")).not.toBeNull();
 		expect(markdownEl.className.split(" ")).not.toContain("html-preview-code-hidden");
 		expect(contentEl.querySelector(".html-preview-render-surface")?.className.split(" "))
 			.toContain("html-preview-render-hidden");
-		expect(findButton(contentEl, "Code")?.className.split(" ")).toContain("html-preview-mode-active");
+		expect(findButton(contentEl, "Show code")?.className.split(" ")).toContain("is-active");
 	});
 
 	it("switches between the rendered iframe and the markdown code", () => {
@@ -190,33 +196,33 @@ describe("extractHtmlCodeBlocks", () => {
 		);
 
 		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
-		findButton(contentEl, "Code")?.click();
+		findButton(contentEl, "Show code")?.click();
 
 		expect(markdownEl.className.split(" ")).not.toContain("html-preview-code-hidden");
 		expect(contentEl.querySelector(".html-preview-render-surface")?.className.split(" "))
 			.toContain("html-preview-render-hidden");
-		expect(findButton(contentEl, "Code")?.getAttribute("aria-pressed")).toBe("true");
+		expect(findButton(contentEl, "Show code")?.getAttribute("aria-pressed")).toBe("true");
 
-		findButton(contentEl, "Render")?.click();
+		findButton(contentEl, "Render HTML")?.click();
 
 		expect(markdownEl.className.split(" ")).toContain("html-preview-code-hidden");
 		expect(contentEl.querySelector(".html-preview-render-surface")?.className.split(" "))
 			.not.toContain("html-preview-render-hidden");
-		expect(findButton(contentEl, "Render")?.getAttribute("aria-pressed")).toBe("true");
+		expect(findButton(contentEl, "Render HTML")?.getAttribute("aria-pressed")).toBe("true");
 	});
 
 	it("remembers a card's selected mode across reattachment for the session", () => {
 		installFakeDocument();
 		const first = createTextNode("session-card", "```html\n<h1>Session</h1>\n```");
 		restoreHtmlPreviews({ nodes: new Map([[first.node.id, first.node]]) }, true);
-		findButton(first.contentEl, "Code")?.click();
+		findButton(first.contentEl, "Show code")?.click();
 
 		const reopened = createTextNode("session-card", first.node.text);
 		restoreHtmlPreviews({ nodes: new Map([[reopened.node.id, reopened.node]]) }, true);
 
 		expect(reopened.markdownEl.className.split(" ")).not.toContain("html-preview-code-hidden");
-		expect(findButton(reopened.contentEl, "Code")?.className.split(" "))
-			.toContain("html-preview-mode-active");
+		expect(findButton(reopened.contentEl, "Show code")?.className.split(" "))
+			.toContain("is-active");
 	});
 
 	it("renders only the first HTML fence", () => {
