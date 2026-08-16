@@ -18,6 +18,25 @@ export type CanvasView = ItemView & {
 };
 
 /**
+ * Pick a canvas leaf whose view is actually loaded.
+ *
+ * Obsidian defers background tabs: the leaf keeps reporting "canvas" from
+ * getViewType(), so getLeavesOfType("canvas") hands it back, but the
+ * placeholder view has no canvas behind it. Taking the first leaf blindly means
+ * that with two canvas tabs open the menu patch never installs.
+ */
+export const findCanvasMenuHost = (
+	leaves: { view?: unknown }[]
+): CanvasView | null => {
+	for (const leaf of leaves) {
+		const view = leaf?.view as CanvasView | undefined;
+		const menu = (view?.canvas as any)?.menu;
+		if (menu?.selection) return view!;
+	}
+	return null;
+};
+
+/**
  * Minimum width for new notes
  */
 const minWidth = 360;

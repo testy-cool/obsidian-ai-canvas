@@ -581,10 +581,20 @@ var init_utils = __esm({
 });
 
 // src/obsidian/canvas-patches.ts
-var minWidth, pxPerChar, pxPerLine, textPaddingHeight, newNoteMargin, newNoteMarginWithLabel, minHeight, getIncomingEdgeDirection, calcHeight, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT, createNode, addEdge;
+var findCanvasMenuHost, minWidth, pxPerChar, pxPerLine, textPaddingHeight, newNoteMargin, newNoteMarginWithLabel, minHeight, getIncomingEdgeDirection, calcHeight, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT, createNode, addEdge;
 var init_canvas_patches = __esm({
   "src/obsidian/canvas-patches.ts"() {
     init_utils();
+    findCanvasMenuHost = (leaves) => {
+      var _a20;
+      for (const leaf of leaves) {
+        const view = leaf == null ? void 0 : leaf.view;
+        const menu = (_a20 = view == null ? void 0 : view.canvas) == null ? void 0 : _a20.menu;
+        if (menu == null ? void 0 : menu.selection)
+          return view;
+      }
+      return null;
+    };
     minWidth = 360;
     pxPerChar = 5;
     pxPerLine = 28;
@@ -50111,6 +50121,9 @@ var FolderSuggestModal = class extends import_obsidian21.FuzzySuggestModal {
   }
 };
 
+// src/AugmentedCanvasPlugin.ts
+init_canvas_patches();
+
 // src/actions/commands/insertSystemPrompt.ts
 var import_obsidian22 = require("obsidian");
 init_canvas_patches();
@@ -50693,19 +50706,14 @@ var AugmentedCanvasPlugin = class extends import_obsidian26.Plugin {
       return `Generate image (${model.replace(/^models\//i, "")})`;
     };
     const patchMenu = () => {
-      var _a20, _b19;
-      const canvasView = (_a20 = this.app.workspace.getLeavesOfType("canvas").first()) == null ? void 0 : _a20.view;
+      const canvasView = findCanvasMenuHost(this.app.workspace.getLeavesOfType("canvas"));
       if (!canvasView)
         return false;
-      const menu = (_b19 = canvasView == null ? void 0 : canvasView.canvas) == null ? void 0 : _b19.menu;
-      if (!menu)
-        return false;
+      const menu = canvasView.canvas.menu;
       const selection = menu.selection;
-      if (!selection)
-        return false;
       const menuUninstaller = around(menu.constructor.prototype, {
         render: (next) => function(...args) {
-          var _a21, _b20, _c, _d, _e, _f;
+          var _a20, _b19, _c, _d, _e, _f;
           const result = next.call(this, ...args);
           const canvas = getActiveCanvas(app);
           if (canvas) {
@@ -50716,7 +50724,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian26.Plugin {
             }, 50);
           }
           const maybeCanvasView = app.workspace.getActiveViewOfType(import_obsidian26.ItemView);
-          if (!maybeCanvasView || ((_b20 = (_a21 = maybeCanvasView.canvas) == null ? void 0 : _a21.selection) == null ? void 0 : _b20.size) !== 1)
+          if (!maybeCanvasView || ((_b19 = (_a20 = maybeCanvasView.canvas) == null ? void 0 : _a20.selection) == null ? void 0 : _b19.size) !== 1)
             return result;
           this.menuEl.querySelectorAll(".ai-menu-item").forEach((el) => el.remove());
           const selectedNode = Array.from((_c = maybeCanvasView.canvas) == null ? void 0 : _c.selection)[0];
@@ -50735,8 +50743,8 @@ var AugmentedCanvasPlugin = class extends import_obsidian26.Plugin {
             this.menuEl.appendChild(buttonEl_AskQuestion);
             buttonEl_AskQuestion.addEventListener("click", () => {
               let modal = new CustomQuestionModal(app, (question2) => {
-                var _a26;
-                handleCallAI_Question(app, settings2, (_a26 = Array.from(this.canvas.selection)) == null ? void 0 : _a26.first(), question2);
+                var _a21;
+                handleCallAI_Question(app, settings2, (_a21 = Array.from(this.canvas.selection)) == null ? void 0 : _a21.first(), question2);
               });
               modal.open();
             });
@@ -50783,12 +50791,15 @@ var AugmentedCanvasPlugin = class extends import_obsidian26.Plugin {
       return true;
     };
     this.app.workspace.onLayoutReady(() => {
-      if (!patchMenu()) {
-        const evt = this.app.workspace.on("layout-change", () => {
-          patchMenu() && this.app.workspace.offref(evt);
-        });
-        this.registerEvent(evt);
-      }
+      if (patchMenu())
+        return;
+      const retryEvents = ["layout-change", "active-leaf-change"];
+      const refs = retryEvents.map((name20) => this.app.workspace.on(name20, () => {
+        if (!patchMenu())
+          return;
+        refs.forEach((ref) => this.app.workspace.offref(ref));
+      }));
+      refs.forEach((ref) => this.registerEvent(ref));
     });
   }
   async fetchSystemPrompts() {

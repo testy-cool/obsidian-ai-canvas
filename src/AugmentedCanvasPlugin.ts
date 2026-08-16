@@ -41,7 +41,7 @@ import { handleAddRelevantQuestions } from "./actions/commands/relevantQuestions
 import { handleGenerateImage } from "./actions/canvasNodeContextMenuActions/generateImage";
 import { initLogDebug } from "./logDebug";
 import FolderSuggestModal from "./Modals/FolderSuggestModal";
-import { calcHeight, createNode } from "./obsidian/canvas-patches";
+import { calcHeight, createNode, findCanvasMenuHost } from "./obsidian/canvas-patches";
 import { insertSystemPrompt } from "./actions/commands/insertSystemPrompt";
 import { runPromptFolder } from "./actions/commands/runPromptFolder";
 import { InputModal } from "./Modals/InputModal";
@@ -304,18 +304,13 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		};
 
 		const patchMenu = () => {
-			const canvasView = this.app.workspace
-				.getLeavesOfType("canvas")
-				.first()?.view;
+			const canvasView = findCanvasMenuHost(
+				this.app.workspace.getLeavesOfType("canvas")
+			);
 			if (!canvasView) return false;
 
-			// console.log("canvasView", canvasView);
-			// TODO: check if this is working (not working in my vault, but works in the sample vault (no .canvas ...))
-			const menu = (canvasView as CanvasView)?.canvas?.menu;
-			if (!menu) return false;
-
+			const menu = (canvasView as any).canvas.menu;
 			const selection = menu.selection;
-			if (!selection) return false;
 
 			const menuUninstaller = around(menu.constructor.prototype, {
 				render: (next: any) =>
@@ -490,12 +485,19 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		};
 
 		this.app.workspace.onLayoutReady(() => {
-			if (!patchMenu()) {
-				const evt = this.app.workspace.on("layout-change", () => {
-					patchMenu() && this.app.workspace.offref(evt);
-				});
-				this.registerEvent(evt);
-			}
+			if (patchMenu()) return;
+
+			// No canvas is loaded yet. Retry on both events, because a deferred
+			// canvas tab wakes up on activation and does not always announce
+			// itself through layout-change alone.
+			const retryEvents = ["layout-change", "active-leaf-change"] as const;
+			const refs = retryEvents.map(name =>
+				this.app.workspace.on(name as any, () => {
+					if (!patchMenu()) return;
+					refs.forEach(ref => this.app.workspace.offref(ref));
+				})
+			);
+			refs.forEach(ref => this.registerEvent(ref));
 		});
 	}
 
