@@ -1,18 +1,57 @@
-import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent, TextComponent, ToggleComponent, Modal, requestUrl } from "obsidian";
+import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent, TextComponent, ToggleComponent, Modal, requestUrl, setIcon, debounce } from "obsidian";
 import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
 import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
 import { LLMModel, LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
 import { testMCPServer } from "src/utils/mcpClient";
 import { getParamsForModel, detectProviderLabel } from "src/utils/providerParams";
 
+interface SettingsSection {
+    id: string;
+    label: string;
+    icon: string;
+    render: (containerEl: HTMLElement) => void;
+}
+
+/**
+ * Hide everything in a rendered section that does not match the query.
+ * Headings stay put so a surviving section keeps its title. Returns whether
+ * anything survived, so the caller can drop empty sections entirely.
+ */
+const filterSection = (sectionEl: HTMLElement, query: string): boolean => {
+    let matches = 0;
+    for (const child of Array.from(sectionEl.children)) {
+        const el = child as HTMLElement;
+        if (el.classList.contains("setting-item-heading")) continue;
+        const hit = (el.textContent || "").toLowerCase().includes(query);
+        el.style.display = hit ? "" : "none";
+        if (hit) matches++;
+    }
+    return matches > 0;
+};
+
 export default class SettingsTab extends PluginSettingTab {
     plugin: AugmentedCanvasPlugin;
     private modelFilters: Record<string, string> = {};
     private modelEnabledOnly: Record<string, boolean> = {};
+    private activeSectionId = "general";
+    private searchQuery = "";
 
     constructor(app: App, plugin: AugmentedCanvasPlugin) {
         super(app, plugin);
         this.plugin = plugin;
+    }
+
+    private get sections(): SettingsSection[] {
+        return [
+            { id: "general", label: "General", icon: "lucide-sliders-horizontal", render: el => this.renderGeneralSettings(el) },
+            { id: "providers", label: "Providers", icon: "lucide-plug", render: el => this.renderProviders(el) },
+            { id: "mcp", label: "MCP servers", icon: "lucide-server", render: el => this.renderMCPServers(el) },
+            { id: "generation", label: "Generation", icon: "lucide-message-square", render: el => this.renderGenerationSettings(el) },
+            { id: "image", label: "Images", icon: "lucide-image", render: el => this.renderImageSettings(el) },
+            { id: "naming", label: "Naming", icon: "lucide-type", render: el => this.renderNamingSettings(el) },
+            { id: "prompts", label: "Prompts", icon: "lucide-book-open", render: el => this.renderPromptManagement(el) },
+            { id: "observability", label: "Observability", icon: "lucide-activity", render: el => this.renderObservability(el) },
+        ];
     }
 
     display(): void {
@@ -20,14 +59,86 @@ export default class SettingsTab extends PluginSettingTab {
         containerEl.empty();
         containerEl.addClass("augmented-canvas-settings");
 
-        this.renderGeneralSettings(containerEl);
-        this.renderProviders(containerEl);
-        this.renderMCPServers(containerEl);
-        this.renderGenerationSettings(containerEl);
-		this.renderImageSettings(containerEl);
-		this.renderNamingSettings(containerEl);
-        this.renderPromptManagement(containerEl);
-        this.renderObservability(containerEl);
+        const sections = this.sections;
+        if (!sections.some(section => section.id === this.activeSectionId)) {
+            this.activeSectionId = sections[0].id;
+        }
+
+        const header = containerEl.createDiv("ac-settings-header");
+        header.createSpan({ cls: "ac-settings-title", text: "AI Canvas" });
+        header.createSpan({
+            cls: "ac-settings-version",
+            text: `v${this.plugin.manifest.version}`,
+        });
+
+        const search = new TextComponent(header.createDiv("ac-settings-search"));
+        search.setPlaceholder("Search all settings…");
+        search.setValue(this.searchQuery);
+
+        const nav = containerEl.createDiv("ac-settings-nav");
+        const content = containerEl.createDiv("ac-settings-content");
+        const navButtons = new Map<string, HTMLElement>();
+
+        const renderContent = () => {
+            content.empty();
+            const query = this.searchQuery.trim().toLowerCase();
+
+            navButtons.forEach((button, id) =>
+                button.classList.toggle(
+                    "is-active",
+                    !query && id === this.activeSectionId
+                )
+            );
+
+            if (!query) {
+                sections
+                    .find(section => section.id === this.activeSectionId)!
+                    .render(content);
+                return;
+            }
+
+            // Searching cuts across every section, so the nav selection is
+            // irrelevant until the query is cleared.
+            for (const section of sections) {
+                const sectionEl = content.createDiv("ac-settings-section");
+                section.render(sectionEl);
+                if (!filterSection(sectionEl, query)) sectionEl.remove();
+            }
+
+            if (!content.firstChild) {
+                content.createDiv({
+                    cls: "ac-settings-empty",
+                    text: `No settings match “${this.searchQuery.trim()}”.`,
+                });
+            }
+        };
+
+        for (const section of sections) {
+            const button = nav.createEl("button", { cls: "ac-settings-nav-item" });
+            setIcon(button.createSpan("ac-settings-nav-icon"), section.icon);
+            button.createSpan({ cls: "ac-settings-nav-label", text: section.label });
+            button.addEventListener("click", () => {
+                this.activeSectionId = section.id;
+                this.searchQuery = "";
+                search.setValue("");
+                renderContent();
+            });
+            navButtons.set(section.id, button);
+        }
+
+        // A query renders every section, so keep keystrokes from rebuilding the
+        // whole tab eight times over.
+        const onQueryChange = debounce(
+            (value: string) => {
+                this.searchQuery = value;
+                renderContent();
+            },
+            150,
+            true
+        );
+        search.onChange(onQueryChange);
+
+        renderContent();
     }
 
     private renderGeneralSettings(containerEl: HTMLElement) {

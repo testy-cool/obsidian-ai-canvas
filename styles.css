@@ -883,3 +883,92 @@
 	gap: 8px;
 	padding: 6px 0;
 }
+
+/* Settings navigation ---------------------------------------------------- */
+
+.augmented-canvas-settings .ac-settings-header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.augmented-canvas-settings .ac-settings-title {
+	font-size: var(--font-ui-large);
+	font-weight: var(--font-semibold);
+}
+
+.augmented-canvas-settings .ac-settings-version {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	background: var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	padding: 1px 6px;
+}
+
+.augmented-canvas-settings .ac-settings-search {
+	margin-left: auto;
+}
+
+.augmented-canvas-settings .ac-settings-search input {
+	width: 220px;
+}
+
+.augmented-canvas-settings .ac-settings-nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	padding: 12px 0;
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--background-primary);
+}
+
+.augmented-canvas-settings .ac-settings-nav-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 10px;
+	height: auto;
+	box-shadow: none;
+	background: transparent;
+	color: var(--text-muted);
+	border-radius: var(--radius-m);
+	cursor: pointer;
+}
+
+.augmented-canvas-settings .ac-settings-nav-item:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.augmented-canvas-settings .ac-settings-nav-item.is-active {
+	background: var(--background-modifier-active-hover, var(--background-modifier-hover));
+	color: var(--text-accent);
+	font-weight: var(--font-medium);
+}
+
+.augmented-canvas-settings .ac-settings-nav-icon {
+	display: flex;
+	align-items: center;
+}
+
+.augmented-canvas-settings .ac-settings-nav-icon svg {
+	width: var(--icon-s);
+	height: var(--icon-s);
+}
+
+/* The first heading inside a section repeats the nav label, so keep it quiet. */
+.augmented-canvas-settings .ac-settings-content > .setting-item-heading:first-child {
+	border-top: none;
+	padding-top: 0;
+}
+
+.augmented-canvas-settings .ac-settings-empty {
+	padding: 24px 0;
+	color: var(--text-muted);
+	text-align: center;
+}
