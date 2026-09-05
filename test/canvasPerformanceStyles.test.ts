@@ -19,11 +19,14 @@ describe("canvas sizing and motion", () => {
 		expect(sizing).toContain("min-width: 300px !important;");
 		expect(sizing).toContain("min-height: 500px !important;");
 		expect(css).not.toContain('.canvas-node[data-node-type="text"] {');
+		expect(css.match(/@media \(prefers-reduced-motion: no-preference\)/g)).toHaveLength(1);
 		const motion = block(css, "@media (prefers-reduced-motion: no-preference)");
+		expect(block(motion, ".modal-button-container button")).toContain("transition: all 0.2s;");
+		expect(block(motion, ".ai-model-indicator")).toContain("transition: opacity 0.2s ease !important;");
 		expect(block(motion, ".canvas-node.ai-generating")).toContain("transition: width 0.1s ease-out, height 0.1s ease-out !important;");
 		expect(block(motion, ".canvas-node.ai-image-placeholder .canvas-node-content")).toContain("animation: ai-image-pulse 1.4s ease-in-out infinite;");
 		const withoutMotion = css.replace(motion, "");
-		expect(withoutMotion).not.toMatch(/transition:\s*width/);
+		expect(withoutMotion).not.toMatch(/transition:/);
 		expect(withoutMotion).not.toContain("animation: ai-image-pulse");
 		const badge = block(css, ".ai-model-indicator");
 		expect(badge).toContain("display: inline-grid;");

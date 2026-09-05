@@ -322,7 +322,6 @@
 	background: var(--background-primary);
 	color: var(--text-normal);
 	cursor: pointer;
-	transition: all 0.2s;
 }
 
 .modal-button-container button:hover {
@@ -550,7 +549,6 @@
 	border-radius: 4px !important;
 	font-family: var(--font-monospace) !important;
 	z-index: 1 !important;
-	transition: opacity 0.2s ease !important;
 }
 
 .ai-model-indicator > span {
@@ -631,6 +629,14 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
+	.modal-button-container button {
+		transition: all 0.2s;
+	}
+
+	.ai-model-indicator {
+		transition: opacity 0.2s ease !important;
+	}
+
 	.canvas-node.ai-generating {
 		transition: width 0.1s ease-out, height 0.1s ease-out !important;
 	}
