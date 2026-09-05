@@ -26,6 +26,9 @@ describe("canvas sizing and motion", () => {
 		expect(withoutMotion).not.toMatch(/transition:\s*width/);
 		expect(withoutMotion).not.toContain("animation: ai-image-pulse");
 		const badge = block(css, ".ai-model-indicator");
+		expect(badge).toContain("display: inline-grid;");
+		expect(block(css, ".ai-model-indicator > span")).toContain("grid-area: 1 / 1;");
+		expect(block(css, ".ai-model-indicator-loading-size")).toContain("visibility: hidden;");
 		expect(badge).not.toContain("backdrop-filter");
 		expect(badge).toContain("background: var(--background-primary) !important;");
 		expect(badge).toContain("font-size: 12px !important;");

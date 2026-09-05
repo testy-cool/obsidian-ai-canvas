@@ -203,13 +203,32 @@ describe("context picker request paths", () => {
 		await vi.advanceTimersByTimeAsync(200);
 		await pending;
 	});
+	it("reserves the final and loading labels from the first frame", () => {
+		const { prompt } = fixture(false);
+		prompt.setData({ ai_context_count: 3 });
+		addModelIndicator(prompt, "Custom", "test-model", true);
+		const indicator = badge(prompt);
+		const sizing = indicator.querySelector(".ai-model-indicator-size")!;
+		const label = indicator.querySelector(".ai-model-indicator-label")!;
+		expect(sizing.textContent).toBe("3 cards • Custom • test-model");
+		expect(indicator.querySelector(".ai-model-indicator-loading-size")!.textContent).toBe("3 cards • generating");
+		expect(sizing.attributes.get("aria-hidden")).toBe("true");
+		expect(label.textContent).toBe("3 cards • generating");
+		expect(indicator.attributes.get("data-state")).toBe("generating");
+		indicators.setModelIndicatorText(prompt, "Custom", "test-model", false);
+		expect(indicator.querySelector(".ai-model-indicator-size")).toBe(sizing);
+		expect(sizing.textContent).toBe("3 cards • Custom • test-model");
+		expect(label.textContent).toBe(sizing.textContent);
+		expect(indicator.attributes.get("data-state")).toBe("complete");
+	});
+
 	it("reuses the badge element when its text changes", () => {
 		const { prompt } = fixture(false);
 		addModelIndicator(prompt, "Custom", "first", true);
 		const indicator = badge(prompt);
 		addModelIndicator(prompt, "Custom", "second");
 		expect(badge(prompt)).toBe(indicator);
-		expect(indicator.textContent).toBe("Custom • second");
+		expect(indicator.querySelector(".ai-model-indicator-label")!.textContent).toBe("Custom • second");
 	});
 
 	it.each(["isContentMounted", "initialized"])("does not restore badges on nodes with %s=false", (flag) => {
@@ -244,7 +263,7 @@ describe("context picker request paths", () => {
 		]);
 		const response = canvas.nodes.get("response");
 		expect(response.getData().ai_context_count).toBe(3);
-		expect(badge(response).textContent).toBe("3 cards • Custom • test-model");
+		expect(badge(response).querySelector(".ai-model-indicator-label")!.textContent).toBe("3 cards • Custom • test-model");
 	});
 
 	it("the setting opens the picker and only sends the selection after Continue", async () => {
@@ -260,7 +279,7 @@ describe("context picker request paths", () => {
 		expect(PromptContextModal.prototype.open).toHaveBeenCalledOnce();
 		expect(vi.mocked(streamResponse).mock.calls[0][1].map((message: any) => message.content)).toEqual(["SYSTEM", "OLDEST", "CURRENT"]);
 		expect(canvas.nodes.get("response").getData().ai_context_count).toBe(2);
-		expect(badge(canvas.nodes.get("response")).textContent).toBe("2 cards • Custom • test-model");
+		expect(badge(canvas.nodes.get("response")).querySelector(".ai-model-indicator-label")!.textContent).toBe("2 cards • Custom • test-model");
 	});
 
 	it("the setting skips the picker for a single card", async () => {
@@ -269,9 +288,9 @@ describe("context picker request paths", () => {
 		await run(() => noteGenerator(app, settings).generateNote());
 		expect(PromptContextModal.prototype.open).not.toHaveBeenCalled();
 		expect(canvas.nodes.get("response").getData().ai_context_count).toBe(1);
-		expect(badge(canvas.nodes.get("response")).textContent).toBe("1 card • Custom • test-model");
+		expect(badge(canvas.nodes.get("response")).querySelector(".ai-model-indicator-label")!.textContent).toBe("1 card • Custom • test-model");
 		addModelIndicator(canvas.nodes.get("response"), "Custom", "test-model", true);
-		expect(badge(canvas.nodes.get("response")).textContent).toBe("1 card • generating");
+		expect(badge(canvas.nodes.get("response")).querySelector(".ai-model-indicator-label")!.textContent).toBe("1 card • generating");
 	});
 
 	it.each([false, true])("the card context menu always opens the picker (ancestors: %s)", async (ancestors) => {
@@ -330,14 +349,14 @@ describe("context picker request paths", () => {
 		const cleanup = setupCanvasIndicatorPersistence(app);
 		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
 			const response = canvas.nodes.get("response");
-			expect(badge(response).textContent).toBe("3 cards • generating");
+			expect(badge(response).querySelector(".ai-model-indicator-label")!.textContent).toBe("3 cards • generating");
 			callback("ANSWER", null, null, null);
-			expect(badge(response).textContent).toBe("3 cards • generating");
+			expect(badge(response).querySelector(".ai-model-indicator-label")!.textContent).toBe("3 cards • generating");
 			expect(badge(response).style.cssText).toMatch(/font-size: 12px;/);
 			response.contentEl.children = [];
 			events.get("layout-change")!();
 			await vi.advanceTimersByTimeAsync(100);
-			expect(badge(response).textContent).toBe("3 cards • generating");
+			expect(badge(response).querySelector(".ai-model-indicator-label")!.textContent).toBe("3 cards • generating");
 			callback(null, { text: "ANSWER" }, null, null);
 		});
 		await run(() => noteGenerator(app, settings).generateNote());
@@ -348,7 +367,7 @@ describe("context picker request paths", () => {
 		reloaded.setData(savedData);
 		events.get("active-leaf-change")!();
 		await vi.advanceTimersByTimeAsync(100);
-		expect(badge(reloaded).textContent).toBe("3 cards • Custom • test-model");
+		expect(badge(reloaded).querySelector(".ai-model-indicator-label")!.textContent).toBe("3 cards • Custom • test-model");
 		expect(badge(reloaded).style.cssText).toMatch(/font-size: 12px;/);
 		cleanup();
 	});
@@ -358,13 +377,13 @@ describe("context picker request paths", () => {
 		vi.mocked(streamResponse).mockRejectedValue(new Error("Request failed"));
 		await run(() => noteGenerator(app, settings).generateNote());
 		expect(canvas.nodes.get("response").text).toBe("**Error:** Request failed");
-		expect(badge(canvas.nodes.get("response")).textContent).toBe("3 cards • Custom • test-model");
+		expect(badge(canvas.nodes.get("response")).querySelector(".ai-model-indicator-label")!.textContent).toBe("3 cards • Custom • test-model");
 	});
 
 	it("keeps legacy cards without a stored count readable", () => {
 		const { prompt } = fixture();
 		addModelIndicator(prompt, "Custom", "test-model");
-		expect(badge(prompt).textContent).toBe("Custom • test-model");
+		expect(badge(prompt).querySelector(".ai-model-indicator-label")!.textContent).toBe("Custom • test-model");
 	});
 
 	it.each(["styles.css", "main.css", "src/styles/settings.css"])("%s sets the badge override to 12px", (path) => {

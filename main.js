@@ -3815,14 +3815,26 @@ var setModelIndicatorText = (node, provider, model, generating = false) => {
   const contextCount = node.getData().ai_context_count;
   const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} \u2022 ` : "";
   const text2 = `${contextLabel}${generating ? "generating" : `${provider} \u2022 ${model}`}`;
-  if (indicator.textContent !== text2)
-    indicator.textContent = text2;
+  const finalText = `${contextLabel}${provider} \u2022 ${model}`;
+  const sizing = indicator.querySelector(".ai-model-indicator-size");
+  if (sizing.textContent !== finalText)
+    sizing.textContent = finalText;
+  indicator.querySelector(".ai-model-indicator-loading-size").textContent = `${contextLabel}generating`;
+  const label = indicator.querySelector(".ai-model-indicator-label");
+  if (label.textContent !== text2)
+    label.textContent = text2;
+  indicator.setAttribute("data-state", generating ? "generating" : "complete");
 };
 var addModelIndicator = (node, provider, model, generating = false) => {
   var _a20, _b19;
   const indicator = (_b19 = (_a20 = node.contentEl.querySelector(".ai-model-indicator")) != null ? _a20 : modelIndicators.get(node)) != null ? _b19 : node.contentEl.createEl("div", { cls: "ai-model-indicator" });
   modelIndicators.set(node, indicator);
   indicator.className = "ai-model-indicator";
+  if (!indicator.querySelector(".ai-model-indicator-size")) {
+    indicator.createEl("span", { cls: "ai-model-indicator-size" }).setAttribute("aria-hidden", "true");
+    indicator.createEl("span", { cls: "ai-model-indicator-loading-size" }).setAttribute("aria-hidden", "true");
+    indicator.createEl("span", { cls: "ai-model-indicator-label" });
+  }
   setModelIndicatorText(node, provider, model, generating);
   indicator.style.cssText = `
 		position: absolute;

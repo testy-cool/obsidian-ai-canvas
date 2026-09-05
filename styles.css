@@ -519,6 +519,8 @@
 }
 
 .ai-model-indicator {
+	display: inline-grid;
+	white-space: nowrap;
 	position: absolute !important;
 	bottom: 4px !important;
 	right: 8px !important;
@@ -532,6 +534,15 @@
 	font-family: var(--font-monospace) !important;
 	z-index: 1 !important;
 	transition: opacity 0.2s ease !important;
+}
+
+.ai-model-indicator > span {
+	grid-area: 1 / 1;
+}
+
+.ai-model-indicator-size,
+.ai-model-indicator-loading-size {
+	visibility: hidden;
 }
 
 .ai-card-title {
