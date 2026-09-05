@@ -529,7 +529,7 @@ var init_utils = __esm({
       else
         generatingNodes.delete(node);
       const contextCount = node.getData().ai_context_count;
-      const contextLabel = typeof contextCount === "number" ? `${contextCount} cards \u2022 ` : "";
+      const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} \u2022 ` : "";
       const existingIndicator = node.contentEl.querySelector(".ai-model-indicator");
       if (existingIndicator) {
         existingIndicator.remove();

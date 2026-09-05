@@ -292,7 +292,7 @@ export const addModelIndicator = (node: any, provider: string, model: string, ge
 	if (generating) generatingNodes.add(node);
 	else generatingNodes.delete(node);
 	const contextCount = node.getData().ai_context_count;
-	const contextLabel = typeof contextCount === "number" ? `${contextCount} cards • ` : "";
+	const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} • ` : "";
 	// Remove existing indicator if present
 	const existingIndicator = node.contentEl.querySelector(".ai-model-indicator");
 	if (existingIndicator) {

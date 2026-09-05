@@ -178,6 +178,9 @@ describe("context picker request paths", () => {
 		await run(() => noteGenerator(app, settings).generateNote());
 		expect(PromptContextModal.prototype.open).not.toHaveBeenCalled();
 		expect(canvas.nodes.get("response").getData().ai_context_count).toBe(1);
+		expect(badge(canvas.nodes.get("response")).textContent).toBe("1 card • Custom • test-model");
+		addModelIndicator(canvas.nodes.get("response"), "Custom", "test-model", true);
+		expect(badge(canvas.nodes.get("response")).textContent).toBe("1 card • generating");
 	});
 
 	it.each([false, true])("the card context menu always opens the picker (ancestors: %s)", async (ancestors) => {
