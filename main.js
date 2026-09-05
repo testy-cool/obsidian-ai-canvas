@@ -47373,6 +47373,95 @@ function createHtmlPreviewIframe(htmlContent) {
 var htmlPreviewModes = /* @__PURE__ */ new Map();
 var lastScannedText = /* @__PURE__ */ new WeakMap();
 var scannedHtmlBlocks = /* @__PURE__ */ new WeakMap();
+var previewsByNode = /* @__PURE__ */ new WeakMap();
+var previewsByContainer = /* @__PURE__ */ new WeakMap();
+var previewObservers = /* @__PURE__ */ new Map();
+function parkPreview(state) {
+  clearTimeout(state.timer);
+  state.timer = void 0;
+  const iframe = state.surface.querySelector("iframe");
+  if (!iframe)
+    return;
+  const placeholder = state.surface.createEl("div", {
+    cls: "html-preview-parked",
+    text: "Preview parked, scroll to view"
+  });
+  placeholder.style.width = iframe.style.width;
+  placeholder.style.height = iframe.style.height;
+  placeholder.style.fontSize = "12px";
+  placeholder.style.color = "var(--text-muted)";
+  placeholder.style.display = "flex";
+  placeholder.style.alignItems = "center";
+  placeholder.style.justifyContent = "center";
+  iframe.remove();
+}
+function resumePreview(state) {
+  clearTimeout(state.timer);
+  state.timer = void 0;
+  if (state.node.isContentMounted === false || state.node.initialized === false) {
+    parkPreview(state);
+    return;
+  }
+  const placeholder = state.surface.querySelector(".html-preview-parked");
+  if (!placeholder)
+    return;
+  placeholder.remove();
+  state.surface.appendChild(createHtmlPreviewIframe(state.html));
+}
+function untrackPreview(node) {
+  const state = previewsByNode.get(node);
+  if (!state)
+    return;
+  clearTimeout(state.timer);
+  const group = previewObservers.get(state.root);
+  group == null ? void 0 : group.observer.unobserve(state.container);
+  group == null ? void 0 : group.states.delete(state);
+  previewsByNode.delete(node);
+  previewsByContainer.delete(state.container);
+}
+function disconnectPreviewObserver(root) {
+  const group = previewObservers.get(root);
+  if (!group)
+    return;
+  group.observer.disconnect();
+  for (const state of group.states) {
+    parkPreview(state);
+    untrackPreview(state.node);
+  }
+  previewObservers.delete(root);
+}
+function trackPreview(node, container, surface, html) {
+  var _a20;
+  const root = (_a20 = node.canvas) == null ? void 0 : _a20.wrapperEl;
+  if (!root || typeof IntersectionObserver === "undefined")
+    return;
+  let group = previewObservers.get(root);
+  if (!group) {
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const state2 = previewsByContainer.get(entry.target);
+        if (!state2)
+          continue;
+        state2.visible = entry.isIntersecting;
+        if (state2.node.isContentMounted === false || state2.node.initialized === false)
+          parkPreview(state2);
+        else if (state2.visible)
+          resumePreview(state2);
+        else if (state2.timer === void 0)
+          state2.timer = setTimeout(() => parkPreview(state2), 3e3);
+      }
+    }, { root });
+    group = { observer, states: /* @__PURE__ */ new Set() };
+    previewObservers.set(root, group);
+  }
+  const state = { node, container, surface, html, root, visible: true };
+  previewsByNode.set(node, state);
+  previewsByContainer.set(container, state);
+  group.states.add(state);
+  group.observer.observe(container);
+  if (node.isContentMounted === false || node.initialized === false)
+    parkPreview(state);
+}
 var htmlPreviewWindows = /* @__PURE__ */ new Set();
 function setClass(element, className, enabled) {
   if (enabled)
@@ -47382,6 +47471,7 @@ function setClass(element, className, enabled) {
 }
 function removeHtmlPreviewFromNode(node) {
   var _a20, _b19, _c, _d;
+  untrackPreview(node);
   (_b19 = (_a20 = node.contentEl) == null ? void 0 : _a20.querySelector(".html-preview-card-ui")) == null ? void 0 : _b19.remove();
   (_c = node.contentEl) == null ? void 0 : _c.removeClass("html-preview-card");
   (_d = node.contentEl) == null ? void 0 : _d.querySelectorAll(".markdown-embed-content").forEach((host) => {
@@ -47398,6 +47488,7 @@ function addHtmlPreviewToNode(node, htmlBlocks, defaultRender) {
   node.contentEl.removeClass("html-preview-host");
   (_a20 = node.contentEl.parentElement) == null ? void 0 : _a20.removeClass("html-preview-node-container");
   node.contentEl.addClass("html-preview-card");
+  untrackPreview(node);
   const existing = node.contentEl.querySelector(".html-preview-container");
   if (existing) {
     existing.remove();
@@ -47456,6 +47547,7 @@ function addHtmlPreviewToNode(node, htmlBlocks, defaultRender) {
   });
   const initialMode = (_b19 = htmlPreviewModes.get(node.id)) != null ? _b19 : defaultRender ? "render" : "code";
   applyMode(initialMode, false);
+  trackPreview(node, container, renderSurface, htmlBlocks[0].content);
   return container;
 }
 async function openHtmlInNewWindow(htmlContent) {
@@ -47500,8 +47592,14 @@ function restoreHtmlPreviewForNode(node, defaultRender = false) {
   var _a20, _b19, _c;
   if (node.nodeEl)
     canvasNodesByElement.set(node.nodeEl, node);
-  if (node.isContentMounted === false || node.initialized === false)
+  const preview = previewsByNode.get(node);
+  if (node.isContentMounted === false || node.initialized === false) {
+    if (preview)
+      parkPreview(preview);
     return;
+  }
+  if (preview == null ? void 0 : preview.visible)
+    resumePreview(preview);
   const nodeData = (_a20 = node.getData) == null ? void 0 : _a20.call(node);
   if ((nodeData == null ? void 0 : nodeData.type) === "text") {
     const text2 = node.text || "";
@@ -47526,22 +47624,50 @@ function setupHtmlPreviewPersistence(app, getDefaultRender) {
   let restoreTimer;
   let observer;
   let observedRoot = null;
+  const registeredRoots = /* @__PURE__ */ new WeakSet();
   const getActiveCanvas3 = () => {
     var _a20, _b19;
     const view = (_a20 = app.workspace.activeLeaf) == null ? void 0 : _a20.view;
     return ((_b19 = view == null ? void 0 : view.getViewType) == null ? void 0 : _b19.call(view)) === "canvas" ? view.canvas : null;
   };
   const runRestore = () => {
+    var _a20, _b19, _c;
     restoreTimer = void 0;
     const canvas = getActiveCanvas3();
     if (!canvas)
       return;
     if (canvas.wrapperEl && canvas.wrapperEl !== observedRoot) {
+      const root = canvas.wrapperEl;
+      if (!registeredRoots.has(root)) {
+        (_c = (_b19 = (_a20 = app.workspace.activeLeaf) == null ? void 0 : _a20.view) == null ? void 0 : _b19.register) == null ? void 0 : _c.call(_b19, () => {
+          if (observedRoot === root) {
+            clearTimeout(restoreTimer);
+            restoreTimer = void 0;
+            observer == null ? void 0 : observer.disconnect();
+            observedRoot = null;
+          }
+          disconnectPreviewObserver(root);
+        });
+        registeredRoots.add(root);
+      }
       observer == null ? void 0 : observer.disconnect();
       observer = new MutationObserver((records) => {
-        var _a20, _b19, _c, _d;
+        var _a21, _b20, _c2, _d, _e;
         const addedCards = /* @__PURE__ */ new Set();
         for (const record2 of records) {
+          for (const removed of Array.from((_a21 = record2.removedNodes) != null ? _a21 : [])) {
+            if (removed.nodeType !== 1)
+              continue;
+            const element = removed;
+            const containers = Array.from(element.querySelectorAll(".html-preview-container"));
+            if (element.matches(".html-preview-container"))
+              containers.push(element);
+            for (const container of containers) {
+              const state = previewsByContainer.get(container);
+              if (state)
+                parkPreview(state);
+            }
+          }
           for (const added of Array.from(record2.addedNodes)) {
             if (added.nodeType !== 1)
               continue;
@@ -47552,7 +47678,7 @@ function setupHtmlPreviewPersistence(app, getDefaultRender) {
           }
         }
         for (const element of addedCards) {
-          const node = (_d = (_c = canvasNodesByElement.get(element)) != null ? _c : (_b19 = (_a20 = canvas.nodes).get) == null ? void 0 : _b19.call(_a20, element.getAttribute("data-node-id"))) != null ? _d : Array.from(canvas.nodes.values()).find((candidate) => candidate.nodeEl === element);
+          const node = (_e = (_d = canvasNodesByElement.get(element)) != null ? _d : (_c2 = (_b20 = canvas.nodes).get) == null ? void 0 : _c2.call(_b20, element.getAttribute("data-node-id"))) != null ? _e : Array.from(canvas.nodes.values()).find((candidate) => candidate.nodeEl === element);
           if (node)
             restoreHtmlPreviewForNode(node, getDefaultRender());
         }
@@ -47579,6 +47705,8 @@ function setupHtmlPreviewPersistence(app, getDefaultRender) {
     if (restoreTimer)
       clearTimeout(restoreTimer);
     observer == null ? void 0 : observer.disconnect();
+    for (const root of previewObservers.keys())
+      disconnectPreviewObserver(root);
     closeHtmlPreviewWindows();
     app.workspace.off("active-leaf-change", restoreForActiveCanvas);
     app.workspace.off("layout-change", scheduleRestore);

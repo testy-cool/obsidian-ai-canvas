@@ -33,6 +33,100 @@ const htmlPreviewModes = new Map<string, HtmlPreviewMode>();
 const lastScannedText = new WeakMap<CanvasNode, string>();
 const scannedHtmlBlocks = new WeakMap<CanvasNode, HtmlCodeBlock[]>();
 
+interface PreviewState {
+	node: CanvasNode;
+	container: HTMLElement;
+	surface: HTMLElement;
+	html: string;
+	root: HTMLElement;
+	visible: boolean;
+	timer?: ReturnType<typeof setTimeout>;
+}
+
+const previewsByNode = new WeakMap<CanvasNode, PreviewState>();
+const previewsByContainer = new WeakMap<Element, PreviewState>();
+const previewObservers = new Map<HTMLElement, { observer: IntersectionObserver; states: Set<PreviewState> }>();
+
+function parkPreview(state: PreviewState): void {
+	clearTimeout(state.timer);
+	state.timer = undefined;
+	const iframe = state.surface.querySelector("iframe");
+	if (!iframe) return;
+	const placeholder = state.surface.createEl("div", {
+		cls: "html-preview-parked", text: "Preview parked, scroll to view",
+	});
+	// Match the iframe's full-size layout without forcing a geometry read.
+	placeholder.style.width = iframe.style.width;
+	placeholder.style.height = iframe.style.height;
+	placeholder.style.fontSize = "12px";
+	placeholder.style.color = "var(--text-muted)";
+	placeholder.style.display = "flex";
+	placeholder.style.alignItems = "center";
+	placeholder.style.justifyContent = "center";
+	iframe.remove();
+}
+
+function resumePreview(state: PreviewState): void {
+	clearTimeout(state.timer);
+	state.timer = undefined;
+	if (state.node.isContentMounted === false || state.node.initialized === false) {
+		parkPreview(state);
+		return;
+	}
+	const placeholder = state.surface.querySelector(".html-preview-parked");
+	if (!placeholder) return;
+	placeholder.remove();
+	state.surface.appendChild(createHtmlPreviewIframe(state.html));
+}
+
+function untrackPreview(node: CanvasNode): void {
+	const state = previewsByNode.get(node);
+	if (!state) return;
+	clearTimeout(state.timer);
+	const group = previewObservers.get(state.root);
+	group?.observer.unobserve(state.container);
+	group?.states.delete(state);
+	previewsByNode.delete(node);
+	previewsByContainer.delete(state.container);
+}
+
+function disconnectPreviewObserver(root: HTMLElement): void {
+	const group = previewObservers.get(root);
+	if (!group) return;
+	group.observer.disconnect();
+	for (const state of group.states) {
+		parkPreview(state);
+		untrackPreview(state.node);
+	}
+	previewObservers.delete(root);
+}
+
+function trackPreview(node: CanvasNode, container: HTMLElement, surface: HTMLElement, html: string): void {
+	const root = node.canvas?.wrapperEl;
+	if (!root || typeof IntersectionObserver === "undefined") return;
+	let group = previewObservers.get(root);
+	if (!group) {
+		const observer = new IntersectionObserver(entries => {
+			for (const entry of entries) {
+				const state = previewsByContainer.get(entry.target);
+				if (!state) continue;
+				state.visible = entry.isIntersecting;
+				if (state.node.isContentMounted === false || state.node.initialized === false) parkPreview(state);
+				else if (state.visible) resumePreview(state);
+				else if (state.timer === undefined) state.timer = setTimeout(() => parkPreview(state), 3000);
+			}
+		}, { root });
+		group = { observer, states: new Set() };
+		previewObservers.set(root, group);
+	}
+	const state: PreviewState = { node, container, surface, html, root, visible: true };
+	previewsByNode.set(node, state);
+	previewsByContainer.set(container, state);
+	group.states.add(state);
+	group.observer.observe(container);
+	if (node.isContentMounted === false || node.initialized === false) parkPreview(state);
+}
+
 interface HtmlPreviewWindow {
 	setMenuBarVisibility(visible: boolean): void;
 	setTitle(title: string): void;
@@ -51,6 +145,7 @@ function setClass(element: HTMLElement, className: string, enabled: boolean): vo
 }
 
 function removeHtmlPreviewFromNode(node: CanvasNode): void {
+	untrackPreview(node);
 	node.contentEl?.querySelector(".html-preview-card-ui")?.remove();
 	node.contentEl?.removeClass("html-preview-card");
 	node.contentEl?.querySelectorAll<HTMLElement>(".markdown-embed-content").forEach(host => {
@@ -77,6 +172,7 @@ export function addHtmlPreviewToNode(
 	node.contentEl.addClass("html-preview-card");
 
 	// Remove existing preview if present
+	untrackPreview(node);
 	const existing = node.contentEl.querySelector(".html-preview-container");
 	if (existing) {
 		existing.remove();
@@ -141,6 +237,7 @@ export function addHtmlPreviewToNode(
 
 	const initialMode = htmlPreviewModes.get(node.id) ?? (defaultRender ? "render" : "code");
 	applyMode(initialMode, false);
+	trackPreview(node, container, renderSurface, htmlBlocks[0].content);
 
 	return container;
 }
@@ -200,7 +297,12 @@ const canvasNodesByElement = new WeakMap<Element, CanvasNode>();
 
 export function restoreHtmlPreviewForNode(node: CanvasNode, defaultRender = false): void {
 	if (node.nodeEl) canvasNodesByElement.set(node.nodeEl, node);
-	if (node.isContentMounted === false || node.initialized === false) return;
+	const preview = previewsByNode.get(node);
+	if (node.isContentMounted === false || node.initialized === false) {
+		if (preview) parkPreview(preview);
+		return;
+	}
+	if (preview?.visible) resumePreview(preview);
 	const nodeData = node.getData?.();
 	if (nodeData?.type === "text") {
 		const text = node.text || "";
@@ -229,6 +331,7 @@ export function setupHtmlPreviewPersistence(app: any, getDefaultRender: () => bo
 	let restoreTimer: ReturnType<typeof setTimeout> | undefined;
 	let observer: MutationObserver | undefined;
 	let observedRoot: HTMLElement | null = null;
+	const registeredRoots = new WeakSet<HTMLElement>();
 
 	const getActiveCanvas = () => {
 		const view = app.workspace.activeLeaf?.view;
@@ -241,10 +344,33 @@ export function setupHtmlPreviewPersistence(app: any, getDefaultRender: () => bo
 		if (!canvas) return;
 
 		if (canvas.wrapperEl && canvas.wrapperEl !== observedRoot) {
+			const root = canvas.wrapperEl;
+			if (!registeredRoots.has(root)) {
+				app.workspace.activeLeaf?.view?.register?.(() => {
+					if (observedRoot === root) {
+						clearTimeout(restoreTimer);
+						restoreTimer = undefined;
+						observer?.disconnect();
+						observedRoot = null;
+					}
+					disconnectPreviewObserver(root);
+				});
+				registeredRoots.add(root);
+			}
 			observer?.disconnect();
 			observer = new MutationObserver(records => {
 				const addedCards = new Set<Element>();
 				for (const record of records) {
+					for (const removed of Array.from(record.removedNodes ?? [])) {
+						if (removed.nodeType !== 1) continue;
+						const element = removed as Element;
+						const containers = Array.from(element.querySelectorAll(".html-preview-container"));
+						if (element.matches(".html-preview-container")) containers.push(element);
+						for (const container of containers) {
+							const state = previewsByContainer.get(container);
+							if (state) parkPreview(state);
+						}
+					}
 					for (const added of Array.from(record.addedNodes)) {
 						if (added.nodeType !== 1) continue;
 						const element = added as Element;
@@ -290,6 +416,7 @@ export function setupHtmlPreviewPersistence(app: any, getDefaultRender: () => bo
 	return () => {
 		if (restoreTimer) clearTimeout(restoreTimer);
 		observer?.disconnect();
+		for (const root of previewObservers.keys()) disconnectPreviewObserver(root);
 		closeHtmlPreviewWindows();
 		app.workspace.off("active-leaf-change", restoreForActiveCanvas);
 		app.workspace.off("layout-change", scheduleRestore);

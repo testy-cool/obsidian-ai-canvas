@@ -390,3 +390,110 @@ describe("extractHtmlCodeBlocks", () => {
 		expect(contentEl.querySelector("iframe")?.srcdoc).toBe("<h1>First</h1>");
 	});
 });
+
+describe("offscreen HTML preview parking", () => {
+	const setup = async () => {
+		vi.useFakeTimers();
+		installFakeDocument();
+		const observers: any[] = [];
+		vi.stubGlobal("IntersectionObserver", class {
+			observe = vi.fn();
+			unobserve = vi.fn();
+			disconnect = vi.fn();
+			constructor(public callback: IntersectionObserverCallback, public options: IntersectionObserverInit) { observers.push(this); }
+		});
+		let mutate!: MutationCallback;
+		const disconnectMutation = vi.fn();
+		vi.stubGlobal("MutationObserver", class {
+			constructor(callback: MutationCallback) { mutate = callback; }
+			observe() {}
+			disconnect = disconnectMutation;
+		});
+		const card = createTextNode("parking-card", "```html<p>Park me</p>```");
+		const canvas = { wrapperEl: new FakeElement(), nodes: new Map([[card.node.id, card.node]]) };
+		Object.assign(card.node, { canvas, initialized: true, isContentMounted: true });
+		const unload: (() => void)[] = [];
+		const events = new Map<string, () => void>();
+		const view = { canvas, getViewType: () => "canvas", register: (callback: () => void) => unload.push(callback) };
+		const workspace = { activeLeaf: { view }, on: (event: string, callback: () => void) => events.set(event, callback), off: vi.fn() };
+		const cleanup = setupHtmlPreviewPersistence({ workspace }, () => true);
+		await vi.advanceTimersByTimeAsync(100);
+		const container = card.contentEl.querySelector(".html-preview-container")!;
+		const intersect = (isIntersecting: boolean) => observers[0].callback([{ target: container, isIntersecting }], observers[0]);
+		return { ...card, canvas, observers, container, intersect, cleanup, unload, events, disconnectMutation, mutate };
+	};
+
+	it.each(["Render HTML", "Show code"])("parks after 3 seconds and resumes the same srcdoc and %s mode", async (mode) => {
+		const { contentEl, canvas, observers, intersect, cleanup } = await setup();
+		findButton(contentEl, mode)!.click();
+		const iframe = contentEl.querySelector("iframe")!;
+		intersect(false);
+		await vi.advanceTimersByTimeAsync(2999);
+		expect(contentEl.querySelector("iframe")).toBe(iframe);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(contentEl.querySelector("iframe")).toBeNull();
+		const placeholder = contentEl.querySelector(".html-preview-parked")!;
+		expect(placeholder.textContent).toBe("Preview parked, scroll to view");
+		expect(placeholder.style).toMatchObject({ width: "100%", height: "100%", fontSize: "12px", color: "var(--text-muted)" });
+		intersect(true);
+		expect(contentEl.querySelector(".html-preview-parked")).toBeNull();
+		expect(contentEl.querySelector("iframe")).not.toBe(iframe);
+		expect(contentEl.querySelector("iframe")!.srcdoc).toBe(iframe.srcdoc);
+		expect(findButton(contentEl, mode)!.getAttribute("aria-pressed")).toBe("true");
+		expect(contentEl.querySelector(".html-preview-render-surface")!.matches(".html-preview-render-hidden")).toBe(mode === "Show code");
+		expect(observers[0].options.root).toBe(canvas.wrapperEl);
+		const second = createTextNode("second-parking-card", "```html<p>Second</p>```");
+		Object.assign(second.node, { canvas });
+		canvas.nodes.set(second.node.id, second.node);
+		restoreHtmlPreviews(canvas, true);
+		expect(observers).toHaveLength(1);
+		expect(observers[0].observe).toHaveBeenCalledTimes(2);
+		cleanup();
+	});
+
+	it("cancels parking when the card returns before the grace period", async () => {
+		const { contentEl, intersect, cleanup } = await setup();
+		const iframe = contentEl.querySelector("iframe");
+		intersect(false);
+		await vi.advanceTimersByTimeAsync(2000);
+		intersect(true);
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(contentEl.querySelector("iframe")).toBe(iframe);
+		expect(vi.getTimerCount()).toBe(0);
+		cleanup();
+	});
+
+	it("parks an unmounted node immediately and resumes when it is mounted again", async () => {
+		const { node, canvas, contentEl, cleanup } = await setup();
+		Object.assign(node, { isContentMounted: false });
+		restoreHtmlPreviews(canvas, true);
+		expect(contentEl.querySelector("iframe")).toBeNull();
+		Object.assign(node, { isContentMounted: true });
+		restoreHtmlPreviews(canvas, true);
+		expect(contentEl.querySelector("iframe")!.srcdoc).toBe("<p>Park me</p>");
+		cleanup();
+	});
+
+	it("parks removed preview containers without scanning the canvas", async () => {
+		const { node, contentEl, container, mutate, cleanup } = await setup();
+		const read = vi.spyOn(node, "getData");
+		container.remove();
+		mutate([{ addedNodes: [], removedNodes: [container] }] as any, {} as any);
+		expect(container.querySelector("iframe")).toBeNull();
+		expect(container.querySelector(".html-preview-parked")).not.toBeNull();
+		expect(read).not.toHaveBeenCalled();
+		cleanup();
+	});
+
+	it("disconnects observers and clears pending timers when the canvas view unloads", async () => {
+		const { contentEl, observers, intersect, cleanup, unload, events, disconnectMutation } = await setup();
+		intersect(false);
+		events.get("layout-change")!();
+		unload.forEach(callback => callback());
+		expect(observers[0].disconnect).toHaveBeenCalledOnce();
+		expect(disconnectMutation).toHaveBeenCalled();
+		expect(vi.getTimerCount()).toBe(0);
+		expect(contentEl.querySelector("iframe")).toBeNull();
+		cleanup();
+	});
+});
