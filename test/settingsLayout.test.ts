@@ -534,3 +534,32 @@ describe("inline settings validation", () => {
 		expect(css).toContain(".ac-setting-error {\n\tmin-height: 1.5em;");
 	});
 });
+
+
+it.each([
+	{ id: "bifrost", type: "My gateway", baseUrl: "https://example.test/v1" },
+	{ id: "gateway", type: "bifrost", baseUrl: "https://example.test/v1" },
+	{ id: "gateway", type: "My Bifrost", baseUrl: "https://example.test/v1" },
+	{ id: "gateway", type: "My gateway", baseUrl: "https://bifrost.example/v1" },
+])("shows and saves the native toggle for $type at $baseUrl", identity => {
+	const onSave = vi.fn();
+	const modal: any = new UnifiedProviderModal({} as any, onSave, { ...identity, apiKey: "test", enabled: true, geminiNative: true });
+	modal.onOpen();
+	expect(settingNamed(modal.contentEl, "Use Gemini-native API").style.display).toBe("");
+	modal.save();
+	expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ ...identity, geminiNative: true }), []);
+});
+
+it("updates Bifrost detection when the user edits the name or endpoint", async () => {
+	const modal = new UnifiedProviderModal({} as any, vi.fn());
+	modal.onOpen();
+	const root = modal.contentEl as any as Element;
+	const nativeSetting = settingNamed(root, "Use Gemini-native API");
+	const name = settingNamed(root, "Provider name").querySelector("input")!;
+	const url = settingNamed(root, "Base URL").querySelector("input")!;
+	for (const [input, value, visible] of [[name, "Bifrost gateway", true], [name, "Gateway", false], [url, "https://bifrost.example/v1", true], [url, "https://example.test/bifrost", false]] as const) {
+		input.value = value;
+		await input.listeners.get("input")!();
+		expect(nativeSetting.style.display).toBe(visible ? "" : "none");
+	}
+});

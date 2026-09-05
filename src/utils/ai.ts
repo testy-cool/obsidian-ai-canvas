@@ -8,7 +8,7 @@ import { requestUrl } from "obsidian";
 import { getToolSchema, convertToGeminiSchema } from "./mcpClient";
 import { applyOpenAICompatParams } from "./providerParams";
 import { streamCodexResponse } from "./codexCli";
-import { getProviderCapabilities, isGoogleProvider, supportsGoogleTools } from "./providerCapabilities";
+import { getProviderCapabilities, isBifrostProvider, isGoogleProvider, supportsGoogleTools } from "./providerCapabilities";
 
 // Cache for access tokens: serviceAccountEmail -> { token, expiresAt }
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -249,7 +249,7 @@ export const getBifrostGeminiBaseUrl = (baseUrl: string): string =>
 	`${baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/genai/v1beta`;
 
 const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>) => {
-	if (provider.type === "Bifrost" && provider.geminiNative) {
+	if (isBifrostProvider(provider) && provider.geminiNative) {
 		const baseURL = getBifrostGeminiBaseUrl(provider.baseUrl);
 		return createGoogleGenerativeAI({
 			baseURL,

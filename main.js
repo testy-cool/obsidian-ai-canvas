@@ -45871,9 +45871,19 @@ var google2 = {
   search: true,
   urlContext: true
 };
+var isBifrostProvider = (provider) => {
+  var _a20, _b19, _c, _d;
+  if (((_a20 = provider == null ? void 0 : provider.id) == null ? void 0 : _a20.toLowerCase()) === "bifrost" || /bifrost/i.test((_b19 = provider == null ? void 0 : provider.type) != null ? _b19 : "") || /bifrost/i.test((_c = provider == null ? void 0 : provider.name) != null ? _c : ""))
+    return true;
+  try {
+    return /bifrost/i.test(new URL((_d = provider == null ? void 0 : provider.baseUrl) != null ? _d : "").hostname);
+  } catch (e) {
+    return false;
+  }
+};
 var isGoogleProvider = (provider) => {
   var _a20;
-  return (provider == null ? void 0 : provider.geminiNative) === true || ["Gemini", "Google", "Vertex"].includes((_a20 = provider == null ? void 0 : provider.type) != null ? _a20 : "");
+  return isBifrostProvider(provider) && (provider == null ? void 0 : provider.geminiNative) === true || ["Gemini", "Google", "Vertex"].includes((_a20 = provider == null ? void 0 : provider.type) != null ? _a20 : "");
 };
 var supportsGoogleTools = (modelId) => {
   var _a20;
@@ -46054,7 +46064,7 @@ var createVertexProvider = (provider, providerParams) => {
 };
 var getBifrostGeminiBaseUrl = (baseUrl) => `${baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/genai/v1beta`;
 var getLlm = (provider, providerParams) => {
-  if (provider.type === "Bifrost" && provider.geminiNative) {
+  if (isBifrostProvider(provider) && provider.geminiNative) {
     const baseURL = getBifrostGeminiBaseUrl(provider.baseUrl);
     return createGoogleGenerativeAI({
       baseURL,
@@ -49143,10 +49153,10 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
         this.provider.type = val;
         if (val.trim())
           this.setFieldError(this.nameField, "");
-        if (geminiNativeSetting)
-          geminiNativeSetting.settingEl.style.display = val === "Bifrost" ? "" : "none";
         if (!this.editing)
           this.provider.id = val.toLowerCase().replace(/\s+/g, "-");
+        if (geminiNativeSetting)
+          geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
       });
     });
     geminiNativeSetting = new import_obsidian17.Setting(contentEl).setName("Use Gemini-native API").setDesc("Route requests through Bifrost's /genai endpoint so Google search grounding, URL context and YouTube links work. Model ids stay as listed (for example vertex/gemini-3.1-pro-preview).").addToggle((toggle) => {
@@ -49155,7 +49165,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
         this.provider.geminiNative = value;
       });
     });
-    geminiNativeSetting.settingEl.style.display = this.provider.type === "Bifrost" ? "" : "none";
+    geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
     if (!isGeminiType((_a20 = this.provider.type) != null ? _a20 : "") && !isVertexType((_b19 = this.provider.type) != null ? _b19 : "") && !isCodexType((_c = this.provider.type) != null ? _c : "")) {
       const isAzure = this.provider.type === "Azure";
       const baseUrlSetting = new import_obsidian17.Setting(contentEl).setName("Base URL");
@@ -49166,6 +49176,8 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
         this.baseUrlField.error.setAttribute("aria-live", "polite");
         text2.setPlaceholder(isAzure ? "https://<resource>.services.ai.azure.com" : "https://api.example.com/v1").setValue((_a21 = this.provider.baseUrl) != null ? _a21 : "").onChange((val) => {
           this.provider.baseUrl = val;
+          if (geminiNativeSetting)
+            geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
           if (val.trim())
             this.setFieldError(this.baseUrlField, "");
         });
@@ -49437,7 +49449,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
       baseUrl: isGeminiType(p.type) ? GEMINI_BASE_URL : (_c = p.baseUrl) != null ? _c : "",
       apiKey: (_d = p.apiKey) != null ? _d : "",
       enabled: (_e = p.enabled) != null ? _e : true,
-      geminiNative: p.type === "Bifrost" && ((_f = p.geminiNative) != null ? _f : false),
+      geminiNative: isBifrostProvider(p) && ((_f = p.geminiNative) != null ? _f : false),
       capabilityReport: p.capabilityReport,
       projectId: p.projectId,
       location: p.location,

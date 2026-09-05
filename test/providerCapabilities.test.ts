@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getProviderCapabilities, providerCapabilityKeys, type ProviderCapabilityReport } from "../src/utils/providerCapabilities";
+import { getProviderCapabilities, isBifrostProvider, isGoogleProvider, providerCapabilityKeys, type ProviderCapabilityReport } from "../src/utils/providerCapabilities";
 
 describe("provider capabilities", () => {
 	it.each(["Gemini", "Google", "Vertex"])("enables all listed capabilities for %s", (type) => {
@@ -47,5 +47,30 @@ describe("Bifrost Gemini-native capabilities", () => {
 		expect(getProviderCapabilities({ type: "Bifrost", geminiNative })).toEqual({
 			image: true, pdf: true, video: false, youtube: false, search: false, urlContext: false,
 		});
+	});
+});
+
+
+describe("Bifrost identity", () => {
+	it.each([
+		{ id: "bifrost" },
+		{ type: "bifrost" },
+		{ type: "Bifrost gateway" },
+		{ name: "My Bifrost" },
+		{ baseUrl: "https://bifrost.example/v1" },
+	])("recognizes $id $type $name $baseUrl consistently for native capabilities", identity => {
+		expect(isBifrostProvider(identity)).toBe(true);
+		expect(isGoogleProvider({ type: "Custom", ...identity, geminiNative: true })).toBe(true);
+		expect(isGoogleProvider({ type: "Custom", ...identity, geminiNative: false })).toBe(false);
+	});
+
+	it.each([
+		undefined,
+		{ type: "OpenRouter", id: "openrouter", baseUrl: "https://openrouter.ai/api/v1" },
+		{ type: "Custom", baseUrl: "https://example.test/bifrost?host=bifrost" },
+		{ type: "Custom", baseUrl: "invalid URL" },
+	])("does not classify other endpoints as Bifrost: %s", provider => {
+		expect(isBifrostProvider(provider)).toBe(false);
+		expect(isGoogleProvider({ type: "Custom", ...provider, geminiNative: true })).toBe(false);
 	});
 });

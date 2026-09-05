@@ -1,6 +1,7 @@
 import { App, Modal, Setting, Notice, ButtonComponent } from "obsidian";
 import type { LLMProvider, LLMModel } from "../settings/AugmentedCanvasSettings";
 import { GEMINI_BASE_URL } from "../settings/AugmentedCanvasSettings";
+import { isBifrostProvider } from "../utils/providerCapabilities";
 import { fetchProviderModels } from "../utils/modelFetch";
 import { fetchPricingForModels } from "../utils/pricingFetch";
 import { getDefaultProviderParams, getParamsForModel, detectProviderLabel } from "../utils/providerParams";
@@ -123,8 +124,8 @@ export class UnifiedProviderModal extends Modal {
         .onChange((val) => {
           this.provider.type = val;
 					if (val.trim()) this.setFieldError(this.nameField, "");
-					if (geminiNativeSetting) geminiNativeSetting.settingEl.style.display = val === "Bifrost" ? "" : "none";
           if (!this.editing) this.provider.id = val.toLowerCase().replace(/\s+/g, "-");
+					if (geminiNativeSetting) geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
         });
     });
 
@@ -134,7 +135,7 @@ export class UnifiedProviderModal extends Modal {
 			.addToggle(toggle => toggle
 				.setValue(this.provider.geminiNative ?? false)
 				.onChange(value => { this.provider.geminiNative = value; }));
-		geminiNativeSetting.settingEl.style.display = this.provider.type === "Bifrost" ? "" : "none";
+		geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
 
     // --- Base URL (hidden for Gemini/Vertex/Codex) ---
     if (
@@ -163,6 +164,7 @@ export class UnifiedProviderModal extends Modal {
             .setValue(this.provider.baseUrl ?? "")
             .onChange((val) => {
 							this.provider.baseUrl = val;
+							if (geminiNativeSetting) geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
 							if (val.trim()) this.setFieldError(this.baseUrlField, "");
 						});
         });
@@ -495,7 +497,7 @@ export class UnifiedProviderModal extends Modal {
       baseUrl: isGeminiType(p.type!) ? GEMINI_BASE_URL : (p.baseUrl ?? ""),
       apiKey: p.apiKey ?? "",
       enabled: p.enabled ?? true,
-			geminiNative: p.type === "Bifrost" && (p.geminiNative ?? false),
+			geminiNative: isBifrostProvider(p) && (p.geminiNative ?? false),
 			capabilityReport: p.capabilityReport,
       projectId: p.projectId,
       location: p.location,

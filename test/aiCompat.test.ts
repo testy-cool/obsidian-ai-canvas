@@ -299,7 +299,12 @@ describe("Bifrost Gemini-native requests", () => {
 		expect((await requests[0].json()).model).toBe("vertex/gemini-3.1-pro-preview");
 	});
 
-	it.each([false, true])("sends the native URL, auth, Google tools and YouTube URI through the real SDK (streaming: %s)", async (streaming) => {
+	it.each([
+		{ id: "bifrost", type: "Bifrost", baseUrl: "https://example.test/v1" },
+		{ id: "bifrost", type: "Gateway", baseUrl: "https://example.test/v1" },
+		{ id: "gateway", type: "My bifrost", baseUrl: "https://example.test/v1" },
+		{ id: "gateway", type: "Gateway", baseUrl: "https://bifrost.example/v1" },
+	].flatMap(identity => [false, true].map(streaming => ({ ...identity, streaming }))))("sends native requests through the real SDK for $type at $baseUrl (streaming: $streaming)", async ({ streaming, ...identity }) => {
 		const requests: Request[] = [];
 		globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 			requests.push(new Request(input, init));
@@ -311,7 +316,7 @@ describe("Bifrost Gemini-native requests", () => {
 				headers: { "Content-Type": streaming ? "text/event-stream" : "application/json" },
 			});
 		});
-		const provider = makeProvider({ type: "Bifrost", geminiNative: true });
+		const provider = makeProvider({ ...identity, geminiNative: true });
 		const messages: any = [{ role: "user", content: [
 			{ type: "text", text: "Summarize this video" },
 			{ type: "file", data: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", mediaType: "video/mp4" },
@@ -325,7 +330,7 @@ describe("Bifrost Gemini-native requests", () => {
 			expect(await getResponse(provider, messages, options)).toBe("ok");
 		}
 		expect(requests).toHaveLength(1);
-		expect(requests[0].url).toBe(`https://example.test/genai/v1beta/models/vertex/gemini-3.1-pro-preview:${streaming ? "streamGenerateContent?alt=sse" : "generateContent"}`);
+		expect(requests[0].url).toBe(`${getBifrostGeminiBaseUrl(identity.baseUrl)}/models/vertex/gemini-3.1-pro-preview:${streaming ? "streamGenerateContent?alt=sse" : "generateContent"}`);
 		expect(requests[0].headers.get("authorization")).toBe("Bearer test-api-key");
 		expect(requests[0].headers.get("x-goog-api-key")).toBe("test-api-key");
 		const body = await requests[0].json();
