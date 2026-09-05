@@ -339,6 +339,7 @@ export function noteGenerator(
 		} = {}
 	) => {
 		const messages: any[] = [];
+		const notes: string[] = [];
 		let tokenCount = 0;
 
 		const provider = resolveProvider();
@@ -349,6 +350,7 @@ export function noteGenerator(
 		const warnUnsupportedMedia = (media: "video files" | "YouTube links") => {
 			if (warnedMedia.has(media)) return;
 			warnedMedia.add(media);
+			notes.push(`${media === "YouTube links" ? "YouTube link" : "Video file"} not sent to ${provider?.type || "this provider"}`);
 			new Notice(`${provider?.type || "This provider"} cannot take ${media}. Use a Gemini provider for this card.`);
 		};
 		const canCountTokens = isGpt && typeof encodingForModel === "function";
@@ -446,6 +448,7 @@ export function noteGenerator(
 			if (nodeMedia?.kind === "too-large") {
 				const sizeMb = (nodeMedia.size / (1024 * 1024)).toFixed(1);
 				const limitMb = (nodeMedia.limit / (1024 * 1024)).toFixed(1);
+				notes.push(`Skipped ${filePath?.split("/").pop() || nodeMedia.filename || "media"}, ${sizeMb} MB exceeds the ${limitMb} MB limit`);
 				new Notice(
 					`Skipping ${nodeMedia.filename || "media"} (${sizeMb} MB). Limit is ${limitMb} MB.`
 				);
@@ -549,7 +552,7 @@ export function noteGenerator(
 				content: prompt,
 			});
 
-		return { messages, tokenCount };
+		return { messages, tokenCount, notes };
 	};
 
 	const generateNote = async (
@@ -629,7 +632,7 @@ export function noteGenerator(
 			const contextCount = contextEntries.filter(({ node }) => isPromptContextNodeIncluded(node.id, selectedNodeIds)).length;
 
 			const trimmedQuestion = question?.trim();
-			const { messages, tokenCount } = await buildMessages(node, {
+			const { messages, tokenCount, notes } = await buildMessages(node, {
 				prompt: question,
 				selectedNodeIds,
 			});
@@ -676,6 +679,7 @@ export function noteGenerator(
 						ai_model: model.model,
 						ai_provider: provider.type,
 						ai_context_count: contextCount,
+						ai_notes: notes,
 					},
 					question,
 					directionBias
@@ -692,6 +696,7 @@ export function noteGenerator(
 					ai_model: model.model,
 					ai_provider: provider.type,
 					ai_context_count: contextCount,
+					ai_notes: notes,
 				});
 				
 				// Resize existing node to proper initial dimensions

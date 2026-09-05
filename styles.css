@@ -545,6 +545,16 @@
 	visibility: hidden;
 }
 
+.ai-card-notes {
+	grid-area: 2 / 1;
+	contain: inline-size;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	margin-top: 4px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
 .ai-card-title {
 	position: absolute;
 	top: -20px;

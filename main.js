@@ -3835,6 +3835,16 @@ var addModelIndicator = (node, provider, model, generating = false) => {
     indicator.createEl("span", { cls: "ai-model-indicator-loading-size" }).setAttribute("aria-hidden", "true");
     indicator.createEl("span", { cls: "ai-model-indicator-label" });
   }
+  const notes = node.getData().ai_notes;
+  let notesEl = indicator.querySelector(".ai-card-notes");
+  if (Array.isArray(notes) && notes.length) {
+    notesEl != null ? notesEl : notesEl = indicator.createEl("div", { cls: "ai-card-notes" });
+    notesEl.empty();
+    for (const note of notes)
+      notesEl.createEl("div", { text: note });
+  } else {
+    notesEl == null ? void 0 : notesEl.remove();
+  }
   setModelIndicatorText(node, provider, model, generating);
   indicator.style.cssText = `
 		position: absolute;
@@ -48023,6 +48033,7 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
     selectedNodeIds
   } = {}) => {
     const messages = [];
+    const notes = [];
     let tokenCount = 0;
     const provider = resolveProvider();
     const model = resolveModel(provider);
@@ -48033,6 +48044,7 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
       if (warnedMedia.has(media))
         return;
       warnedMedia.add(media);
+      notes.push(`${media === "YouTube links" ? "YouTube link" : "Video file"} not sent to ${(provider == null ? void 0 : provider.type) || "this provider"}`);
       new import_obsidian11.Notice(`${(provider == null ? void 0 : provider.type) || "This provider"} cannot take ${media}. Use a Gemini provider for this card.`);
     };
     const canCountTokens = isGpt && typeof encodingForModel2 === "function";
@@ -48099,6 +48111,7 @@ ${nodeText}`);
       if ((nodeMedia == null ? void 0 : nodeMedia.kind) === "too-large") {
         const sizeMb = (nodeMedia.size / (1024 * 1024)).toFixed(1);
         const limitMb = (nodeMedia.limit / (1024 * 1024)).toFixed(1);
+        notes.push(`Skipped ${(filePath == null ? void 0 : filePath.split("/").pop()) || nodeMedia.filename || "media"}, ${sizeMb} MB exceeds the ${limitMb} MB limit`);
         new import_obsidian11.Notice(`Skipping ${nodeMedia.filename || "media"} (${sizeMb} MB). Limit is ${limitMb} MB.`);
         nodeMedia = null;
       }
@@ -48193,7 +48206,7 @@ ${nodeText}`);
         role: "user",
         content: prompt
       });
-    return { messages, tokenCount };
+    return { messages, tokenCount, notes };
   };
   const generateNote = async (question, selectedNodeIds, chooseContext = false) => {
     var _a20, _b19, _c, _d, _e, _f, _g;
@@ -48250,7 +48263,7 @@ ${nodeText}`);
       }
       const contextCount = contextEntries.filter(({ node: node2 }) => isPromptContextNodeIncluded(node2.id, selectedNodeIds)).length;
       const trimmedQuestion = question == null ? void 0 : question.trim();
-      const { messages, tokenCount } = await buildMessages(node, {
+      const { messages, tokenCount, notes } = await buildMessages(node, {
         prompt: question,
         selectedNodeIds
       });
@@ -48285,7 +48298,8 @@ ${nodeText}`);
           chat_role: "assistant",
           ai_model: model.model,
           ai_provider: provider.type,
-          ai_context_count: contextCount
+          ai_context_count: contextCount,
+          ai_notes: notes
         }, question, directionBias);
       } else {
         created = toNode;
@@ -48296,7 +48310,8 @@ ${nodeText}`);
           ...nodeData,
           ai_model: model.model,
           ai_provider: provider.type,
-          ai_context_count: contextCount
+          ai_context_count: contextCount,
+          ai_notes: notes
         });
         const initialDimensions = calculateNoteDimensions(initialText, 300, 500);
         created.moveAndResize({

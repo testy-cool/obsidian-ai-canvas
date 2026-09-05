@@ -393,6 +393,16 @@
 	visibility: hidden;
 }
 
+.ai-card-notes {
+	grid-area: 2 / 1;
+	contain: inline-size;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	margin-top: 4px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
 /* Show indicator more clearly on hover */
 .canvas-node:hover .ai-model-indicator {
 	opacity: 0.8 !important;

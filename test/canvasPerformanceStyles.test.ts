@@ -57,3 +57,12 @@ it("keeps the feature line at a fixed available width with 12px text", () => {
 	expect(features).toContain("font-size: 12px;");
 	expect(block(css, ".ai-features-indicator > span")).toContain("flex: 1;");
 });
+
+
+it.each(["styles.css", "src/styles/settings.css"])("%s keeps card notes at 12px without affecting badge width", (path) => {
+	const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+	const notes = block(css, ".ai-card-notes");
+	expect(notes).toContain("font-size: 12px;");
+	expect(notes).toContain("grid-area: 2 / 1;");
+	expect(notes).toContain("contain: inline-size;");
+});

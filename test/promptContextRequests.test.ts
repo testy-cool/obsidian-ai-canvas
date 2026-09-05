@@ -58,6 +58,7 @@ class Element {
 	addEventListener(name: string, listener: () => unknown) { this.listeners.set(name, listener); }
 	click() { return this.listeners.get("click")?.(); }
 	setText(text: string) { this.textContent = text; }
+	empty() { this.children = []; this.textContent = ""; }
 	getText() { return this.textContent; }
 	addClass(name: string) { this.className = `${this.className} ${name}`.trim(); }
 	removeClass(...names: string[]) { this.className = this.className.split(" ").filter(value => !names.includes(value)).join(" "); }
@@ -211,6 +212,23 @@ describe("context picker request paths", () => {
 		await vi.advanceTimersByTimeAsync(200);
 		await pending;
 	});
+	it.each([[[]], [["YouTube link not sent to Bifrost", "Skipped diagram.png, 24 MB exceeds the 20 MB limit"]]])("restores card notes with the badge: %j", (notes) => {
+		const { prompt, canvas } = fixture(false);
+		prompt.setData({ ai_provider: "Custom", ai_model: "test", ...(notes.length ? { ai_notes: notes } : {}) });
+		addModelIndicator(prompt, "Custom", "test");
+		const lines = () => prompt.contentEl.querySelector(".ai-card-notes")?.children.map((line: Element) => line.textContent) ?? [];
+		expect(lines()).toEqual(notes);
+		prompt.contentEl.children = [];
+		restoreModelIndicators(canvas);
+		expect(lines()).toEqual(notes);
+		const saved = JSON.parse(JSON.stringify(prompt.getData()));
+		const reloaded = canvas.makeNode("reloaded", "answer");
+		reloaded.setData(saved);
+		restoreModelIndicators(canvas);
+		expect(reloaded.contentEl.querySelector(".ai-card-notes")?.children.map((line: Element) => line.textContent) ?? []).toEqual(notes);
+		if (!notes.length) expect(prompt.contentEl.querySelector(".ai-card-notes")).toBeNull();
+	});
+
 	it("reserves the final and loading labels from the first frame", () => {
 		const { prompt } = fixture(false);
 		prompt.setData({ ai_context_count: 3 });
@@ -502,6 +520,17 @@ describe("provider media input", () => {
 		Array.isArray(message.content) ? message.content : []
 	);
 
+	it("records an oversized attachment on the response card", async () => {
+		const { app, canvas, settings, provider, prompt } = fixture(false);
+		provider.type = "Gemini";
+		attachFile(app, prompt, "mp4", 24 * 1024 * 1024);
+		await run(() => noteGenerator(app, settings).generateNote());
+		const response = canvas.nodes.get("response");
+		expect(response.getData().ai_notes).toEqual(["Skipped attachment.mp4, 24.0 MB exceeds the 20.0 MB limit"]);
+		expect(response.contentEl.querySelector(".ai-card-notes")!.children[0].textContent).toBe(response.getData().ai_notes[0]);
+		expect(app.vault.readBinary).not.toHaveBeenCalled();
+	});
+
 	it("reads and sends an image card through Bifrost", async () => {
 		const { app, settings, provider, prompt } = fixture(false);
 		provider.type = "Bifrost";
@@ -542,10 +571,11 @@ describe("provider media input", () => {
 	});
 
 	it.each([4, 30 * 1024 * 1024])("skips Bifrost video bytes and emits one notice (file size: %s)", async (size) => {
-		const { app, settings, provider, prompt } = fixture(false);
+		const { app, settings, provider, prompt, canvas } = fixture(false);
 		provider.type = "Bifrost";
 		attachFile(app, prompt, "mp4", size);
 		await run(() => noteGenerator(app, settings).generateNote());
+		expect(canvas.nodes.get("response").getData().ai_notes).toEqual(["Video file not sent to Bifrost"]);
 		expect(app.vault.readBinary).not.toHaveBeenCalled();
 		expect(sentParts().filter((part: any) => part.type === "file")).toEqual([]);
 		expect(vi.mocked(obsidian.Notice).mock.calls.filter(([message]) => message.includes("cannot take"))).toEqual([
@@ -559,6 +589,7 @@ describe("provider media input", () => {
 		prompt.setData({ type: "link", url: "https://youtu.be/dQw4w9WgXcQ" });
 		canvas.nodes.get("parent").text = "Also read https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 		await run(() => noteGenerator(app, settings).generateNote());
+		expect(canvas.nodes.get("response").getData().ai_notes).toEqual(["YouTube link not sent to Bifrost"]);
 		expect(sentParts().filter((part: any) => part.type === "file")).toEqual([]);
 		expect(vi.mocked(obsidian.Notice).mock.calls.filter(([message]) => message.includes("cannot take"))).toEqual([
 			["Bifrost cannot take YouTube links. Use a Gemini provider for this card."],

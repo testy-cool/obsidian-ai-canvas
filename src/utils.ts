@@ -318,6 +318,15 @@ export const addModelIndicator = (node: any, provider: string, model: string, ge
 		indicator.createEl("span", { cls: "ai-model-indicator-loading-size" }).setAttribute("aria-hidden", "true");
 		indicator.createEl("span", { cls: "ai-model-indicator-label" });
 	}
+	const notes = node.getData().ai_notes;
+	let notesEl = indicator.querySelector(".ai-card-notes");
+	if (Array.isArray(notes) && notes.length) {
+		notesEl ??= indicator.createEl("div", { cls: "ai-card-notes" });
+		notesEl.empty();
+		for (const note of notes) notesEl.createEl("div", { text: note });
+	} else {
+		notesEl?.remove();
+	}
 	setModelIndicatorText(node, provider, model, generating);
 
 	// Style the indicator to be subtle
