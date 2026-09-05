@@ -172,19 +172,10 @@ export const createNode = (
 		? nodeOptions?.size?.width || Math.max(minWidth, parentNode?.width)
 		: DEFAULT_NODE_WIDTH;
 
-	const height = text
-		? parentNode
-			? nodeOptions?.size?.height ||
-			  Math.max(
-					minHeight,
-					parentNode &&
-						calcHeight({
-							text,
-							// parentHeight: parentNode.height
-						})
-			  )
-			: DEFAULT_NODE_HEIGHT
-		: undefined;
+	// Empty response cards still need a real height before positioning or rendering.
+	const height = nodeOptions.size?.height || (parentNode
+		? Math.max(minHeight, calcHeight({ text: text ?? "" }))
+		: DEFAULT_NODE_HEIGHT);
 
 	// @ts-expect-error
 	let x = canvas.x - width / 2;

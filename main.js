@@ -3978,9 +3978,7 @@ var createNode = (canvas, nodeOptions, parentNode, nodeData, edgeLabel, directio
   }
   const { text: text2 } = nodeOptions;
   const width = parentNode ? ((_a20 = nodeOptions == null ? void 0 : nodeOptions.size) == null ? void 0 : _a20.width) || Math.max(minWidth, parentNode == null ? void 0 : parentNode.width) : DEFAULT_NODE_WIDTH;
-  const height = text2 ? parentNode ? ((_b19 = nodeOptions == null ? void 0 : nodeOptions.size) == null ? void 0 : _b19.height) || Math.max(minHeight, parentNode && calcHeight({
-    text: text2
-  })) : DEFAULT_NODE_HEIGHT : void 0;
+  const height = ((_b19 = nodeOptions.size) == null ? void 0 : _b19.height) || (parentNode ? Math.max(minHeight, calcHeight({ text: text2 != null ? text2 : "" })) : DEFAULT_NODE_HEIGHT);
   let x = canvas.x - width / 2;
   let y = canvas.y - height / 2;
   if (parentNode) {
