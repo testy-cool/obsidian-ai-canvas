@@ -42,7 +42,7 @@ const parseModelIds = (payload: unknown): string[] => {
 
 export const fetchProviderModels = async (
 	provider: LLMProvider,
-	apiKey?: string
+	apiKey: string = provider.apiKey
 ): Promise<string[]> => {
 	const isOllama =
 		provider.type === "Ollama" || provider.id.toLowerCase() === "ollama";

@@ -52094,7 +52094,7 @@ var parseModelIds = (payload) => {
   }).filter((id) => typeof id === "string" && id.trim().length > 0).map((id) => normalizeModelId(id.trim()));
   return Array.from(new Set(ids));
 };
-var fetchProviderModels = async (provider, apiKey) => {
+var fetchProviderModels = async (provider, apiKey = provider.apiKey) => {
   var _a20, _b19, _c, _d, _e;
   const isOllama = provider.type === "Ollama" || provider.id.toLowerCase() === "ollama";
   const isGoogle = provider.type === "Gemini" || provider.type === "Google" || ["gemini", "google"].includes(provider.id.toLowerCase());
