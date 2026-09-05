@@ -28,12 +28,17 @@ export class CustomQuestionModal extends Modal {
 			}
 		});
 
+		contentEl.createEl("div", { cls: "augmented-canvas-modal-hint", text: "Ctrl+Enter to send" });
+		const actions = contentEl.createDiv({ cls: "augmented-canvas-modal-actions" });
+		actions.createEl("button", { text: "Cancel" }).onClickEvent(() => this.close());
+
 		// Create and append a submit button
-		let submitBtn = contentEl.createEl("button", { text: "Ask AI" });
+		let submitBtn = actions.createEl("button", { text: "Ask AI" });
 		submitBtn.onClickEvent(() => {
 			this.onSubmit(textareaEl.value);
 			this.close();
 		});
+		textareaEl.focus();
 	}
 
 	onClose() {

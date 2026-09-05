@@ -101,6 +101,8 @@ export class PromptContextModal extends Modal {
 			this.close();
 			this.onSubmit(new Set(this.selectedNodeIds));
 		});
+		const firstEditable = this.options.find(option => option.id !== currentNodeId);
+		(firstEditable ? toggles.get(firstEditable.id)?.toggleEl : continueButton)?.focus();
 	}
 
 	onClose(): void {

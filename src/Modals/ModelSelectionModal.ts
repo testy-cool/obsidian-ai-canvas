@@ -1,4 +1,4 @@
-import { App, Modal, Setting, Notice } from "obsidian";
+import { App, Modal, Setting, Notice, DropdownComponent } from "obsidian";
 import { AugmentedCanvasSettings, LLMProvider, LLMModel } from "../settings/AugmentedCanvasSettings";
 
 export interface ModelSelection {
@@ -12,6 +12,7 @@ export class ModelSelectionModal extends Modal {
 	private selectedProvider: LLMProvider | null = null;
 	private selectedModel: LLMModel | null = null;
 	private availableModels: LLMModel[] = [];
+	private modelDropdown: DropdownComponent;
 
 	constructor(
 		app: App,
@@ -37,6 +38,7 @@ export class ModelSelectionModal extends Modal {
 		this.createProviderSetting();
 		this.createModelSetting();
 		this.createButtons();
+		contentEl.querySelector<HTMLSelectElement>("select")?.focus();
 	}
 
 	private createProviderSetting() {
@@ -66,32 +68,20 @@ export class ModelSelectionModal extends Modal {
 					this.selectedProvider = this.settings.providers.find(p => p.id === value) || null;
 					this.updateAvailableModels();
 					this.selectedModel = this.availableModels[0] || null;
-					this.refresh();
+					this.updateModelOptions();
 				});
 			});
 	}
 
 	private createModelSetting() {
-		if (this.availableModels.length === 0) {
-			this.contentEl.createEl("p", { 
-				text: "No models available for the selected provider.",
-				cls: "mod-warning"
-			});
-			return;
-		}
 
 		new Setting(this.contentEl)
 			.setName("Model")
 			.setDesc("Select the AI model to use")
 			.addDropdown(dropdown => {
-				this.availableModels.forEach(model => {
-					dropdown.addOption(model.id, model.model);
-				});
-				
-				if (this.selectedModel) {
-					dropdown.setValue(this.selectedModel.id);
-				}
-				
+				this.modelDropdown = dropdown;
+				this.updateModelOptions();
+
 				dropdown.onChange(value => {
 					this.selectedModel = this.availableModels.find(m => m.id === value) || null;
 				});
@@ -135,9 +125,16 @@ export class ModelSelectionModal extends Modal {
 		}
 	}
 
-	private refresh() {
-		this.contentEl.empty();
-		this.onOpen();
+	private updateModelOptions() {
+		const dropdown = this.modelDropdown;
+		dropdown.selectEl.empty();
+		if (this.availableModels.length) {
+			for (const model of this.availableModels) dropdown.addOption(model.id, model.model);
+			dropdown.setValue(this.selectedModel?.id || this.availableModels[0].id);
+		} else {
+			dropdown.addOption("", "No models available for this provider");
+		}
+		dropdown.setDisabled(this.availableModels.length === 0);
 	}
 
 	onClose() {

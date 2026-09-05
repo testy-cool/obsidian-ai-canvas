@@ -47759,7 +47759,7 @@ var PromptContextModal = class extends import_obsidian10.Modal {
     this.selectedNodeIds = new Set(options.map((option) => option.id));
   }
   onOpen() {
-    var _a20;
+    var _a20, _b19, _c;
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("prompt-context-modal");
@@ -47832,6 +47832,8 @@ var PromptContextModal = class extends import_obsidian10.Modal {
       this.close();
       this.onSubmit(new Set(this.selectedNodeIds));
     });
+    const firstEditable = this.options.find((option) => option.id !== currentNodeId);
+    (_c = firstEditable ? (_b19 = toggles.get(firstEditable.id)) == null ? void 0 : _b19.toggleEl : continueButton) == null ? void 0 : _c.focus();
   }
   onClose() {
     this.contentEl.empty();
@@ -48551,6 +48553,7 @@ var ModelSelectionModal = class extends import_obsidian12.Modal {
     this.onSelect = onSelect;
   }
   onOpen() {
+    var _a20;
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h2", { text: "Select AI Model" });
@@ -48560,6 +48563,7 @@ var ModelSelectionModal = class extends import_obsidian12.Modal {
     this.createProviderSetting();
     this.createModelSetting();
     this.createButtons();
+    (_a20 = contentEl.querySelector("select")) == null ? void 0 : _a20.focus();
   }
   createProviderSetting() {
     const enabledProviders = this.settings.providers.filter((p) => p.enabled);
@@ -48581,25 +48585,14 @@ var ModelSelectionModal = class extends import_obsidian12.Modal {
         this.selectedProvider = this.settings.providers.find((p) => p.id === value) || null;
         this.updateAvailableModels();
         this.selectedModel = this.availableModels[0] || null;
-        this.refresh();
+        this.updateModelOptions();
       });
     });
   }
   createModelSetting() {
-    if (this.availableModels.length === 0) {
-      this.contentEl.createEl("p", {
-        text: "No models available for the selected provider.",
-        cls: "mod-warning"
-      });
-      return;
-    }
     new import_obsidian12.Setting(this.contentEl).setName("Model").setDesc("Select the AI model to use").addDropdown((dropdown) => {
-      this.availableModels.forEach((model) => {
-        dropdown.addOption(model.id, model.model);
-      });
-      if (this.selectedModel) {
-        dropdown.setValue(this.selectedModel.id);
-      }
+      this.modelDropdown = dropdown;
+      this.updateModelOptions();
       dropdown.onChange((value) => {
         this.selectedModel = this.availableModels.find((m) => m.id === value) || null;
       });
@@ -48636,9 +48629,18 @@ var ModelSelectionModal = class extends import_obsidian12.Modal {
       this.availableModels = [];
     }
   }
-  refresh() {
-    this.contentEl.empty();
-    this.onOpen();
+  updateModelOptions() {
+    var _a20;
+    const dropdown = this.modelDropdown;
+    dropdown.selectEl.empty();
+    if (this.availableModels.length) {
+      for (const model of this.availableModels)
+        dropdown.addOption(model.id, model.model);
+      dropdown.setValue(((_a20 = this.selectedModel) == null ? void 0 : _a20.id) || this.availableModels[0].id);
+    } else {
+      dropdown.addOption("", "No models available for this provider");
+    }
+    dropdown.setDisabled(this.availableModels.length === 0);
   }
   onClose() {
     const { contentEl } = this;
@@ -48666,11 +48668,15 @@ var CustomQuestionModal = class extends import_obsidian13.Modal {
         this.close();
       }
     });
-    let submitBtn = contentEl.createEl("button", { text: "Ask AI" });
+    contentEl.createEl("div", { cls: "augmented-canvas-modal-hint", text: "Ctrl+Enter to send" });
+    const actions = contentEl.createDiv({ cls: "augmented-canvas-modal-actions" });
+    actions.createEl("button", { text: "Cancel" }).onClickEvent(() => this.close());
+    let submitBtn = actions.createEl("button", { text: "Ask AI" });
     submitBtn.onClickEvent(() => {
       this.onSubmit(textareaEl.value);
       this.close();
     });
+    textareaEl.focus();
   }
   onClose() {
     let { contentEl } = this;
@@ -49099,7 +49105,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
     }
   }
   onOpen() {
-    var _a20, _b19, _c, _d, _e, _f, _g;
+    var _a20, _b19, _c, _d, _e, _f, _g, _h;
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("unified-provider-modal");
@@ -49174,7 +49180,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
         ta.inputEl.rows = 4;
         ta.inputEl.style.width = "100%";
         ta.inputEl.style.fontFamily = "monospace";
-        ta.inputEl.style.fontSize = "11px";
+        ta.inputEl.style.fontSize = "12px";
       });
     }
     if (isCodexType((_g = this.provider.type) != null ? _g : "")) {
@@ -49274,6 +49280,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
       cls: "mod-cta"
     });
     saveBtn.addEventListener("click", () => this.save());
+    (_h = contentEl.querySelector("input")) == null ? void 0 : _h.focus();
   }
   getFilteredModelIds() {
     return this.fetchedModelIds.filter((id) => this.filterText ? id.toLowerCase().includes(this.filterText) : true);
@@ -50547,6 +50554,10 @@ var QuickActionModal = class extends import_obsidian19.SuggestModal {
     });
     this.fuse = fuse;
   }
+  onOpen() {
+    super.onOpen();
+    this.inputEl.focus();
+  }
   getSuggestions(query) {
     if (query === "")
       return this.settings.systemPrompts;
@@ -50771,7 +50782,7 @@ var InputModal = class extends import_obsidian24.Modal {
   onOpen() {
     let { contentEl } = this;
     contentEl.className = "augmented-canvas-modal-container";
-    let inputEl = contentEl.createEl("input");
+    const inputEl = this.inputEl = contentEl.createEl("input");
     inputEl.className = "augmented-canvas-modal-input";
     inputEl.placeholder = this.label;
     inputEl.addEventListener("keydown", (event) => {
@@ -50781,13 +50792,17 @@ var InputModal = class extends import_obsidian24.Modal {
         this.close();
       }
     });
-    let submitBtn = contentEl.createEl("button", {
+    contentEl.createEl("div", { cls: "augmented-canvas-modal-hint", text: "Enter to send" });
+    const actions = contentEl.createDiv({ cls: "augmented-canvas-modal-actions" });
+    actions.createEl("button", { text: "Cancel" }).onClickEvent(() => this.close());
+    let submitBtn = actions.createEl("button", {
       text: this.buttonLabel
     });
     submitBtn.onClickEvent(() => {
       this.onSubmit(inputEl.value);
       this.close();
     });
+    inputEl.focus();
   }
   onClose() {
     const { contentEl } = this;

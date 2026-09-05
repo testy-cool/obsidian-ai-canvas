@@ -21,7 +21,7 @@ export class InputModal extends Modal {
 		let { contentEl } = this;
 		contentEl.className = "augmented-canvas-modal-container";
 
-		let inputEl = contentEl.createEl("input");
+		const inputEl = this.inputEl = contentEl.createEl("input");
 		inputEl.className = "augmented-canvas-modal-input";
 		inputEl.placeholder = this.label;
 
@@ -37,14 +37,19 @@ export class InputModal extends Modal {
 			}
 		});
 
+		contentEl.createEl("div", { cls: "augmented-canvas-modal-hint", text: "Enter to send" });
+		const actions = contentEl.createDiv({ cls: "augmented-canvas-modal-actions" });
+		actions.createEl("button", { text: "Cancel" }).onClickEvent(() => this.close());
+
 		// Create and append a submit button
-		let submitBtn = contentEl.createEl("button", {
+		let submitBtn = actions.createEl("button", {
 			text: this.buttonLabel,
 		});
 		submitBtn.onClickEvent(() => {
 			this.onSubmit(inputEl.value);
 			this.close();
 		});
+		inputEl.focus();
 	}
 
 	onClose() {

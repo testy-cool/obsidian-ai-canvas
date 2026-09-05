@@ -20,6 +20,23 @@
 	padding: 12px;
 }
 
+.augmented-canvas-modal-hint {
+	align-self: flex-start;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.augmented-canvas-modal-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.augmented-canvas-modal-actions button,
+.augmented-canvas-modal-input,
+.augmented-canvas-modal-textarea {
+	font-size: var(--font-ui-small);
+}
+
 .image-generation-prompt-modal {
 	box-sizing: border-box;
 	width: min(680px, calc(100vw - 48px));

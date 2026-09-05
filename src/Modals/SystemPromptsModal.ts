@@ -41,6 +41,11 @@ export default class QuickActionModal extends SuggestModal<SystemPrompt> {
 		this.fuse = fuse;
 	}
 
+	onOpen() {
+		super.onOpen();
+		this.inputEl.focus();
+	}
+
 	/**
 	 * filters the checkbox options; the results are used as suggestions
 	 * @param query the search string

@@ -28,6 +28,7 @@ class Element {
 		},
 	};
 	constructor(public tagName = "div") {}
+	focus = vi.fn();
 	get textContent(): string { return this.text + this.children.map(child => child.textContent).join(""); }
 	createEl(tag: string, options: string | { cls?: string; text?: string } = {}) {
 		const child = new Element(tag);

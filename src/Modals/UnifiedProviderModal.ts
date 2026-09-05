@@ -189,7 +189,7 @@ export class UnifiedProviderModal extends Modal {
           ta.inputEl.rows = 4;
           ta.inputEl.style.width = "100%";
           ta.inputEl.style.fontFamily = "monospace";
-          ta.inputEl.style.fontSize = "11px";
+          ta.inputEl.style.fontSize = "12px";
         });
     }
 
@@ -324,6 +324,7 @@ export class UnifiedProviderModal extends Modal {
       cls: "mod-cta",
     });
     saveBtn.addEventListener("click", () => this.save());
+		contentEl.querySelector<HTMLInputElement>("input")?.focus();
   }
 
   private getFilteredModelIds(): string[] {
