@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as htmlCodeBlocks from "../src/utils/htmlCodeBlocks";
 import {
 	extractHtmlCodeBlocks,
 	restoreHtmlPreviews,
@@ -97,9 +98,34 @@ const installFakeDocument = () => {
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
 });
 
 describe("extractHtmlCodeBlocks", () => {
+	it.each(["isContentMounted", "initialized"])("leaves nodes with %s=false untouched", (flag) => {
+		const { node, contentEl } = createTextNode(`unmounted-${flag}`, "```html<p>Skip</p>```");
+		Object.assign(node, { [flag]: false });
+		const read = vi.spyOn(node, "getData");
+		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);
+		expect(read).not.toHaveBeenCalled();
+		expect(contentEl.children).toHaveLength(1);
+	});
+
+	it("scans unchanged text once and restores missing UI from the cached blocks", () => {
+		installFakeDocument();
+		const extract = vi.spyOn(htmlCodeBlocks, "extractHtmlCodeBlocks");
+		const { node, contentEl } = createTextNode("cached", "```html<p>Cached</p>```");
+		const canvas = { nodes: new Map([[node.id, node]]) };
+		restoreHtmlPreviews(canvas, true);
+		restoreHtmlPreviews(canvas, true);
+		contentEl.querySelector(".html-preview-container")!.remove();
+		restoreHtmlPreviews(canvas, true);
+		expect(extract).toHaveBeenCalledOnce();
+		expect(contentEl.querySelector("iframe")?.srcdoc).toBe("<p>Cached</p>");
+		node.text = "Changed";
+		restoreHtmlPreviews(canvas, true);
+		expect(extract).toHaveBeenCalledTimes(2);
+	});
 	it("extracts a lowercase html fence with a newline", () => {
 		const blocks = extractHtmlCodeBlocks("Before\n```html\n<h1>Hello</h1>\n```\nAfter");
 

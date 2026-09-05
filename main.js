@@ -525,20 +525,16 @@ var init_utils = __esm({
     };
     generatingNodes = /* @__PURE__ */ new WeakSet();
     addModelIndicator = (node, provider, model, generating = false) => {
+      var _a20;
       if (generating)
         generatingNodes.add(node);
       else
         generatingNodes.delete(node);
       const contextCount = node.getData().ai_context_count;
       const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} \u2022 ` : "";
-      const existingIndicator = node.contentEl.querySelector(".ai-model-indicator");
-      if (existingIndicator) {
-        existingIndicator.remove();
-      }
-      const indicator = node.contentEl.createEl("div", {
-        cls: "ai-model-indicator",
-        text: `${contextLabel}${generating ? "generating" : `${provider} \u2022 ${model}`}`
-      });
+      const indicator = (_a20 = node.contentEl.querySelector(".ai-model-indicator")) != null ? _a20 : node.contentEl.createEl("div", { cls: "ai-model-indicator" });
+      indicator.className = "ai-model-indicator";
+      indicator.textContent = `${contextLabel}${generating ? "generating" : `${provider} \u2022 ${model}`}`;
       indicator.style.cssText = `
 		position: absolute;
 		bottom: 4px;
@@ -559,7 +555,7 @@ var init_utils = __esm({
       if (!canvas || !canvas.nodes)
         return;
       canvas.nodes.forEach((node) => {
-        if (!(node == null ? void 0 : node.contentEl))
+        if (!(node == null ? void 0 : node.contentEl) || node.isContentMounted === false || node.initialized === false)
           return;
         const nodeData = node.getData();
         if (nodeData.ai_model && nodeData.ai_provider) {
@@ -47411,6 +47407,8 @@ var addGenerateGroupNameButton = (app, settings2, menuEl) => {
 
 // src/utils/htmlPreview.ts
 var import_obsidian9 = require("obsidian");
+
+// src/utils/htmlCodeBlocks.ts
 function extractHtmlCodeBlocks(text2) {
   const blocks = [];
   const regex = /```html\s*([\s\S]*?)```/gi;
@@ -47427,6 +47425,8 @@ function extractHtmlCodeBlocks(text2) {
   }
   return blocks;
 }
+
+// src/utils/htmlPreview.ts
 function createHtmlPreviewIframe(htmlContent) {
   const iframe = document.createElement("iframe");
   iframe.style.width = "100%";
@@ -47438,6 +47438,8 @@ function createHtmlPreviewIframe(htmlContent) {
   return iframe;
 }
 var htmlPreviewModes = /* @__PURE__ */ new Map();
+var lastScannedText = /* @__PURE__ */ new WeakMap();
+var scannedHtmlBlocks = /* @__PURE__ */ new WeakMap();
 var htmlPreviewWindows = /* @__PURE__ */ new Set();
 function setClass(element, className, enabled) {
   if (enabled)
@@ -47564,14 +47566,20 @@ function restoreHtmlPreviews(canvas, defaultRender = false) {
   if (!(canvas == null ? void 0 : canvas.nodes))
     return;
   canvas.nodes.forEach((node) => {
-    var _a20, _b19;
+    var _a20, _b19, _c;
+    if (node.isContentMounted === false || node.initialized === false)
+      return;
     const nodeData = (_a20 = node.getData) == null ? void 0 : _a20.call(node);
     if ((nodeData == null ? void 0 : nodeData.type) === "text") {
       const text2 = node.text || "";
-      const htmlBlocks = extractHtmlCodeBlocks(text2);
+      if (lastScannedText.get(node) !== text2) {
+        lastScannedText.set(node, text2);
+        scannedHtmlBlocks.set(node, extractHtmlCodeBlocks(text2));
+      }
+      const htmlBlocks = (_b19 = scannedHtmlBlocks.get(node)) != null ? _b19 : [];
       if (htmlBlocks.length === 0) {
         removeHtmlPreviewFromNode(node);
-      } else if (!((_b19 = node.contentEl) == null ? void 0 : _b19.querySelector(".html-preview-card-ui"))) {
+      } else if (!((_c = node.contentEl) == null ? void 0 : _c.querySelector(".html-preview-card-ui"))) {
         addHtmlPreviewToNode(node, htmlBlocks, defaultRender);
       }
     }

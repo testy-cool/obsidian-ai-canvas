@@ -1,34 +1,8 @@
 import { setIcon } from "obsidian";
 import { CanvasNode } from "../obsidian/canvas-internal";
 
-export interface HtmlCodeBlock {
-	content: string;
-	startIndex: number;
-	endIndex: number;
-}
-
-/**
- * Extract ```html code blocks from text
- */
-export function extractHtmlCodeBlocks(text: string): HtmlCodeBlock[] {
-	const blocks: HtmlCodeBlock[] = [];
-	// More lenient regex - optional newline after ```html
-	const regex = /```html\s*([\s\S]*?)```/gi;
-	let match;
-
-	while ((match = regex.exec(text)) !== null) {
-		const content = match[1].trim();
-		if (content) {
-			blocks.push({
-				content,
-				startIndex: match.index,
-				endIndex: match.index + match[0].length,
-			});
-		}
-	}
-
-	return blocks;
-}
+import { extractHtmlCodeBlocks, type HtmlCodeBlock } from "./htmlCodeBlocks";
+export { extractHtmlCodeBlocks, type HtmlCodeBlock } from "./htmlCodeBlocks";
 
 /**
  * Create a sandboxed iframe with HTML content
@@ -56,6 +30,8 @@ export function createHtmlPreviewIframe(htmlContent: string): HTMLIFrameElement 
 type HtmlPreviewMode = "render" | "code";
 
 const htmlPreviewModes = new Map<string, HtmlPreviewMode>();
+const lastScannedText = new WeakMap<CanvasNode, string>();
+const scannedHtmlBlocks = new WeakMap<CanvasNode, HtmlCodeBlock[]>();
 
 interface HtmlPreviewWindow {
 	setMenuBarVisibility(visible: boolean): void;
@@ -224,10 +200,15 @@ export function restoreHtmlPreviews(canvas: any, defaultRender: boolean = false)
 	if (!canvas?.nodes) return;
 
 	canvas.nodes.forEach((node: CanvasNode) => {
+		if (node.isContentMounted === false || node.initialized === false) return;
 		const nodeData = node.getData?.();
 		if (nodeData?.type === "text") {
 			const text = node.text || "";
-			const htmlBlocks = extractHtmlCodeBlocks(text);
+			if (lastScannedText.get(node) !== text) {
+				lastScannedText.set(node, text);
+				scannedHtmlBlocks.set(node, extractHtmlCodeBlocks(text));
+			}
+			const htmlBlocks = scannedHtmlBlocks.get(node) ?? [];
 			if (htmlBlocks.length === 0) {
 				removeHtmlPreviewFromNode(node);
 			} else if (!node.contentEl?.querySelector(".html-preview-card-ui")) {

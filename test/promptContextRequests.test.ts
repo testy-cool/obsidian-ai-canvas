@@ -12,7 +12,7 @@ import {
 	handleCallAI_Question,
 } from "../src/actions/canvasNodeMenuActions/advancedCanvas";
 import { DEFAULT_SETTINGS } from "../src/settings/AugmentedCanvasSettings";
-import { addModelIndicator, setupCanvasIndicatorPersistence } from "../src/utils";
+import { addModelIndicator, restoreModelIndicators, setupCanvasIndicatorPersistence } from "../src/utils";
 import { streamResponse } from "../src/utils/llm";
 
 vi.mock("../src/data/prompts.csv.txt", () => ({ default: "act,prompt" }));
@@ -132,6 +132,24 @@ afterEach(() => {
 });
 
 describe("context picker request paths", () => {
+	it("reuses the badge element when its text changes", () => {
+		const { prompt } = fixture(false);
+		addModelIndicator(prompt, "Custom", "first", true);
+		const indicator = badge(prompt);
+		addModelIndicator(prompt, "Custom", "second");
+		expect(badge(prompt)).toBe(indicator);
+		expect(indicator.textContent).toBe("Custom • second");
+	});
+
+	it.each(["isContentMounted", "initialized"])("does not restore badges on nodes with %s=false", (flag) => {
+		const { canvas, prompt } = fixture(false);
+		prompt[flag] = false;
+		prompt.setData({ ai_provider: "Custom", ai_model: "test" });
+		const read = vi.spyOn(prompt, "getData");
+		restoreModelIndicators(canvas);
+		expect(read).not.toHaveBeenCalled();
+		expect(badge(prompt)).toBeNull();
+	});
 	it.each(["Ask AI", "Ask AI (select model)", "Ask Question"])("%s skips the picker and sends all ancestors by default", async (entry) => {
 		const { app, canvas, prompt, settings, provider, model } = fixture();
 		const menu = new Element();

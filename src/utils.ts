@@ -293,18 +293,11 @@ export const addModelIndicator = (node: any, provider: string, model: string, ge
 	else generatingNodes.delete(node);
 	const contextCount = node.getData().ai_context_count;
 	const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} • ` : "";
-	// Remove existing indicator if present
-	const existingIndicator = node.contentEl.querySelector(".ai-model-indicator");
-	if (existingIndicator) {
-		existingIndicator.remove();
-	}
+	const indicator = node.contentEl.querySelector(".ai-model-indicator") ??
+		node.contentEl.createEl("div", { cls: "ai-model-indicator" });
+	indicator.className = "ai-model-indicator";
+	indicator.textContent = `${contextLabel}${generating ? "generating" : `${provider} • ${model}`}`;
 
-	// Create a subtle indicator at the bottom of the note
-	const indicator = node.contentEl.createEl("div", { 
-		cls: "ai-model-indicator",
-		text: `${contextLabel}${generating ? "generating" : `${provider} • ${model}`}`
-	});
-	
 	// Style the indicator to be subtle
 	indicator.style.cssText = `
 		position: absolute;
@@ -331,7 +324,7 @@ export const restoreModelIndicators = (canvas: any) => {
 
 	// Iterate through all nodes in the canvas
 	canvas.nodes.forEach((node: any) => {
-		if (!node?.contentEl) return;
+		if (!node?.contentEl || node.isContentMounted === false || node.initialized === false) return;
 		const nodeData = node.getData();
 		
 		// Check if this node has AI model information
