@@ -1092,3 +1092,24 @@
 .augmented-canvas-settings .provider-capability-note {
 	color: var(--text-muted);
 }
+
+/* Reserve the widest idle or busy label before a request starts. */
+.provider-capability-test-button {
+	min-width: 12em;
+}
+
+.mcp-test-button {
+	min-width: 9em;
+}
+
+.provider-fetch-button {
+	min-width: 14em;
+}
+
+.provider-capability-test-button,
+.mcp-test-button,
+.provider-fetch-button {
+	flex-shrink: 0;
+	white-space: nowrap;
+	font-size: max(12px, var(--font-ui-small));
+}

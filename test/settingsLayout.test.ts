@@ -5,9 +5,14 @@ import { UnifiedProviderModal } from "../src/Modals/UnifiedProviderModal";
 import { DEFAULT_SETTINGS } from "../src/settings/AugmentedCanvasSettings";
 import * as obsidian from "obsidian";
 import { probeProviderCapabilities } from "../src/utils/capabilityProbe";
+import { testMCPServer } from "../src/utils/mcpClient";
+import { fetchProviderModels } from "../src/utils/modelFetch";
 import type { ProviderCapabilityReport } from "../src/utils/providerCapabilities";
 
 vi.mock("../src/utils/capabilityProbe", () => ({ probeProviderCapabilities: vi.fn() }));
+
+vi.mock("../src/utils/mcpClient", () => ({ testMCPServer: vi.fn() }));
+vi.mock("../src/utils/modelFetch", () => ({ fetchProviderModels: vi.fn() }));
 
 class Element {
 	children: Element[] = [];
@@ -41,6 +46,7 @@ class Element {
 	createDiv(options?: string | { cls?: string; text?: string }) { return this.createEl("div", options); }
 	createSpan(options?: string | { cls?: string; text?: string }) { return this.createEl("span", options); }
 	addClass(name: string) { this.className += ` ${name}`; }
+	removeClass(name: string) { this.classList.toggle(name, false); }
 	setText(text: string) { this.text = text; }
 	setAttribute(name: string, value: string) { this.attributes.set(name, value); }
 	empty() { this.children = []; this.text = ""; }
@@ -256,6 +262,7 @@ describe("provider capability settings", () => {
 		vi.mocked(probeProviderCapabilities).mockReturnValue(new Promise(resolve => { finish = resolve; }));
 		const pending = button.listeners.get("click")!();
 		expect(button.textContent).toBe("Testing…");
+		expect(button.classList.contains("provider-capability-test-button")).toBe(true);
 		expect(button.disabled).toBe(true);
 		await button.listeners.get("click")!();
 		expect(probeProviderCapabilities).toHaveBeenCalledExactlyOnceWith(provider, "test-model", plugin.settings);
@@ -268,6 +275,7 @@ describe("provider capability settings", () => {
 		expect(provider.capabilityReport).toBe(report);
 		expect(plugin.saveSettings).toHaveBeenCalledOnce();
 		expect(button.textContent).toBe("Test capabilities");
+		expect(button.classList.contains("provider-capability-test-button")).toBe(true);
 		expect(button.disabled).toBe(false);
 		expect(reopenedButton.disabled).toBe(false);
 		expect(reopenedButton.textContent).toBe("Test capabilities");
@@ -320,5 +328,50 @@ describe("provider capability settings", () => {
 			.toContain("font-size: max(12px, var(--font-ui-small));");
 		const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 		expect(css).toContain(".provider-capability-report *,\n.augmented-canvas-settings .provider-capability-note,");
+	});
+});
+
+
+describe("busy settings buttons", () => {
+	it.each(["mcp", "provider"])("reserves the %s button in idle, busy and failed states", async (kind) => {
+		let reject!: (error: Error) => void;
+		let finish!: (result: any) => void;
+		const pending = new Promise<any>((resolve, fail) => { finish = resolve; reject = fail; });
+		let root: Element;
+		if (kind === "mcp") {
+			vi.mocked(testMCPServer).mockReturnValue(pending);
+			const tab: any = new SettingsTab({} as any, {
+				settings: { ...DEFAULT_SETTINGS, mcpServers: [{ id: "server", name: "Server", transport: "sse", url: "https://example.test", enabled: true }] },
+			} as any);
+			root = new Element();
+			tab.renderMCPServers(root);
+		} else {
+			vi.mocked(fetchProviderModels).mockReturnValue(pending);
+			const modal = new UnifiedProviderModal({} as any, vi.fn());
+			modal.onOpen();
+			root = modal.contentEl as any;
+		}
+		const cls = kind === "mcp" ? "mcp-test-button" : "provider-fetch-button";
+		const idle = kind === "mcp" ? "Test" : "Test & fetch models";
+		const button = root.querySelector(`.${cls}`)!;
+		expect(button.textContent).toBe(idle);
+		const request = button.listeners.get("click")!();
+		expect(button.textContent).toBe(kind === "mcp" ? "Testing…" : "Fetching…");
+		expect(button.classList.contains(cls)).toBe(true);
+		expect(button.disabled).toBe(true);
+		if (kind === "mcp") finish({ success: false, error: "Offline" });
+		else reject(new Error("Offline"));
+		await request;
+		expect(button.textContent).toBe(idle);
+		expect(button.classList.contains(cls)).toBe(true);
+		expect(button.disabled).toBe(false);
+	});
+
+	it.each(["src/styles/settings.css", "styles.css"])("%s reserves readable, nonshrinking button labels", path => {
+		for (const [cls, width] of [["provider-capability-test-button", "12em"], ["mcp-test-button", "9em"], ["provider-fetch-button", "14em"]]) {
+			expect(cssRule(path, `.${cls}`)).toContain(`min-width: ${width};`);
+		}
+		const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+		expect(css).toContain("flex-shrink: 0;\n\twhite-space: nowrap;\n\tfont-size: max(12px, var(--font-ui-small));");
 	});
 });

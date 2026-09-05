@@ -216,9 +216,10 @@ export class UnifiedProviderModal extends Modal {
     let connStatus: HTMLElement;
 
     connSetting.addButton((btn: ButtonComponent) => {
+			btn.buttonEl.addClass("provider-fetch-button");
       btn.setButtonText("Test & fetch models").onClick(async () => {
         btn.setDisabled(true);
-        btn.setButtonText("Fetching...");
+        btn.setButtonText("Fetching…");
         connStatus?.setText("");
         try {
           if (isCodexType(this.provider.type ?? "")) {

@@ -456,6 +456,7 @@ export default class SettingsTab extends PluginSettingTab {
 		};
 		renderReport();
 		const testBtn = new ButtonComponent(actions);
+		testBtn.buttonEl.addClass("provider-capability-test-button");
 		const updateTestButton = () => testBtn
 			.setButtonText(this.capabilityTests.has(provider.id) ? "Testing…" : "Test capabilities")
 			.setDisabled(this.capabilityTests.has(provider.id));
@@ -683,9 +684,10 @@ export default class SettingsTab extends PluginSettingTab {
             });
 
             const testBtn = new ButtonComponent(controls);
+			testBtn.buttonEl.addClass("mcp-test-button");
             testBtn.setButtonText("Test");
             testBtn.onClick(async () => {
-                testBtn.setButtonText("Testing...");
+                testBtn.setButtonText("Testing…");
                 testBtn.setDisabled(true);
                 const result = await testMCPServer(server);
                 if (result.success) {

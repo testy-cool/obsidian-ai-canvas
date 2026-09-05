@@ -49192,10 +49192,11 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
     const connSetting = new import_obsidian17.Setting(contentEl);
     let connStatus;
     connSetting.addButton((btn) => {
+      btn.buttonEl.addClass("provider-fetch-button");
       btn.setButtonText("Test & fetch models").onClick(async () => {
         var _a21;
         btn.setDisabled(true);
-        btn.setButtonText("Fetching...");
+        btn.setButtonText("Fetching\u2026");
         connStatus == null ? void 0 : connStatus.setText("");
         try {
           if (isCodexType((_a21 = this.provider.type) != null ? _a21 : "")) {
@@ -49853,6 +49854,7 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
     };
     renderReport();
     const testBtn = new import_obsidian18.ButtonComponent(actions);
+    testBtn.buttonEl.addClass("provider-capability-test-button");
     const updateTestButton = () => testBtn.setButtonText(this.capabilityTests.has(provider.id) ? "Testing\u2026" : "Test capabilities").setDisabled(this.capabilityTests.has(provider.id));
     updateTestButton();
     this.capabilityViews.set(provider.id, () => {
@@ -50035,9 +50037,10 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
         await this.plugin.saveSettings();
       });
       const testBtn = new import_obsidian18.ButtonComponent(controls);
+      testBtn.buttonEl.addClass("mcp-test-button");
       testBtn.setButtonText("Test");
       testBtn.onClick(async () => {
-        testBtn.setButtonText("Testing...");
+        testBtn.setButtonText("Testing\u2026");
         testBtn.setDisabled(true);
         const result = await testMCPServer(server);
         if (result.success) {
