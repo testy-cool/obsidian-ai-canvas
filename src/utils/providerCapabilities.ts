@@ -10,8 +10,11 @@ export interface ProviderCapabilities {
 }
 
 export type ProviderCapability = keyof ProviderCapabilities;
-export type CapabilityVerdict = "yes" | "no" | "untested";
+export type CapabilityVerdict = "yes" | "no" | "untested" | "error" | "inconclusive";
 export type ProviderCapabilityReport = Record<ProviderCapability, CapabilityVerdict> & {
+	schemaVersion?: 2;
+	route?: string;
+	testing?: ProviderCapability;
 	testedAt?: string;
 	model?: string;
 	notes?: Record<string, string>;
@@ -49,6 +52,7 @@ export const isBifrostProvider = (provider?: ProviderIdentity): boolean => {
 };
 
 type ProviderKind = Pick<LLMProvider, "type" | "geminiNative"> & ProviderIdentity;
+type TestedProvider = ProviderKind & Pick<LLMProvider, "capabilityReport" | "capabilityReports">;
 
 export const isGoogleProvider = (provider?: ProviderKind): boolean =>
 	(isBifrostProvider(provider) && provider?.geminiNative === true) || ["Gemini", "Google", "Vertex"].includes(provider?.type ?? "");
@@ -56,12 +60,25 @@ export const isGoogleProvider = (provider?: ProviderKind): boolean =>
 export const supportsGoogleTools = (modelId: string): boolean =>
 	/^gemini-(?:2\.5|3(?:\.\d+)?)-/.test(modelId.split("/").pop() ?? "");
 
+export const getCapabilityRoute = (provider?: ProviderKind): string =>
+	JSON.stringify([provider?.type, provider?.baseUrl?.replace(/\/+$/, ""), isGoogleProvider(provider)]);
+
+export const getCapabilityReportKey = (provider: ProviderKind, model: string): string =>
+	JSON.stringify([getCapabilityRoute(provider), model]);
+
+export const getModelCapabilityReport = (provider: TestedProvider, model: string): ProviderCapabilityReport | undefined => {
+	const report = provider.capabilityReports?.[getCapabilityReportKey(provider, model)];
+	return report?.schemaVersion === 2 && report.model === model && report.route === getCapabilityRoute(provider) ? report : undefined;
+};
+
 export const getProviderCapabilities = (
-	provider?: ProviderKind & Pick<LLMProvider, "capabilityReport">
+	provider?: TestedProvider,
+	model?: string
 ): ProviderCapabilities => {
 	const capabilities = { ...(isGoogleProvider(provider) ? google : openAICompatible) };
+	const report = provider && model ? getModelCapabilityReport(provider, model) : undefined;
 	for (const key of providerCapabilityKeys) {
-		const verdict = provider?.capabilityReport?.[key];
+		const verdict = report?.[key];
 		if (verdict === "yes" || verdict === "no") capabilities[key] = verdict === "yes";
 	}
 	return capabilities;

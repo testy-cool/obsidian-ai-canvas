@@ -131,6 +131,8 @@ export interface LLMProvider {
 
 	/** Results of the most recent provider capability test. */
 	capabilityReport?: ProviderCapabilityReport;
+	/** Model and API-route scoped results. Legacy reports are not used for routing. */
+	capabilityReports?: Record<string, ProviderCapabilityReport>;
 
 	/**
 	 * API key for the provider

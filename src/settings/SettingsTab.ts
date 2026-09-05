@@ -1,10 +1,10 @@
-import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent, TextComponent, ToggleComponent, Modal, requestUrl, setIcon, debounce } from "obsidian";
+import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent, TextComponent, ToggleComponent, DropdownComponent, Modal, requestUrl, setIcon, debounce } from "obsidian";
 import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
 import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
 import { LLMModel, LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
 import { testMCPServer } from "src/utils/mcpClient";
 import { getParamsForModel, detectProviderLabel } from "src/utils/providerParams";
-import { getProviderCapabilities, providerCapabilityKeys, type ProviderCapability, type ProviderCapabilityReport } from "src/utils/providerCapabilities";
+import { getCapabilityReportKey, getModelCapabilityReport, isGoogleProvider, getProviderCapabilities, providerCapabilityKeys, type ProviderCapability, type ProviderCapabilityReport } from "src/utils/providerCapabilities";
 import { probeProviderCapabilities } from "src/utils/capabilityProbe";
 
 interface SettingsSection {
@@ -33,6 +33,7 @@ const filterSection = (sectionEl: HTMLElement, query: string): boolean => {
 
 export default class SettingsTab extends PluginSettingTab {
 	private capabilityTests = new Set<string>();
+	private capabilityModels = new Map<string, string>();
 	private capabilityProgress = new Map<string, ProviderCapabilityReport>();
 	private capabilityViews = new Map<string, () => void>();
     plugin: AugmentedCanvasPlugin;
@@ -420,6 +421,7 @@ export default class SettingsTab extends PluginSettingTab {
             const providerModels = getProviderModels();
             const enabledCount = providerModels.filter(m => m.enabled).length;
             titleText.setText(`Models (${enabledCount}/${providerModels.length})`);
+			refreshTestModels();
         };
 
         const addBtn = new ButtonComponent(actions);
@@ -449,7 +451,24 @@ export default class SettingsTab extends PluginSettingTab {
         });
 
 		const reportEl = modelsWrapper.createDiv("provider-capability-report");
-		const chips = reportEl.createDiv("provider-meta");
+		const modelSetting = new Setting(reportEl).setName("Test model")
+			.setDesc(`${isGoogleProvider(provider) ? "Gemini-native" : "OpenAI-compatible"} API. Results apply to this model only. Runs up to five small requests.`);
+		let selectedModel = this.capabilityModels.get(provider.id) ?? this.plugin.settings.apiModel;
+		if (!getProviderModels().some(model => model.enabled && model.id === selectedModel)) {
+			selectedModel = getProviderModels().find(model => model.enabled)?.id ?? "";
+		}
+		this.capabilityModels.set(provider.id, selectedModel);
+		const modelSelect = new DropdownComponent(modelSetting.controlEl);
+		modelSelect.selectEl.addClass("provider-capability-model");
+		modelSelect.selectEl.setAttribute("aria-label", "Model to test");
+		for (const model of getProviderModels().filter(model => model.enabled)) modelSelect.addOption(model.id, model.model);
+		modelSelect.setValue(selectedModel).onChange(value => {
+			selectedModel = value;
+			this.capabilityModels.set(provider.id, value);
+			selectedCapability = undefined;
+			renderReport();
+		});
+		const chips = reportEl.createDiv("provider-capability-results");
 		const chipElements = new Map<ProviderCapability, HTMLButtonElement>();
 		const testedLine = reportEl.createDiv({ cls: "provider-models-desc provider-capability-tested", text: "Not tested yet" });
 		const noteLine = reportEl.createDiv("provider-capability-note");
@@ -466,47 +485,57 @@ export default class SettingsTab extends PluginSettingTab {
 		}
 		const renderReport = () => {
 			const current = this.plugin.settings.providers.find(item => item.id === provider.id);
-			const report = this.capabilityProgress.get(provider.id) ?? current?.capabilityReport;
+			const model = getProviderModels().find(model => model.id === selectedModel);
+			const progress = this.capabilityProgress.get(provider.id);
+			const report = progress?.model === model?.model ? progress : current && model ? getModelCapabilityReport(current, model.model) : undefined;
+			const labels = { image: "Images", pdf: "PDF", video: "Video files", youtube: "YouTube", search: "Google Search", urlContext: "URL context" };
+			const statuses = { yes: "Verified", no: "Unavailable", untested: "Not tested", error: "Test failed", inconclusive: "Unverified" };
 			for (const [capability, chip] of chipElements) {
 				const verdict = report?.[capability] ?? "untested";
-				const symbol = verdict === "yes" ? "✓" : verdict === "no" ? "✗" : "?";
-				chip.setText(`${capability === "urlContext" ? "url" : capability} ${symbol}`);
+				chip.setText(`${labels[capability]}: ${report?.testing === capability ? "Testing…" : statuses[verdict]}`);
 				chip.setAttribute("title", report?.notes?.[capability] ?? "Not tested.");
 				chip.setAttribute("aria-expanded", String(selectedCapability === capability));
 			}
 			testedLine.setText(report?.testedAt
 				? `Tested ${new Date(report.testedAt).toLocaleString()} with ${report.model ?? "unknown model"}`
-				: "Not tested yet");
-			noteLine.setText(selectedCapability ? report?.notes?.[selectedCapability] ?? "Not tested." : "");
+				: report?.testing ? `Testing ${labels[report.testing]} with ${model?.model}` : current?.capabilityReport && !report
+					? "Previous gateway-wide results need a new test for this model."
+					: "Not tested yet");
+			const detail = selectedCapability ?? providerCapabilityKeys.find(key => report?.[key] === "error");
+			noteLine.setText(detail ? report?.notes?.[detail] ?? "Not tested." : "");
 		};
 		renderReport();
-		const testBtn = new ButtonComponent(actions);
+		const testBtn = new ButtonComponent(modelSetting.controlEl);
 		testBtn.buttonEl.addClass("provider-capability-test-button");
-		const updateTestButton = () => testBtn
-			.setButtonText(this.capabilityTests.has(provider.id) ? "Testing…" : "Test capabilities")
-			.setDisabled(this.capabilityTests.has(provider.id));
+		const updateTestButton = () => {
+			const testing = this.capabilityTests.has(provider.id);
+			modelSelect.setDisabled(testing);
+			testBtn.setButtonText(testing ? "Testing…" : "Test selected model").setDisabled(testing);
+		};
 		updateTestButton();
 		this.capabilityViews.set(provider.id, () => { renderReport(); updateTestButton(); });
 		testBtn.onClick(async () => {
 			if (this.capabilityTests.has(provider.id)) return;
-			const model = getProviderModels().find(item => item.enabled);
+			const model = getProviderModels().find(item => item.enabled && item.id === selectedModel);
 			if (!model) {
 				new Notice(`Enable a model for ${provider.type} before testing capabilities.`);
 				return;
 			}
 			const current = this.plugin.settings.providers.find(item => item.id === provider.id);
 			if (!current) return;
+			const testedProvider = { ...current };
+			const reportKey = getCapabilityReportKey(testedProvider, model.model);
 			this.capabilityTests.add(provider.id);
 			updateTestButton();
 			try {
-				const report = await probeProviderCapabilities(current, model.model, this.plugin.settings, progress => {
+				const report = await probeProviderCapabilities(testedProvider, model.model, this.plugin.settings, progress => {
 					this.capabilityProgress.set(provider.id, progress);
 					renderReport();
 					this.capabilityViews.get(provider.id)?.();
 				});
 				const saved = this.plugin.settings.providers.find(item => item.id === provider.id);
-				if (saved) {
-					saved.capabilityReport = report;
+				if (saved && getCapabilityReportKey(saved, model.model) === reportKey && saved.apiKey === testedProvider.apiKey) {
+					saved.capabilityReports = { ...saved.capabilityReports, [reportKey]: report };
 					await this.plugin.saveSettings();
 				}
 			} catch (error) {
@@ -514,11 +543,27 @@ export default class SettingsTab extends PluginSettingTab {
 			} finally {
 				this.capabilityTests.delete(provider.id);
 				this.capabilityProgress.delete(provider.id);
+				refreshTestModels();
 				renderReport();
 				updateTestButton();
 				this.capabilityViews.get(provider.id)?.();
 			}
 		});
+
+		let shownModels = JSON.stringify(getProviderModels().filter(model => model.enabled).map(model => [model.id, model.model]));
+		const refreshTestModels = () => {
+			if (this.capabilityTests.has(provider.id)) return;
+			const models = getProviderModels().filter(model => model.enabled);
+			const signature = JSON.stringify(models.map(model => [model.id, model.model]));
+			if (signature === shownModels) return;
+			shownModels = signature;
+			modelSelect.selectEl.empty();
+			for (const model of models) modelSelect.addOption(model.id, model.model);
+			if (!models.some(model => model.id === selectedModel)) selectedModel = models.find(model => model.id === this.plugin.settings.apiModel)?.id ?? models[0]?.id ?? "";
+			modelSelect.setValue(selectedModel);
+			this.capabilityModels.set(provider.id, selectedModel);
+			renderReport();
+		};
 
         updateHeader();
 
@@ -826,7 +871,7 @@ export default class SettingsTab extends PluginSettingTab {
     private renderGenerationSettings(containerEl: HTMLElement) {
         new Setting(containerEl).setHeading().setName("Generation Settings");
 		const activeProvider = this.plugin.settings.providers.find(provider => provider.id === this.plugin.settings.activeProvider);
-		if (activeProvider && !getProviderCapabilities(activeProvider).search) {
+		if (activeProvider && !getProviderCapabilities(activeProvider, this.plugin.settings.models.find(model => model.id === this.plugin.settings.apiModel)?.model).search) {
 			containerEl.createDiv({
 				cls: "provider-capability-note",
 				text: `The active provider (${activeProvider.type}) cannot do search grounding. Use a Gemini provider or Bifrost with the Gemini-native API.`,

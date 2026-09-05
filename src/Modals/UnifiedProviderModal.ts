@@ -52,6 +52,7 @@ export class UnifiedProviderModal extends Modal {
   private renderLimit = UnifiedProviderModal.MODEL_PAGE_SIZE;
   private modelListEl: HTMLElement | null = null;
   private editing: boolean;
+	private initialProvider?: LLMProvider;
   private pricingData: Map<string, { inputCostPerMillion: number; outputCostPerMillion: number }> | undefined;
   private modelParams = new Map<string, Record<string, unknown>>();
   private expandedParams = new Set<string>();
@@ -63,6 +64,7 @@ export class UnifiedProviderModal extends Modal {
     private existingModels: LLMModel[] = []
   ) {
     super(app);
+		this.initialProvider = existingProvider ? { ...existingProvider } : undefined;
     this.editing = !!existingProvider;
     this.provider = existingProvider
       ? { ...existingProvider }
@@ -145,7 +147,7 @@ export class UnifiedProviderModal extends Modal {
 
 		geminiNativeSetting = new Setting(contentEl)
 			.setName("Use Gemini-native API")
-			.setDesc("Route requests through Bifrost's /genai endpoint so Google search grounding, URL context and YouTube links work. Model ids stay as listed (for example vertex/gemini-3.1-pro-preview).")
+			.setDesc("Use Google's request format for Gemini models through Bifrost. Enables testing of YouTube input, Google Search and URL context. Support depends on the selected model.")
 			.addToggle(toggle => toggle
 				.setValue(this.provider.geminiNative ?? false)
 				.onChange(value => { this.provider.geminiNative = value; }));
@@ -202,7 +204,8 @@ export class UnifiedProviderModal extends Modal {
 			this.baseUrlField!.input.placeholder = azure
 				? "https://<resource>.services.ai.azure.com" : "https://api.example.com/v1";
 			baseUrlSetting.setDesc(azure
-				? "Azure OpenAI resource endpoint — no path, no api-version" : "OpenAI-compatible endpoint.");
+				? "Azure OpenAI resource endpoint — no path, no api-version" : isBifrostProvider(this.provider)
+					? "Bifrost gateway address. Keep /v1 here when Gemini-native API is enabled." : "OpenAI-compatible endpoint.");
 			baseUrlSetting.settingEl.style.display = gemini || vertex || codex ? "none" : "";
 			apiKeyInput.placeholder = gemini ? "Google API key" : "sk-...";
 			apiKeySetting.settingEl.style.display = vertex || codex ? "none" : "";
@@ -221,12 +224,13 @@ export class UnifiedProviderModal extends Modal {
 		updateProviderFields();
 
     // --- Test connection + Fetch models ---
-    const connSetting = new Setting(contentEl);
+    const connSetting = new Setting(contentEl).setName("Available models")
+			.setDesc("Fetch the model list with these credentials. Test model capabilities from the Providers tab.");
     let connStatus: HTMLElement;
 
     connSetting.addButton((btn: ButtonComponent) => {
 			btn.buttonEl.addClass("provider-fetch-button");
-      btn.setButtonText("Test & fetch models").onClick(async () => {
+      btn.setButtonText("Fetch models").onClick(async () => {
 				const fetchVersion = this.modelFetchVersion;
         btn.setDisabled(true);
         btn.setButtonText("Fetching…");
@@ -267,18 +271,24 @@ export class UnifiedProviderModal extends Modal {
           this.renderModelList();
         } catch (e) {
 					if (fetchVersion !== this.modelFetchVersion) return;
-          connStatus?.setText(`Failed: ${e}`);
+					const raw = e instanceof Error ? e.message : String(e);
+					const message = this.provider.apiKey ? raw.split(this.provider.apiKey).join("[redacted]") : raw;
+					connStatus?.setText(/\b401\b/.test(message)
+						? "Authentication failed (HTTP 401). Check the API key for this provider."
+						: /\b403\b/.test(message) ? "Model listing denied (HTTP 403). Check this key's access."
+							: `Could not fetch models: ${message}`);
           connStatus?.addClass("mod-warning");
           connStatus?.removeClass("mod-success");
         } finally {
           btn.setDisabled(false);
-          btn.setButtonText("Test & fetch models");
+          btn.setButtonText("Fetch models");
         }
       });
     });
     connStatus = connSetting.controlEl.createEl("span", {
-      cls: "setting-item-description",
+      cls: "setting-item-description provider-fetch-status",
     });
+		connStatus.setAttribute("role", "status");
 
     // --- Model list area ---
     contentEl.createEl("h3", { text: "Models" });
@@ -357,7 +367,7 @@ export class UnifiedProviderModal extends Modal {
 
     if (filtered.length === 0 && this.fetchedModelIds.length === 0) {
       this.modelListEl.createEl("div", {
-        text: 'Click "Test & fetch models" to load available models.',
+        text: 'Click "Fetch models" to load available models.',
         cls: "setting-item-description",
       });
       return;
@@ -496,11 +506,19 @@ export class UnifiedProviderModal extends Modal {
       enabled: p.enabled ?? true,
 			geminiNative: isBifrostProvider(p) && (p.geminiNative ?? false),
 			capabilityReport: p.capabilityReport,
+			capabilityReports: p.capabilityReports,
       projectId: p.projectId,
       location: p.location,
       serviceAccountJson: p.serviceAccountJson,
       binaryPath: p.binaryPath,
     };
+
+		if (this.initialProvider && ["apiKey", "baseUrl", "type", "geminiNative", "projectId", "location", "serviceAccountJson"].some(key =>
+			key === "geminiNative" ? !!provider.geminiNative !== !!this.initialProvider!.geminiNative
+				: (provider as any)[key] !== (this.initialProvider as any)[key])) {
+			provider.capabilityReport = undefined;
+			provider.capabilityReports = undefined;
+		}
 
     const models: LLMModel[] = [...this.selectedModelIds].map((modelId) => {
       const existing = this.existingModels.find((m) => m.model === modelId);

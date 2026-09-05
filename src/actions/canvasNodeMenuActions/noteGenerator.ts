@@ -344,7 +344,7 @@ export function noteGenerator(
 		const provider = resolveProvider();
 		const model = resolveModel(provider);
 		const isGpt = provider?.type === "OpenAI";
-		const capabilities = getProviderCapabilities(provider);
+		const capabilities = getProviderCapabilities(provider, model?.model);
 		const warnedMedia = new Set<string>();
 		const warnUnsupportedMedia = (media: "video files" | "YouTube links") => {
 			if (warnedMedia.has(media)) return;
@@ -754,7 +754,7 @@ export function noteGenerator(
 				// Determine what features are active
 				const hasMcpTools = mcpTools && Object.keys(mcpTools).length > 0;
 				const mcpToolCount = hasMcpTools ? Object.keys(mcpTools!).length : 0;
-				const capabilities = getProviderCapabilities(provider);
+				const capabilities = getProviderCapabilities(provider, model?.model);
 				const canUseGoogleTools = supportsGoogleTools(model.model) && !hasMcpTools;
 				const usesUrlContext = capabilities.urlContext && canUseGoogleTools;
 				const usesSearchGrounding = capabilities.search && canUseGoogleTools;

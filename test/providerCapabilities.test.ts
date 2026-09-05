@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getProviderCapabilities, isBifrostProvider, isGoogleProvider, providerCapabilityKeys, type ProviderCapabilityReport } from "../src/utils/providerCapabilities";
+import { getProviderCapabilities, getCapabilityReportKey, getCapabilityRoute, isBifrostProvider, isGoogleProvider, providerCapabilityKeys, type ProviderCapabilityReport } from "../src/utils/providerCapabilities";
 
 describe("provider capabilities", () => {
 	it.each(["Gemini", "Google", "Vertex"])("enables all listed capabilities for %s", (type) => {
@@ -15,24 +15,20 @@ describe("provider capabilities", () => {
 	});
 });
 
-describe("saved capability reports", () => {
-	it.each(["yes", "no", "untested"] as const)("folds %s over every static capability", (verdict) => {
-		const report = Object.fromEntries(providerCapabilityKeys.map(key => [key, verdict])) as ProviderCapabilityReport;
-		for (const type of ["Bifrost", "Gemini"]) {
-			const defaults = getProviderCapabilities({ type });
-			const folded = getProviderCapabilities({ type, capabilityReport: report });
-			for (const key of providerCapabilityKeys) {
-				expect(folded[key]).toBe(verdict === "untested" ? defaults[key] : verdict === "yes");
-			}
-		}
+describe("model-scoped capability reports", () => {
+	const provider = { type: "Bifrost", baseUrl: "https://example.test/v1", geminiNative: true };
+	const model = "vertex/gemini-3.1-pro-preview";
+	const report: ProviderCapabilityReport = { schemaVersion: 2, route: getCapabilityRoute(provider), model,
+		image: "yes", pdf: "yes", video: "untested", youtube: "no", search: "error", urlContext: "inconclusive" };
+	it("ignores legacy gateway-wide failures", () => {
+		expect(getProviderCapabilities({...provider, capabilityReport: {...report, schemaVersion: undefined}}, model).youtube).toBe(true);
 	});
-
-	it("keeps native defaults for untested entries and applies mixed results without changing defaults", () => {
-		const provider = { type: "Bifrost", geminiNative: true };
-		expect(getProviderCapabilities({ ...provider, capabilityReport: {
-			image: "no", pdf: "yes", video: "untested", youtube: "no", search: "no", urlContext: "untested",
-		} })).toEqual({ image: false, pdf: true, video: true, youtube: false, search: false, urlContext: true });
-		expect(getProviderCapabilities(provider).search).toBe(true);
+	it("applies only the tested model and route, leaving errors and inconclusive results enabled", () => {
+		const saved = {...provider, capabilityReports: {[getCapabilityReportKey(provider, model)]: report}};
+		expect(getProviderCapabilities(saved, model)).toMatchObject({youtube:false,search:true,urlContext:true});
+		expect(getProviderCapabilities(saved, "vertex/gemini-other").youtube).toBe(true);
+		expect(getProviderCapabilities({...saved, baseUrl:"https://new.example/v1"}, model).youtube).toBe(true);
+		expect(getProviderCapabilities({...saved, geminiNative:false}, model).youtube).toBe(false);
 	});
 });
 

@@ -8,7 +8,7 @@ import { probeProviderCapabilities } from "../src/utils/capabilityProbe";
 import { testMCPServer } from "../src/utils/mcpClient";
 import { fetchPricingForModels } from "../src/utils/pricingFetch";
 import { fetchProviderModels } from "../src/utils/modelFetch";
-import type { ProviderCapabilityReport } from "../src/utils/providerCapabilities";
+import { getCapabilityReportKey, getCapabilityRoute, type ProviderCapabilityReport } from "../src/utils/providerCapabilities";
 
 vi.mock("../src/utils/capabilityProbe", () => ({ probeProviderCapabilities: vi.fn() }));
 
@@ -234,14 +234,14 @@ describe("Bifrost Gemini-native setting", () => {
 		const nativeSetting = (modal.contentEl as Element).querySelectorAll(".setting-item")
 			.find(item => item.querySelector(".setting-item-name")?.textContent === "Use Gemini-native API")!;
 		expect(nativeSetting.style.display).toBe("");
-		expect(nativeSetting.querySelector(".setting-item-description")!.textContent).toBe("Route requests through Bifrost's /genai endpoint so Google search grounding, URL context and YouTube links work. Model ids stay as listed (for example vertex/gemini-3.1-pro-preview).");
+		expect(nativeSetting.querySelector(".setting-item-description")!.textContent).toBe("Use Google's request format for Gemini models through Bifrost. Enables testing of YouTube input, Google Search and URL context. Support depends on the selected model.");
 		const toggle = nativeSetting.querySelector("input")!;
 		expect(toggle.checked).toBe(geminiNative ?? false);
 		toggle.checked = true;
 		await toggle.listeners.get("change")!();
 		modal.save();
 		expect(onSave).toHaveBeenCalledWith(
-			expect.objectContaining({ type: "Bifrost", geminiNative: true, baseUrl: provider.baseUrl, capabilityReport: provider.capabilityReport }),
+			expect.objectContaining({ type: "Bifrost", geminiNative: true, baseUrl: provider.baseUrl }),
 			[expect.objectContaining({ model: model.model })],
 		);
 	});
@@ -257,17 +257,32 @@ describe("Bifrost Gemini-native setting", () => {
 	});
 });
 
+describe("provider diagnostic invalidation", () => {
+	it.each([false, true])("retains tests only when credentials are unchanged (changed: %s)", async changed => {
+		const provider: any = { id:"bifrost", type:"Bifrost", baseUrl:"https://example.test/v1", apiKey:"original-key", enabled:true,
+			capabilityReports:{saved:{model:"test-model"}} };
+		const save = vi.fn();
+		const modal:any = new UnifiedProviderModal({} as any, save, provider);
+		modal.onOpen();
+		if (changed) modal.provider.apiKey = "replacement-key";
+		await modal.contentEl.querySelectorAll("button").find((button:any)=>button.textContent==="Save provider").listeners.get("click")();
+		expect(save.mock.calls[0][0].capabilityReports).toEqual(changed ? undefined : provider.capabilityReports);
+	});
+});
+
 describe("provider capability settings", () => {
 	const report: ProviderCapabilityReport = {
 		image: "yes", pdf: "yes", video: "no", youtube: "untested", search: "no", urlContext: "no",
+		schemaVersion: 2, route: getCapabilityRoute({type:"Bifrost",baseUrl:"https://example.test/v1"}),
 		testedAt: "2026-09-05T12:00:00.000Z", model: "test-model",
 		notes: { image: "Saw red", search: "No grounding evidence" },
 	};
 	const setup = (capabilityReport?: ProviderCapabilityReport) => {
-		const provider = { id: "test", type: "Bifrost", baseUrl: "https://example.test/v1", enabled: true, capabilityReport };
+		const provider: any = { id: "test", type: "Bifrost", baseUrl: "https://example.test/v1", enabled: true };
+		if (capabilityReport) provider.capabilityReports = { [getCapabilityReportKey(provider, "test-model")]: capabilityReport };
 		const plugin: any = {
 			settings: {
-				...DEFAULT_SETTINGS, providers: [provider], activeProvider: provider.id,
+				...DEFAULT_SETTINGS, providers: [provider], activeProvider: provider.id, apiModel: "selected",
 				models: [
 					{ id: "disabled", model: "disabled-model", providerId: provider.id, enabled: false },
 					{ id: "selected", model: "test-model", providerId: provider.id, enabled: true },
@@ -278,17 +293,17 @@ describe("provider capability settings", () => {
 		const tab: any = new SettingsTab({} as any, plugin);
 		const root = new Element();
 		tab.renderProviders(root);
-		const button = root.querySelectorAll("button").find(item => item.textContent === "Test capabilities")!;
+		const button = root.querySelectorAll("button").find(item => item.textContent === "Test selected model")!;
 		return { tab, root, button, provider, plugin };
 	};
 
 	it("tests the first enabled model, disables duplicate requests, saves the report and renders its details", async () => {
 		const { tab, root, button, provider, plugin } = setup();
-		expect(button.parentElement?.className).toBe("provider-models-actions");
+		expect(button.parentElement?.className).toBe("setting-item-control");
 		const testedLine = root.querySelector(".provider-capability-tested")!;
 		expect(testedLine.textContent).toBe("Not tested yet");
 		expect(root.querySelectorAll(".provider-capability-chip").map(item => item.textContent)).toEqual([
-			"image ?", "pdf ?", "video ?", "youtube ?", "search ?", "url ?",
+			"Images: Not tested", "PDF: Not tested", "Video files: Not tested", "YouTube: Not tested", "Google Search: Not tested", "URL context: Not tested",
 		]);
 		let finish!: (value: ProviderCapabilityReport) => void;
 		vi.mocked(probeProviderCapabilities).mockReturnValue(new Promise(resolve => { finish = resolve; }));
@@ -305,23 +320,23 @@ describe("provider capability settings", () => {
 		const progress = vi.mocked(probeProviderCapabilities).mock.calls[0][3]!;
 		const chips = root.querySelectorAll(".provider-capability-chip");
 		progress({ ...report, pdf: "untested", testedAt: undefined });
-		expect(chips[0].textContent).toBe("image ✓");
-		expect(chips[1].textContent).toBe("pdf ?");
+		expect(chips[0].textContent).toBe("Images: Verified");
+		expect(chips[1].textContent).toBe("PDF: Not tested");
 		expect(root.querySelectorAll(".provider-capability-chip")).toEqual(chips);
-		expect(reopened.querySelector(".provider-capability-chip")!.textContent).toBe("image ✓");
+		expect(reopened.querySelector(".provider-capability-chip")!.textContent).toBe("Images: Verified");
 		expect(plugin.saveSettings).not.toHaveBeenCalled();
 		finish(report);
 		await pending;
 		expect(root.querySelector(".provider-capability-tested")).toBe(testedLine);
-		expect(provider.capabilityReport).toBe(report);
+		expect(provider.capabilityReports[getCapabilityReportKey(provider, report.model!)]).toBe(report);
 		expect(plugin.saveSettings).toHaveBeenCalledOnce();
-		expect(button.textContent).toBe("Test capabilities");
+		expect(button.textContent).toBe("Test selected model");
 		expect(button.classList.contains("provider-capability-test-button")).toBe(true);
 		expect(button.disabled).toBe(false);
 		expect(reopenedButton.disabled).toBe(false);
-		expect(reopenedButton.textContent).toBe("Test capabilities");
+		expect(reopenedButton.textContent).toBe("Test selected model");
 		expect(root.querySelectorAll(".provider-capability-chip").map(item => item.textContent)).toEqual([
-			"image ✓", "pdf ✓", "video ✗", "youtube ?", "search ✗", "url ✗",
+			"Images: Verified", "PDF: Verified", "Video files: Unavailable", "YouTube: Not tested", "Google Search: Unavailable", "URL context: Unavailable",
 		]);
 		expect(root.querySelector(".provider-capability-chip")!.attributes.get("title")).toBe("Saw red");
 		expect(root.textContent).toContain(`Tested ${new Date(report.testedAt!).toLocaleString()} with test-model`);
@@ -346,6 +361,41 @@ describe("provider capability settings", () => {
 		expect(chip.attributes.get("aria-expanded")).toBe("false");
 	});
 
+	it("defaults to the generation model and lets the user explicitly test a different model", async () => {
+		const { tab, plugin, provider } = setup();
+		plugin.settings.models.unshift({id:"first",model:"first-model",providerId:provider.id,enabled:true});
+		const root = new Element(); tab.renderProviders(root);
+		const select = root.querySelector(".provider-capability-model")!;
+		expect(select.value).toBe("selected");
+		select.value = "first"; await select.listeners.get("change")!();
+		vi.mocked(probeProviderCapabilities).mockResolvedValue({...report,model:"first-model"});
+		await root.querySelectorAll("button").find(b=>b.textContent==="Test selected model")!.listeners.get("click")!();
+		expect(probeProviderCapabilities).toHaveBeenCalledWith(expect.anything(),"first-model",plugin.settings,expect.any(Function));
+		expect(provider.capabilityReports[getCapabilityReportKey(provider,"first-model")].model).toBe("first-model");
+	});
+
+	it("updates the test selector when a model is enabled", async () => {
+		const { root } = setup();
+		const select = root.querySelector(".provider-capability-model")!;
+		expect(select.children.some(option => option.value === "disabled")).toBe(false);
+		const row = root.querySelectorAll(".provider-model-row").find(row => row.textContent.includes("disabled-model"))!;
+		const checkbox = row.querySelector("input")!;
+		checkbox.checked = true; await checkbox.listeners.get("change")!();
+		expect(select.children.some(option => option.value === "disabled")).toBe(true);
+	});
+
+	it("shows access errors openly and ignores old gateway-wide failures", () => {
+		const {tab, plugin, provider} = setup();
+		provider.capabilityReport = {...report,image:"no"};
+		const root = new Element(); tab.renderProviders(root);
+		expect(root.textContent).toContain("Previous gateway-wide results need a new test");
+		expect(root.textContent).toContain("Images: Not tested");
+		provider.capabilityReports = {[getCapabilityReportKey(provider,"test-model")]:{...report,image:"error",notes:{image:"HTTP 403: key denied"}}};
+		root.empty(); tab.renderProviders(root);
+		expect(root.textContent).toContain("Images: Test failed");
+		expect(root.querySelector(".provider-capability-note")!.textContent).toBe("HTTP 403: key denied");
+	});
+
 	it("notifies without sending requests when no model is enabled", async () => {
 		const notice = vi.spyOn(obsidian, "Notice");
 		const { button, plugin } = setup();
@@ -362,18 +412,19 @@ describe("provider capability settings", () => {
 		vi.mocked(probeProviderCapabilities).mockRejectedValue(new Error("Probe failed"));
 		await button.listeners.get("click")!();
 		expect(notice).toHaveBeenCalledWith("Capability test failed: Probe failed");
-		expect(provider.capabilityReport).toBe(report);
+		expect(provider.capabilityReports[getCapabilityReportKey(provider, report.model!)]).toBe(report);
 		expect(button.disabled).toBe(false);
-		expect(button.textContent).toBe("Test capabilities");
+		expect(button.textContent).toBe("Test selected model");
 	});
 
 	it("shows the grounding note from the active provider's folded report", () => {
 		const { tab, plugin } = setup(report);
 		plugin.settings.providers[0].geminiNative = true;
+		plugin.settings.providers[0].capabilityReports = { [getCapabilityReportKey(plugin.settings.providers[0], report.model!)]: { ...report, route:getCapabilityRoute(plugin.settings.providers[0]) } };
 		const root = new Element();
 		tab.renderGenerationSettings(root);
 		expect(root.querySelector(".provider-capability-note")!.textContent).toBe("The active provider (Bifrost) cannot do search grounding. Use a Gemini provider or Bifrost with the Gemini-native API.");
-		plugin.settings.providers[0].capabilityReport = { ...report, search: "yes" };
+		plugin.settings.providers[0].capabilityReports = { [getCapabilityReportKey(plugin.settings.providers[0], report.model!)]: { ...report, route:getCapabilityRoute(plugin.settings.providers[0]), search: "yes" } };
 		root.empty();
 		tab.renderGenerationSettings(root);
 		expect(root.querySelector(".provider-capability-note")).toBeNull();
@@ -382,8 +433,8 @@ describe("provider capability settings", () => {
 	it.each(["src/styles/settings.css", "styles.css"])("%s keeps capability text and actions at least 12px", (path) => {
 		expect(cssRule(path, ".augmented-canvas-settings .provider-models-actions button"))
 			.toContain("font-size: max(12px, var(--font-ui-small));");
-		expect(cssRule(path, ".augmented-canvas-settings .provider-capability-chip")).toContain("width: 8em;");
-		expect(cssRule(path, ".augmented-canvas-settings .provider-capability-chip")).toContain("flex: 0 0 8em;");
+		expect(cssRule(path, ".augmented-canvas-settings .provider-capability-chip")).toContain("width: 100%;");
+		expect(cssRule(path, ".augmented-canvas-settings .provider-capability-chip")).toContain("white-space: normal;");
 		const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 		expect(css).toContain(".provider-capability-report *,\n.augmented-canvas-settings .provider-capability-note,");
 	});
@@ -410,7 +461,7 @@ describe("busy settings buttons", () => {
 			root = modal.contentEl as any;
 		}
 		const cls = kind === "mcp" ? "mcp-test-button" : "provider-fetch-button";
-		const idle = kind === "mcp" ? "Test" : "Test & fetch models";
+		const idle = kind === "mcp" ? "Test" : "Fetch models";
 		const button = root.querySelector(`.${cls}`)!;
 		expect(button.textContent).toBe(idle);
 		const request = button.listeners.get("click")!();
@@ -730,7 +781,7 @@ describe("provider modal updates in place", () => {
 		if (rejected) reject(new Error("Old request failed"));
 		else resolve(["old-provider-model"]);
 		await pending;
-		expect(root.querySelector(".model-checklist")!.textContent).toBe('Click "Test & fetch models" to load available models.');
+		expect(root.querySelector(".model-checklist")!.textContent).toBe('Click "Fetch models" to load available models.');
 		expect(root.textContent).not.toContain("Old request failed");
 		expect(button.disabled).toBe(false);
 	});

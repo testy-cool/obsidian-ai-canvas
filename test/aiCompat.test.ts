@@ -357,8 +357,9 @@ describe("capability probe production routing", () => {
 			const body = await request.json();
 			requests.push(body);
 			const text = ["red", "7431", "A man at the zoo with elephants.", `${new Date().getFullYear()} news`, "Example Domain"][requests.length - 1];
-			return new Response(JSON.stringify({ candidates: [{
+			return new Response(JSON.stringify({ usageMetadata: {promptTokensDetails:[{modality:"VIDEO",tokenCount:200}]}, candidates: [{
 				content: { role: "model", parts: [{ text }] }, finishReason: "STOP",
+				urlContextMetadata:{urlMetadata:[{retrievedUrl:"https://example.com/",urlRetrievalStatus:"URL_RETRIEVAL_STATUS_SUCCESS"}]},
 				...(body.tools?.[0]?.googleSearch ? { groundingMetadata: {
 					groundingChunks: [{ web: { uri: "https://example.test/news", title: "Today's news" } }],
 					webSearchQueries: ["today news"],
@@ -379,7 +380,7 @@ describe("capability probe production routing", () => {
 		expect(requests[4].tools).toEqual([{ urlContext: {} }]);
 	});
 
-	it.each([false, true])("omits Google tools disabled by a saved report (streaming: %s)", async (streaming) => {
+	it.each([false, true])("ignores legacy gateway-wide failures when configuring Google tools (streaming: %s)", async (streaming) => {
 		const requests: any[] = [];
 		globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 			requests.push(await new Request(input, init).json());
@@ -396,7 +397,7 @@ describe("capability probe production routing", () => {
 		if (streaming) await streamResponse(provider, messages, options, vi.fn());
 		else expect(await getResponse(provider, messages, options)).toBe("ok");
 		expect(requests).toHaveLength(1);
-		expect(requests[0].tools).toBeUndefined();
+		expect(requests[0].tools).toEqual([{googleSearch:{}},{urlContext:{}}]);
 	});
 });
 

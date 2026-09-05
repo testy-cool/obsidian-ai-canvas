@@ -328,7 +328,7 @@ export const buildTools = (
 	{ useSearchGrounding = true, useUrlContext = true } = {}
 ) => {
 	const allTools: Record<string, any> = { ...mcpTools };
-	const capabilities = getProviderCapabilities(provider);
+	const capabilities = getProviderCapabilities(provider, modelId);
 	// Gemini cannot mix built-in tools with MCP function tools.
 	if (isGoogleProvider(provider) && Object.keys(allTools).length === 0) {
 		if (useSearchGrounding && capabilities.search && supportsSearchGrounding(modelId)) {
@@ -402,7 +402,7 @@ export const streamResponse = async (
 	const llm = getLlm(provider, providerParams) as any;
 	const modelId = model || "gemini-3-flash-preview";
 	const useGoogle = isGoogleProvider(provider);
-	const capabilities = getProviderCapabilities(provider);
+	const capabilities = getProviderCapabilities(provider, modelId);
 	const canUseSearch = useGoogle && capabilities.search && supportsSearchGrounding(modelId);
 	const canUseUrlContext = useGoogle && capabilities.urlContext && supportsUrlContext(modelId);
 
@@ -629,7 +629,7 @@ export const getResponse = async (
 	const llm = getLlm(provider, providerParams) as any;
 	const modelId = model || "gemini-3-flash-preview";
 	const useGoogle = isGoogleProvider(provider);
-	const capabilities = getProviderCapabilities(provider);
+	const capabilities = getProviderCapabilities(provider, modelId);
 	const canUseSearch = useSearchGrounding && useGoogle && capabilities.search && supportsSearchGrounding(modelId);
 	const canUseUrlContext = useUrlContext && useGoogle && capabilities.urlContext && supportsUrlContext(modelId);
 
@@ -726,7 +726,13 @@ export const getResponse = async (
 	}
 
 	logDebug("AI response", { text });
-	if (includeMetadata) return { text: text ?? "", sources: textResult.sources, providerMetadata: textResult.providerMetadata };
+	if (includeMetadata) {
+		// The SDK's parsed usage drops modality details; retain only that evidence from the raw response.
+		const raw = textResult.response?.body as any;
+		const inputModalities = (raw?.usageMetadata?.promptTokensDetails ?? [])
+			.filter((detail: any) => detail.tokenCount > 0).map((detail: any) => detail.modality);
+		return { text: text ?? "", sources: textResult.sources, providerMetadata: textResult.providerMetadata, inputModalities };
+	}
 	if (isJSON) {
 		try {
 			return JSON.parse(text as string);

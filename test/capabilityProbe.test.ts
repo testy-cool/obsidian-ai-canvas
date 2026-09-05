@@ -15,9 +15,9 @@ const settings = { ...DEFAULT_SETTINGS, models: [model], temperature: 0.2, maxRe
 const answers = () => [
 	{ text: "RED" },
 	{ text: "7431" },
-	{ text: "A man stands in front of elephants at a zoo." },
+	{ text: "A man stands in front of elephants at a zoo.", inputModalities: ["VIDEO"] },
 	{ text: "2026: A headline from today.", sources: [{ type: "source", url: "https://example.test/news" }] },
-	{ text: "Example Domain" },
+	{ text: "Example Domain", providerMetadata: {google:{urlContextMetadata:{urlMetadata:[{retrievedUrl:"https://example.com/",urlRetrievalStatus:"URL_RETRIEVAL_STATUS_SUCCESS"}]}}} },
 ];
 const installAnswers = (responses = answers()) => {
 	for (const response of responses) vi.mocked(getResponse).mockResolvedValueOnce(response);
@@ -43,8 +43,8 @@ describe("provider capability probes", () => {
 		expect(calls).toHaveLength(5);
 		for (const [index, call] of calls.entries()) {
 			expect(call[2]).toMatchObject({
-				model: model.model, timeoutMs: 30_000, includeMetadata: true,
-				temperature: 0.2, max_tokens: 100, providerParams: model.providerParams,
+				model: model.model, timeoutMs: 60_000, includeMetadata: true,
+				temperature: 0.2, max_tokens: 2048, providerParams: model.providerParams,
 				useSearchGrounding: index === 3, useUrlContext: index === 4,
 			});
 		}
@@ -61,11 +61,11 @@ describe("provider capability probes", () => {
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
-	it("records failed answer checks as no", async () => {
+	it("records failed answer checks as inconclusive", async () => {
 		installAnswers(Array(5).fill({ text: "No information." }));
 		const result = await probeProviderCapabilities(provider, model.model, settings);
 		for (const key of providerCapabilityKeys.filter(key => key !== "video")) {
-			expect(result[key]).toBe("no");
+			expect(result[key]).toBe("inconclusive");
 			expect(result.notes![key]).toBeTruthy();
 		}
 	});
@@ -78,15 +78,15 @@ describe("provider capability probes", () => {
 		const responses = answers();
 		responses[2] = { text };
 		installAnswers(responses);
-		expect((await probeProviderCapabilities(provider, model.model, settings)).youtube).toBe("no");
+		expect((await probeProviderCapabilities(provider, model.model, settings)).youtube).toBe("inconclusive");
 	});
 
 	it.each([
 		{ text: "2026 news", sources: [{ url: "https://example.test" }], expected: "yes" },
 		{ text: "2026 news", providerMetadata: { google: { groundingMetadata: { webSearchQueries: ["today"] } } }, expected: "yes" },
-		{ text: "2026 news", providerMetadata: { google: { groundingMetadata: {} } }, sources: [], expected: "no" },
-		{ text: "2026 news", expected: "no" },
-		{ text: "2025 news", sources: [{ url: "https://example.test" }], expected: "no" },
+		{ text: "2026 news", providerMetadata: { google: { groundingMetadata: {} } }, sources: [], expected: "inconclusive" },
+		{ text: "2026 news", expected: "inconclusive" },
+		{ text: "2025 news", sources: [{ url: "https://example.test" }], expected: "inconclusive" },
 	])("requires the current year and grounding evidence: $expected", async ({ expected, ...response }) => {
 		const responses: any[] = answers();
 		responses[3] = response;
@@ -99,7 +99,7 @@ describe("provider capability probes", () => {
 		const result = await probeProviderCapabilities(provider, model.model, settings);
 		expect(getResponse).toHaveBeenCalledTimes(5);
 		for (const key of providerCapabilityKeys.filter(key => key !== "video")) {
-			expect(result[key]).toBe("no");
+			expect(result[key]).toBe("error");
 			expect(result.notes![key]).toBe(error instanceof Error ? error.message : error);
 		}
 		expect(vi.getTimerCount()).toBe(0);
@@ -108,7 +108,7 @@ describe("provider capability probes", () => {
 	it.each([
 		"Failed to decode audio or visual data",
 		"Request contains an invalid argument",
-	])("records a YouTube HTTP 400 as no and retains its message: %s", async (message) => {
+	])("records a YouTube HTTP 400 as a test error and retains its message: %s", async (message) => {
 		const responses = answers();
 		vi.mocked(getResponse)
 			.mockResolvedValueOnce(responses[0])
@@ -117,23 +117,23 @@ describe("provider capability probes", () => {
 			.mockResolvedValueOnce(responses[3])
 			.mockResolvedValueOnce(responses[4]);
 		const report = await probeProviderCapabilities(provider, model.model, settings);
-		expect(report.youtube).toBe("no");
+		expect(report.youtube).toBe("error");
 		expect(report.notes?.youtube).toBe(`HTTP 400: ${message}`);
 		expect(report.search).toBe("yes");
 		expect(report.urlContext).toBe("yes");
 	});
 
-	it("times out each check after 30 seconds and starts the next only after it settles", async () => {
+	it("times out each check after 60 seconds and starts the next only after it settles", async () => {
 		vi.mocked(getResponse).mockImplementation(() => new Promise(() => {}));
 		const pending = probeProviderCapabilities(provider, model.model, settings);
 		for (let index = 1; index <= 5; index++) {
 			expect(getResponse).toHaveBeenCalledTimes(index);
-			await vi.advanceTimersByTimeAsync(30_000);
+			await vi.advanceTimersByTimeAsync(60_000);
 		}
 		const result = await pending;
 		for (const key of providerCapabilityKeys.filter(key => key !== "video")) {
-			expect(result[key]).toBe("no");
-			expect(result.notes![key]).toBe("Timed out after 30 seconds.");
+			expect(result[key]).toBe("error");
+			expect(result.notes![key]).toBe("Timed out after 60 seconds. Retry to check this capability.");
 		}
 		expect(vi.getTimerCount()).toBe(0);
 	});
@@ -148,7 +148,7 @@ describe("provider capability probes", () => {
 	])("skips video upload for $type (native: $geminiNative)", async ({ expected, ...config }) => {
 		installAnswers();
 		expect((await probeProviderCapabilities({ ...provider, ...config }, model.model, settings)).video).toBe(expected);
-		expect(getResponse).toHaveBeenCalledTimes(5);
+		expect(getResponse).toHaveBeenCalledTimes(expected === "no" ? 2 : 5);
 	});
 
 	it("re-tests previously failed capabilities without mutating the saved report", async () => {
@@ -166,7 +166,7 @@ it("reports independent progress snapshots as each capability finishes", async (
 	installAnswers();
 	const progress = vi.fn();
 	const report = await probeProviderCapabilities(provider, model.model, settings, progress);
-	const snapshots = progress.mock.calls.map(([snapshot]) => snapshot);
+	const snapshots = progress.mock.calls.map(([snapshot]) => snapshot).filter(snapshot => !snapshot.testing);
 	expect(snapshots).toHaveLength(7);
 	expect(snapshots[0].image).toBe("untested");
 	expect(snapshots[0].notes).toEqual({});
@@ -178,4 +178,23 @@ it("reports independent progress snapshots as each capability finishes", async (
 	expect(snapshots[6].urlContext).toBe("yes");
 	expect(snapshots.every(snapshot => !snapshot.testedAt)).toBe(true);
 	expect(report.testedAt).toBeTruthy();
+});
+
+
+it.each([401, 402, 403])("stops on an access or budget failure (HTTP %s) without marking capabilities unsupported", async (statusCode) => {
+	vi.mocked(getResponse).mockRejectedValue(Object.assign(new Error(`HTTP ${statusCode}: request blocked`), {statusCode}));
+	const report = await probeProviderCapabilities(provider, model.model, settings);
+	expect(report.image).toBe("error");
+	expect(report.pdf).toBe("untested");
+	expect(report.notes?.pdf).toContain("access");
+	expect(getResponse).toHaveBeenCalledTimes(1);
+});
+
+it("does not verify YouTube or URL context from a memorized answer alone", async () => {
+	const responses: any[] = answers();
+	responses[2] = {text:responses[2].text}; responses[4] = {text:responses[4].text};
+	installAnswers(responses);
+	const report = await probeProviderCapabilities(provider, model.model, settings);
+	expect(report.youtube).toBe("inconclusive");
+	expect(report.urlContext).toBe("inconclusive");
 });

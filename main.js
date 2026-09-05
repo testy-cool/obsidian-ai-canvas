@@ -48831,11 +48831,21 @@ var supportsGoogleTools = (modelId) => {
   var _a20;
   return /^gemini-(?:2\.5|3(?:\.\d+)?)-/.test((_a20 = modelId.split("/").pop()) != null ? _a20 : "");
 };
-var getProviderCapabilities = (provider) => {
+var getCapabilityRoute = (provider) => {
   var _a20;
+  return JSON.stringify([provider == null ? void 0 : provider.type, (_a20 = provider == null ? void 0 : provider.baseUrl) == null ? void 0 : _a20.replace(/\/+$/, ""), isGoogleProvider(provider)]);
+};
+var getCapabilityReportKey = (provider, model) => JSON.stringify([getCapabilityRoute(provider), model]);
+var getModelCapabilityReport = (provider, model) => {
+  var _a20;
+  const report = (_a20 = provider.capabilityReports) == null ? void 0 : _a20[getCapabilityReportKey(provider, model)];
+  return (report == null ? void 0 : report.schemaVersion) === 2 && report.model === model && report.route === getCapabilityRoute(provider) ? report : void 0;
+};
+var getProviderCapabilities = (provider, model) => {
   const capabilities = { ...isGoogleProvider(provider) ? google2 : openAICompatible };
+  const report = provider && model ? getModelCapabilityReport(provider, model) : void 0;
   for (const key of providerCapabilityKeys) {
-    const verdict = (_a20 = provider == null ? void 0 : provider.capabilityReport) == null ? void 0 : _a20[key];
+    const verdict = report == null ? void 0 : report[key];
     if (verdict === "yes" || verdict === "no")
       capabilities[key] = verdict === "yes";
   }
@@ -49069,7 +49079,7 @@ var supportsUrlContext = supportsGoogleTools;
 var supportsSearchGrounding = supportsUrlContext;
 var buildTools = (provider, modelId, mcpTools, { useSearchGrounding = true, useUrlContext = true } = {}) => {
   const allTools = { ...mcpTools };
-  const capabilities = getProviderCapabilities(provider);
+  const capabilities = getProviderCapabilities(provider, modelId);
   if (isGoogleProvider(provider) && Object.keys(allTools).length === 0) {
     if (useSearchGrounding && capabilities.search && supportsSearchGrounding(modelId)) {
       allTools.google_search = google.tools.googleSearch({});
@@ -49117,7 +49127,7 @@ var streamResponse = async (provider, messages, {
   const llm = getLlm(provider, providerParams);
   const modelId = model || "gemini-3-flash-preview";
   const useGoogle = isGoogleProvider(provider);
-  const capabilities = getProviderCapabilities(provider);
+  const capabilities = getProviderCapabilities(provider, modelId);
   const canUseSearch = useGoogle && capabilities.search && supportsSearchGrounding(modelId);
   const canUseUrlContext = useGoogle && capabilities.urlContext && supportsUrlContext(modelId);
   const isFlexTier = (providerParams == null ? void 0 : providerParams.serviceTier) === "flex";
@@ -49289,7 +49299,7 @@ var getResponse = async (provider, messages, {
   timeoutMs,
   onComplete
 } = {}) => {
-  var _a20, _b19;
+  var _a20, _b19, _c, _d, _e;
   if (provider.type === "Codex") {
     let text3 = "";
     await streamCodexResponse(provider, messages, { model, providerParams, timeoutMs, onComplete }, (chunk) => {
@@ -49317,7 +49327,7 @@ var getResponse = async (provider, messages, {
   const llm = getLlm(provider, providerParams);
   const modelId = model || "gemini-3-flash-preview";
   const useGoogle = isGoogleProvider(provider);
-  const capabilities = getProviderCapabilities(provider);
+  const capabilities = getProviderCapabilities(provider, modelId);
   const canUseSearch = useSearchGrounding && useGoogle && capabilities.search && supportsSearchGrounding(modelId);
   const canUseUrlContext = useUrlContext && useGoogle && capabilities.urlContext && supportsUrlContext(modelId);
   const isFlexTier = (providerParams == null ? void 0 : providerParams.serviceTier) === "flex";
@@ -49422,8 +49432,11 @@ var getResponse = async (provider, messages, {
     });
   }
   logDebug("AI response", { text: text2 });
-  if (includeMetadata)
-    return { text: text2 != null ? text2 : "", sources: textResult.sources, providerMetadata: textResult.providerMetadata };
+  if (includeMetadata) {
+    const raw = (_c = textResult.response) == null ? void 0 : _c.body;
+    const inputModalities = ((_e = (_d = raw == null ? void 0 : raw.usageMetadata) == null ? void 0 : _d.promptTokensDetails) != null ? _e : []).filter((detail) => detail.tokenCount > 0).map((detail) => detail.modality);
+    return { text: text2 != null ? text2 : "", sources: textResult.sources, providerMetadata: textResult.providerMetadata, inputModalities };
+  }
   if (isJSON) {
     try {
       return JSON.parse(text2);
@@ -51210,7 +51223,7 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
     const provider = resolveProvider();
     const model = resolveModel(provider);
     const isGpt = (provider == null ? void 0 : provider.type) === "OpenAI";
-    const capabilities = getProviderCapabilities(provider);
+    const capabilities = getProviderCapabilities(provider, model == null ? void 0 : model.model);
     const warnedMedia = /* @__PURE__ */ new Set();
     const warnUnsupportedMedia = (media) => {
       if (warnedMedia.has(media))
@@ -51529,7 +51542,7 @@ ${nodeText}`);
         const toolRefs = /* @__PURE__ */ new Map();
         const hasMcpTools = mcpTools && Object.keys(mcpTools).length > 0;
         const mcpToolCount = hasMcpTools ? Object.keys(mcpTools).length : 0;
-        const capabilities = getProviderCapabilities(provider);
+        const capabilities = getProviderCapabilities(provider, model == null ? void 0 : model.model);
         const canUseGoogleTools = supportsGoogleTools(model.model) && !hasMcpTools;
         const usesUrlContext = capabilities.urlContext && canUseGoogleTools;
         const usesSearchGrounding = capabilities.search && canUseGoogleTools;
@@ -52267,6 +52280,7 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
     this.modelListEl = null;
     this.modelParams = /* @__PURE__ */ new Map();
     this.expandedParams = /* @__PURE__ */ new Set();
+    this.initialProvider = existingProvider ? { ...existingProvider } : void 0;
     this.editing = !!existingProvider;
     this.provider = existingProvider ? { ...existingProvider } : { enabled: true };
     if (existingProvider) {
@@ -52336,7 +52350,7 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
           geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
       });
     });
-    geminiNativeSetting = new import_obsidian18.Setting(contentEl).setName("Use Gemini-native API").setDesc("Route requests through Bifrost's /genai endpoint so Google search grounding, URL context and YouTube links work. Model ids stay as listed (for example vertex/gemini-3.1-pro-preview).").addToggle((toggle) => {
+    geminiNativeSetting = new import_obsidian18.Setting(contentEl).setName("Use Gemini-native API").setDesc("Use Google's request format for Gemini models through Bifrost. Enables testing of YouTube input, Google Search and URL context. Support depends on the selected model.").addToggle((toggle) => {
       var _a21;
       return toggle.setValue((_a21 = this.provider.geminiNative) != null ? _a21 : false).onChange((value) => {
         this.provider.geminiNative = value;
@@ -52403,7 +52417,7 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
       this.nameField.input.value = type;
       this.baseUrlField.input.value = (_b19 = this.provider.baseUrl) != null ? _b19 : "";
       this.baseUrlField.input.placeholder = azure ? "https://<resource>.services.ai.azure.com" : "https://api.example.com/v1";
-      baseUrlSetting.setDesc(azure ? "Azure OpenAI resource endpoint \u2014 no path, no api-version" : "OpenAI-compatible endpoint.");
+      baseUrlSetting.setDesc(azure ? "Azure OpenAI resource endpoint \u2014 no path, no api-version" : isBifrostProvider(this.provider) ? "Bifrost gateway address. Keep /v1 here when Gemini-native API is enabled." : "OpenAI-compatible endpoint.");
       baseUrlSetting.settingEl.style.display = gemini || vertex || codex ? "none" : "";
       apiKeyInput.placeholder = gemini ? "Google API key" : "sk-...";
       apiKeySetting.settingEl.style.display = vertex || codex ? "none" : "";
@@ -52418,11 +52432,11 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
       geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
     };
     updateProviderFields();
-    const connSetting = new import_obsidian18.Setting(contentEl);
+    const connSetting = new import_obsidian18.Setting(contentEl).setName("Available models").setDesc("Fetch the model list with these credentials. Test model capabilities from the Providers tab.");
     let connStatus;
     connSetting.addButton((btn) => {
       btn.buttonEl.addClass("provider-fetch-button");
-      btn.setButtonText("Test & fetch models").onClick(async () => {
+      btn.setButtonText("Fetch models").onClick(async () => {
         var _a21;
         const fetchVersion = this.modelFetchVersion;
         btn.setDisabled(true);
@@ -52459,18 +52473,21 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
         } catch (e) {
           if (fetchVersion !== this.modelFetchVersion)
             return;
-          connStatus == null ? void 0 : connStatus.setText(`Failed: ${e}`);
+          const raw = e instanceof Error ? e.message : String(e);
+          const message = this.provider.apiKey ? raw.split(this.provider.apiKey).join("[redacted]") : raw;
+          connStatus == null ? void 0 : connStatus.setText(/\b401\b/.test(message) ? "Authentication failed (HTTP 401). Check the API key for this provider." : /\b403\b/.test(message) ? "Model listing denied (HTTP 403). Check this key's access." : `Could not fetch models: ${message}`);
           connStatus == null ? void 0 : connStatus.addClass("mod-warning");
           connStatus == null ? void 0 : connStatus.removeClass("mod-success");
         } finally {
           btn.setDisabled(false);
-          btn.setButtonText("Test & fetch models");
+          btn.setButtonText("Fetch models");
         }
       });
     });
     connStatus = connSetting.controlEl.createEl("span", {
-      cls: "setting-item-description"
+      cls: "setting-item-description provider-fetch-status"
     });
+    connStatus.setAttribute("role", "status");
     contentEl.createEl("h3", { text: "Models" });
     new import_obsidian18.Setting(contentEl).addText((text2) => {
       text2.setPlaceholder("Filter models...").onChange((val) => {
@@ -52531,7 +52548,7 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
     const filtered = this.getFilteredModelIds();
     if (filtered.length === 0 && this.fetchedModelIds.length === 0) {
       this.modelListEl.createEl("div", {
-        text: 'Click "Test & fetch models" to load available models.',
+        text: 'Click "Fetch models" to load available models.',
         cls: "setting-item-description"
       });
       return;
@@ -52670,11 +52687,16 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
       enabled: (_e = p.enabled) != null ? _e : true,
       geminiNative: isBifrostProvider(p) && ((_f = p.geminiNative) != null ? _f : false),
       capabilityReport: p.capabilityReport,
+      capabilityReports: p.capabilityReports,
       projectId: p.projectId,
       location: p.location,
       serviceAccountJson: p.serviceAccountJson,
       binaryPath: p.binaryPath
     };
+    if (this.initialProvider && ["apiKey", "baseUrl", "type", "geminiNative", "projectId", "location", "serviceAccountJson"].some((key) => key === "geminiNative" ? !!provider.geminiNative !== !!this.initialProvider.geminiNative : provider[key] !== this.initialProvider[key])) {
+      provider.capabilityReport = void 0;
+      provider.capabilityReports = void 0;
+    }
     const models = [...this.selectedModelIds].map((modelId) => {
       var _a21, _b20, _c2, _d2, _e2, _f2;
       const existing = this.existingModels.find((m) => m.model === modelId);
@@ -52705,7 +52727,7 @@ UnifiedProviderModal.MODEL_PAGE_SIZE = 50;
 // src/utils/capabilityProbe.ts
 var RED_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 var PROBE_PDF = "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA0MDAgMjAwXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggNDkgPj4Kc3RyZWFtCkJUIC9GMSAyNCBUZiA0MCAxMDAgVGQgKENBTlZBUyBQUk9CRSA3NDMxKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwMzExIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDA5CiUlRU9GCg==";
-var TIMEOUT_MS = 3e4;
+var TIMEOUT_MS = 6e4;
 var probeProviderCapabilities = async (provider, modelId, settings2, onProgress) => {
   const notes = {};
   const report = {
@@ -52716,21 +52738,38 @@ var probeProviderCapabilities = async (provider, modelId, settings2, onProgress)
     search: "untested",
     urlContext: "untested",
     model: modelId,
+    schemaVersion: 2,
+    route: getCapabilityRoute(provider),
     notes
   };
   const reportProgress = () => onProgress == null ? void 0 : onProgress({ ...report, notes: { ...notes } });
   reportProgress();
-  const probeProvider = { ...provider, capabilityReport: void 0 };
+  const probeProvider = { ...provider, capabilityReport: void 0, capabilityReports: void 0 };
+  const available = getProviderCapabilities(probeProvider, modelId);
+  let accessFailed = false;
   const model = settings2.models.find((item) => item.providerId === provider.id && item.model === modelId);
   const check2 = async (capability, content, accept, failure) => {
     var _a20;
+    if (accessFailed) {
+      notes[capability] = "Not run because access or budget checks failed. Resolve the error above, then retry.";
+      reportProgress();
+      return;
+    }
+    if (!available[capability] || ["search", "urlContext"].includes(capability) && !supportsGoogleTools(modelId)) {
+      report[capability] = "no";
+      notes[capability] = "Unavailable through this model's current API mode. No request was sent.";
+      reportProgress();
+      return;
+    }
+    report.testing = capability;
+    reportProgress();
     let timer;
     try {
       const response = await Promise.race([
         getResponse2(probeProvider, [{ role: "user", content }], {
           model: modelId,
           temperature: settings2.temperature,
-          max_tokens: settings2.maxResponseTokens || void 0,
+          max_tokens: 2048,
           providerParams: model == null ? void 0 : model.providerParams,
           timeoutMs: TIMEOUT_MS,
           includeMetadata: true,
@@ -52738,18 +52777,21 @@ var probeProviderCapabilities = async (provider, modelId, settings2, onProgress)
           useUrlContext: capability === "urlContext"
         }),
         new Promise((_, reject) => {
-          timer = setTimeout(() => reject(new Error("Timed out after 30 seconds.")), TIMEOUT_MS);
+          timer = setTimeout(() => reject(new Error("Timed out after 60 seconds. Retry to check this capability.")), TIMEOUT_MS);
         })
       ]);
       const result = typeof response === "string" ? { text: response } : response;
       const passed = accept(result);
-      report[capability] = passed ? "yes" : "no";
+      report[capability] = passed ? "yes" : "inconclusive";
       notes[capability] = `${passed ? "Passed." : failure} ${(_a20 = result.text) != null ? _a20 : ""}`.trim().slice(0, 500);
     } catch (error40) {
-      report[capability] = "no";
-      notes[capability] = error40 instanceof Error ? error40.message : String(error40);
+      report[capability] = "error";
+      const message = error40 instanceof Error ? error40.message : String(error40);
+      notes[capability] = provider.apiKey ? message.split(provider.apiKey).join("[redacted]") : message;
+      accessFailed = /\b(?:401|402|403)\b/.test(message) || [401, 402, 403].includes(error40 == null ? void 0 : error40.statusCode);
     } finally {
       clearTimeout(timer);
+      delete report.testing;
     }
     reportProgress();
   };
@@ -52764,7 +52806,10 @@ var probeProviderCapabilities = async (provider, modelId, settings2, onProgress)
   await check2("youtube", [
     { type: "text", text: "In one sentence, what is shown in this video?" },
     { type: "file", data: "https://www.youtube.com/watch?v=jNQXAC9IVRw", mediaType: "video/mp4" }
-  ], (result) => /zoo|elephant/i.test(result.text) && !/(?:cannot|can['’]t|unable to|do not|don['’]t).{0,60}(?:see|access|watch|view)/i.test(result.text), "The reply did not describe the zoo video or reported it could not access it.");
+  ], (result) => {
+    var _a20;
+    return ((_a20 = result.inputModalities) == null ? void 0 : _a20.includes("VIDEO")) === true && /zoo|elephant/i.test(result.text) && !/(?:cannot|can['’]t|unable to|do not|don['’]t).{0,60}(?:see|access|watch|view)/i.test(result.text);
+  }, "Video processing was not verified. A description alone is insufficient; the response must also report video input usage.");
   if (!isGoogleProvider(provider)) {
     report.video = "no";
     notes.video = "The OpenAI-compatible SDK rejects video file parts; no request was sent.";
@@ -52778,7 +52823,10 @@ var probeProviderCapabilities = async (provider, modelId, settings2, onProgress)
     const grounded = Boolean(((_c = result.sources) == null ? void 0 : _c.length) || grounding && Object.keys(grounding).length);
     return result.text.includes(String(new Date().getFullYear())) && grounded;
   }, "The reply lacked the current year or grounding evidence in sources/provider metadata.");
-  await check2("urlContext", "Read https://example.com and quote its first heading verbatim.", (result) => /Example Domain/i.test(result.text), "The reply did not contain Example Domain.");
+  await check2("urlContext", "Read https://example.com and quote its first heading verbatim.", (result) => {
+    var _a20, _b19, _c, _d;
+    return /Example Domain/i.test(result.text) && ((_d = (_c = (_b19 = (_a20 = result.providerMetadata) == null ? void 0 : _a20.google) == null ? void 0 : _b19.urlContextMetadata) == null ? void 0 : _c.urlMetadata) == null ? void 0 : _d.some((item) => /^https:\/\/example\.com\/?$/.test(item.retrievedUrl) && item.urlRetrievalStatus === "URL_RETRIEVAL_STATUS_SUCCESS"));
+  }, "URL retrieval was not verified. The expected heading alone can come from memory.");
   report.testedAt = new Date().toISOString();
   return report;
 };
@@ -52801,6 +52849,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.capabilityTests = /* @__PURE__ */ new Set();
+    this.capabilityModels = /* @__PURE__ */ new Map();
     this.capabilityProgress = /* @__PURE__ */ new Map();
     this.capabilityViews = /* @__PURE__ */ new Map();
     this.modelFilters = {};
@@ -53072,6 +53121,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     });
   }
   renderProviderModels(provider, container) {
+    var _a20, _b19, _c;
     const modelsWrapper = container.createDiv("provider-models");
     const getProviderModels = () => this.plugin.settings.models.filter((m) => m.providerId === provider.id);
     const header = modelsWrapper.createDiv("provider-models-header");
@@ -53083,6 +53133,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
       const providerModels = getProviderModels();
       const enabledCount = providerModels.filter((m) => m.enabled).length;
       titleText.setText(`Models (${enabledCount}/${providerModels.length})`);
+      refreshTestModels();
     };
     const addBtn = new import_obsidian19.ButtonComponent(actions);
     addBtn.setButtonText("Add Model");
@@ -53103,7 +53154,24 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
       }, provider, this.plugin.settings.models.filter((m) => m.providerId === provider.id)).open();
     });
     const reportEl = modelsWrapper.createDiv("provider-capability-report");
-    const chips = reportEl.createDiv("provider-meta");
+    const modelSetting = new import_obsidian19.Setting(reportEl).setName("Test model").setDesc(`${isGoogleProvider(provider) ? "Gemini-native" : "OpenAI-compatible"} API. Results apply to this model only. Runs up to five small requests.`);
+    let selectedModel = (_a20 = this.capabilityModels.get(provider.id)) != null ? _a20 : this.plugin.settings.apiModel;
+    if (!getProviderModels().some((model) => model.enabled && model.id === selectedModel)) {
+      selectedModel = (_c = (_b19 = getProviderModels().find((model) => model.enabled)) == null ? void 0 : _b19.id) != null ? _c : "";
+    }
+    this.capabilityModels.set(provider.id, selectedModel);
+    const modelSelect = new import_obsidian19.DropdownComponent(modelSetting.controlEl);
+    modelSelect.selectEl.addClass("provider-capability-model");
+    modelSelect.selectEl.setAttribute("aria-label", "Model to test");
+    for (const model of getProviderModels().filter((model2) => model2.enabled))
+      modelSelect.addOption(model.id, model.model);
+    modelSelect.setValue(selectedModel).onChange((value) => {
+      selectedModel = value;
+      this.capabilityModels.set(provider.id, value);
+      selectedCapability = void 0;
+      renderReport();
+    });
+    const chips = reportEl.createDiv("provider-capability-results");
     const chipElements = /* @__PURE__ */ new Map();
     const testedLine = reportEl.createDiv({ cls: "provider-models-desc provider-capability-tested", text: "Not tested yet" });
     const noteLine = reportEl.createDiv("provider-capability-note");
@@ -53119,33 +53187,41 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
       chipElements.set(capability, chip);
     }
     const renderReport = () => {
-      var _a20, _b19, _c, _d, _e, _f, _g;
+      var _a21, _b20, _c2, _d, _e, _f;
       const current = this.plugin.settings.providers.find((item) => item.id === provider.id);
-      const report = (_a20 = this.capabilityProgress.get(provider.id)) != null ? _a20 : current == null ? void 0 : current.capabilityReport;
+      const model = getProviderModels().find((model2) => model2.id === selectedModel);
+      const progress = this.capabilityProgress.get(provider.id);
+      const report = (progress == null ? void 0 : progress.model) === (model == null ? void 0 : model.model) ? progress : current && model ? getModelCapabilityReport(current, model.model) : void 0;
+      const labels = { image: "Images", pdf: "PDF", video: "Video files", youtube: "YouTube", search: "Google Search", urlContext: "URL context" };
+      const statuses = { yes: "Verified", no: "Unavailable", untested: "Not tested", error: "Test failed", inconclusive: "Unverified" };
       for (const [capability, chip] of chipElements) {
-        const verdict = (_b19 = report == null ? void 0 : report[capability]) != null ? _b19 : "untested";
-        const symbol21 = verdict === "yes" ? "\u2713" : verdict === "no" ? "\u2717" : "?";
-        chip.setText(`${capability === "urlContext" ? "url" : capability} ${symbol21}`);
-        chip.setAttribute("title", (_d = (_c = report == null ? void 0 : report.notes) == null ? void 0 : _c[capability]) != null ? _d : "Not tested.");
+        const verdict = (_a21 = report == null ? void 0 : report[capability]) != null ? _a21 : "untested";
+        chip.setText(`${labels[capability]}: ${(report == null ? void 0 : report.testing) === capability ? "Testing\u2026" : statuses[verdict]}`);
+        chip.setAttribute("title", (_c2 = (_b20 = report == null ? void 0 : report.notes) == null ? void 0 : _b20[capability]) != null ? _c2 : "Not tested.");
         chip.setAttribute("aria-expanded", String(selectedCapability === capability));
       }
-      testedLine.setText((report == null ? void 0 : report.testedAt) ? `Tested ${new Date(report.testedAt).toLocaleString()} with ${(_e = report.model) != null ? _e : "unknown model"}` : "Not tested yet");
-      noteLine.setText(selectedCapability ? (_g = (_f = report == null ? void 0 : report.notes) == null ? void 0 : _f[selectedCapability]) != null ? _g : "Not tested." : "");
+      testedLine.setText((report == null ? void 0 : report.testedAt) ? `Tested ${new Date(report.testedAt).toLocaleString()} with ${(_d = report.model) != null ? _d : "unknown model"}` : (report == null ? void 0 : report.testing) ? `Testing ${labels[report.testing]} with ${model == null ? void 0 : model.model}` : (current == null ? void 0 : current.capabilityReport) && !report ? "Previous gateway-wide results need a new test for this model." : "Not tested yet");
+      const detail = selectedCapability != null ? selectedCapability : providerCapabilityKeys.find((key) => (report == null ? void 0 : report[key]) === "error");
+      noteLine.setText(detail ? (_f = (_e = report == null ? void 0 : report.notes) == null ? void 0 : _e[detail]) != null ? _f : "Not tested." : "");
     };
     renderReport();
-    const testBtn = new import_obsidian19.ButtonComponent(actions);
+    const testBtn = new import_obsidian19.ButtonComponent(modelSetting.controlEl);
     testBtn.buttonEl.addClass("provider-capability-test-button");
-    const updateTestButton = () => testBtn.setButtonText(this.capabilityTests.has(provider.id) ? "Testing\u2026" : "Test capabilities").setDisabled(this.capabilityTests.has(provider.id));
+    const updateTestButton = () => {
+      const testing = this.capabilityTests.has(provider.id);
+      modelSelect.setDisabled(testing);
+      testBtn.setButtonText(testing ? "Testing\u2026" : "Test selected model").setDisabled(testing);
+    };
     updateTestButton();
     this.capabilityViews.set(provider.id, () => {
       renderReport();
       updateTestButton();
     });
     testBtn.onClick(async () => {
-      var _a20;
+      var _a21;
       if (this.capabilityTests.has(provider.id))
         return;
-      const model = getProviderModels().find((item) => item.enabled);
+      const model = getProviderModels().find((item) => item.enabled && item.id === selectedModel);
       if (!model) {
         new import_obsidian19.Notice(`Enable a model for ${provider.type} before testing capabilities.`);
         return;
@@ -53153,18 +53229,20 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
       const current = this.plugin.settings.providers.find((item) => item.id === provider.id);
       if (!current)
         return;
+      const testedProvider = { ...current };
+      const reportKey = getCapabilityReportKey(testedProvider, model.model);
       this.capabilityTests.add(provider.id);
       updateTestButton();
       try {
-        const report = await probeProviderCapabilities(current, model.model, this.plugin.settings, (progress) => {
-          var _a21;
+        const report = await probeProviderCapabilities(testedProvider, model.model, this.plugin.settings, (progress) => {
+          var _a26;
           this.capabilityProgress.set(provider.id, progress);
           renderReport();
-          (_a21 = this.capabilityViews.get(provider.id)) == null ? void 0 : _a21();
+          (_a26 = this.capabilityViews.get(provider.id)) == null ? void 0 : _a26();
         });
         const saved = this.plugin.settings.providers.find((item) => item.id === provider.id);
-        if (saved) {
-          saved.capabilityReport = report;
+        if (saved && getCapabilityReportKey(saved, model.model) === reportKey && saved.apiKey === testedProvider.apiKey) {
+          saved.capabilityReports = { ...saved.capabilityReports, [reportKey]: report };
           await this.plugin.saveSettings();
         }
       } catch (error40) {
@@ -53172,11 +53250,31 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
       } finally {
         this.capabilityTests.delete(provider.id);
         this.capabilityProgress.delete(provider.id);
+        refreshTestModels();
         renderReport();
         updateTestButton();
-        (_a20 = this.capabilityViews.get(provider.id)) == null ? void 0 : _a20();
+        (_a21 = this.capabilityViews.get(provider.id)) == null ? void 0 : _a21();
       }
     });
+    let shownModels = JSON.stringify(getProviderModels().filter((model) => model.enabled).map((model) => [model.id, model.model]));
+    const refreshTestModels = () => {
+      var _a21, _b20, _c2, _d;
+      if (this.capabilityTests.has(provider.id))
+        return;
+      const models = getProviderModels().filter((model) => model.enabled);
+      const signature = JSON.stringify(models.map((model) => [model.id, model.model]));
+      if (signature === shownModels)
+        return;
+      shownModels = signature;
+      modelSelect.selectEl.empty();
+      for (const model of models)
+        modelSelect.addOption(model.id, model.model);
+      if (!models.some((model) => model.id === selectedModel))
+        selectedModel = (_d = (_c2 = (_a21 = models.find((model) => model.id === this.plugin.settings.apiModel)) == null ? void 0 : _a21.id) != null ? _c2 : (_b20 = models[0]) == null ? void 0 : _b20.id) != null ? _d : "";
+      modelSelect.setValue(selectedModel);
+      this.capabilityModels.set(provider.id, selectedModel);
+      renderReport();
+    };
     updateHeader();
     let filterText = this.modelFilters[provider.id] || "";
     let enabledOnly = this.modelEnabledOnly[provider.id] || false;
@@ -53419,9 +53517,10 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     }
   }
   renderGenerationSettings(containerEl) {
+    var _a20;
     new import_obsidian19.Setting(containerEl).setHeading().setName("Generation Settings");
     const activeProvider = this.plugin.settings.providers.find((provider) => provider.id === this.plugin.settings.activeProvider);
-    if (activeProvider && !getProviderCapabilities(activeProvider).search) {
+    if (activeProvider && !getProviderCapabilities(activeProvider, (_a20 = this.plugin.settings.models.find((model) => model.id === this.plugin.settings.apiModel)) == null ? void 0 : _a20.model).search) {
       containerEl.createDiv({
         cls: "provider-capability-note",
         text: `The active provider (${activeProvider.type}) cannot do search grounding. Use a Gemini provider or Bifrost with the Gemini-native API.`
