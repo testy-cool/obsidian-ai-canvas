@@ -280,11 +280,29 @@ const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>)
 const isGoogleProvider = (provider: LLMProvider) =>
 	provider.type === "Gemini" || provider.type === "Google" || provider.type === "Vertex";
 
-const supportsSearchGrounding = (modelId: string) =>
-	/^(?:models\/)?gemini-2\.5-/.test(modelId);
-
 const supportsUrlContext = (modelId: string) =>
-	/^(?:models\/)?gemini-(?:2\.5|3)-/.test(modelId);
+	/^(?:models\/)?gemini-(?:2\.5|3(?:\.\d+)?)-/.test(modelId);
+
+const supportsSearchGrounding = supportsUrlContext;
+
+export const buildTools = (
+	provider: LLMProvider,
+	modelId: string,
+	mcpTools?: Record<string, any>,
+	{ useSearchGrounding = true, useUrlContext = true } = {}
+) => {
+	const allTools: Record<string, any> = { ...mcpTools };
+	// Gemini cannot mix built-in tools with MCP function tools.
+	if (isGoogleProvider(provider) && Object.keys(allTools).length === 0) {
+		if (useSearchGrounding && supportsSearchGrounding(modelId)) {
+			allTools.google_search = google.tools.googleSearch({});
+		}
+		if (useUrlContext && supportsUrlContext(modelId)) {
+			allTools.url_context = google.tools.urlContext({});
+		}
+	}
+	return Object.keys(allTools).length > 0 ? allTools : undefined;
+};
 
 const enrichHttpError = (error: any, fallback: string): string => {
 	let body = error?.responseBody;
@@ -354,23 +372,8 @@ export const streamResponse = async (
 	const wantsFlexFallback = isFlexTier && providerParams?.flexFallback === true;
 	const effectiveTimeout = timeoutMs ?? (isFlexTier ? 600_000 : 60_000);
 
-	// Build tools - can't mix url_context with MCP tools (Gemini limitation)
-	const buildTools = (useUrlContext: boolean) => {
-		const allTools: Record<string, any> = {};
-		const hasMcpTools = mcpTools && Object.keys(mcpTools).length > 0;
-
-		// Only use url_context if there are no MCP tools (Gemini doesn't support mixing them)
-		if (useUrlContext && !hasMcpTools) {
-			allTools.url_context = google.tools.urlContext({});
-		}
-		if (mcpTools) {
-			Object.assign(allTools, mcpTools);
-		}
-		return Object.keys(allTools).length > 0 ? allTools : undefined;
-	};
-
 	const runStream = (useSearchGrounding: boolean, useUrlContext: boolean) => {
-		const tools = buildTools(useUrlContext);
+		const tools = buildTools(provider, modelId, mcpTools, { useSearchGrounding, useUrlContext });
 		const hasTools = tools && Object.keys(tools).length > 0;
 
 		console.log("[AI Canvas] Calling streamText:", {
@@ -387,7 +390,7 @@ export const streamResponse = async (
 		const timer = setTimeout(() => abortController.abort(), effectiveTimeout);
 
 		const streamConfig: any = {
-			model: useSearchGrounding ? llm(modelId, { useSearchGrounding: true }) : llm(modelId),
+			model: llm(modelId),
 			messages,
 			maxOutputTokens: max_tokens,
 			temperature,
@@ -588,12 +591,12 @@ export const getResponse = async (
 
 	const runGenerate = (useSearchGrounding: boolean, useUrlContext: boolean) =>
 		generateText({
-			model: useSearchGrounding ? llm(modelId, { useSearchGrounding: true }) : llm(modelId),
+			model: llm(modelId),
 			messages,
 			maxOutputTokens: max_tokens,
 			temperature,
 			abortSignal: abortController.signal,
-			...(useUrlContext && { tools: { url_context: google.tools.urlContext({}) } }),
+			tools: buildTools(provider, modelId, undefined, { useSearchGrounding, useUrlContext }),
 		});
 
 	let textResult;

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LLMProvider } from "../src/settings/AugmentedCanvasSettings";
-import { getResponse, streamResponse } from "../src/utils/ai";
+import { buildTools, getResponse, streamResponse } from "../src/utils/ai";
 
 const originalFetch = globalThis.fetch;
 
@@ -177,5 +177,73 @@ describe("provider HTTP errors", () => {
 		expect(onComplete).toHaveBeenCalledWith(
 			expect.objectContaining({ error: expected })
 		);
+	});
+});
+
+describe("Google provider tools", () => {
+	it.each(["Gemini", "Google", "Vertex"])("enables search and URL context for %s without MCP tools", (type) => {
+		const tools = buildTools(makeProvider({ type }), "gemini-3-flash-preview");
+		expect(tools).toMatchObject({
+			google_search: { id: "google.google_search" },
+			url_context: { id: "google.url_context" },
+		});
+	});
+
+	it("does not send Google tools through Bifrost, even for a Gemini model", () => {
+		expect(buildTools(makeProvider(), "gemini-3-flash-preview")).toBeUndefined();
+	});
+
+	it("keeps MCP tools without mixing in either Google built-in tool", () => {
+		const mcpTools = { lookup: { description: "Test function tool" } };
+		expect(buildTools(makeProvider({ type: "Gemini" }), "gemini-3-flash-preview", mcpTools)).toEqual(mcpTools);
+	});
+
+	it.each(["gemini-2.5-flash", "gemini-3-flash-preview", "models/gemini-3.1-pro-preview"])("uses the same search and URL context gate for %s", (model) => {
+		expect(Object.keys(buildTools(makeProvider({ type: "Gemini" }), model)!)).toEqual(["google_search", "url_context"]);
+	});
+
+	it("omits both built-in tools for older models and for the fallback", () => {
+		const provider = makeProvider({ type: "Gemini" });
+		expect(buildTools(provider, "gemini-2.0-flash")).toBeUndefined();
+		expect(buildTools(provider, "gemini-3-flash-preview", undefined, {
+			useSearchGrounding: false, useUrlContext: false,
+		})).toBeUndefined();
+	});
+
+	const googleResponse = {
+		candidates: [{ content: { role: "model", parts: [{ text: "ok" }] }, finishReason: "STOP" }],
+		usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 },
+	};
+
+	it("serializes both tools through the real SDK for streaming requests", async () => {
+		const requests: Request[] = [];
+		globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			requests.push(new Request(input, init));
+			return new Response(`data: ${JSON.stringify(googleResponse)}\n\n`, {
+				headers: { "Content-Type": "text/event-stream" },
+			});
+		});
+		const callback = vi.fn();
+		await streamResponse(makeProvider({ type: "Gemini" }), [{ role: "user", content: "hello" }], { model: "gemini-3-flash-preview" }, callback);
+		expect(requests).toHaveLength(1);
+		expect((await requests[0].json()).tools).toEqual([{ googleSearch: {} }, { urlContext: {} }]);
+		expect(callback).toHaveBeenCalledWith("ok", null, null, null);
+	});
+
+	it("retries non-streaming requests without either tool when Google rejects them", async () => {
+		const requests: Request[] = [];
+		globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			requests.push(new Request(input, init));
+			return new Response(JSON.stringify(requests.length === 1
+				? { error: { message: "Unsupported tools", code: 400 } }
+				: googleResponse), {
+				status: requests.length === 1 ? 400 : 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		});
+		expect(await getResponse(makeProvider({ type: "Gemini" }), [{ role: "user", content: "hello" }], { model: "gemini-3-flash-preview" })).toBe("ok");
+		expect(requests).toHaveLength(2);
+		expect((await requests[0].json()).tools).toEqual([{ googleSearch: {} }, { urlContext: {} }]);
+		expect((await requests[1].json()).tools).toBeUndefined();
 	});
 });

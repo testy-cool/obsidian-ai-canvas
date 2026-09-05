@@ -104,7 +104,8 @@ describe.skipIf(!GEMINI_API_KEY)('Gemini API Tests', () => {
 				try {
 					console.log(`Search grounding with ${model}...`);
 					const { text } = await generateText({
-						model: provider(model, { useSearchGrounding: true }),
+						model: provider(model),
+						tools: { google_search: google.tools.googleSearch({}) },
 						prompt: 'What year is it currently? Just the year number.',
 					});
 					expect(text).toMatch(/202[4-9]/);
