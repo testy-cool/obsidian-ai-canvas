@@ -87,6 +87,7 @@ const fixture = (ancestors = true) => {
 			getData() { return { ...this.unknownData, text: this.text }; },
 			setData(data: any) { Object.assign(this.unknownData, data); },
 			setText(text: string) { this.text = text; this.contentEl.children = []; },
+			render: vi.fn(),
 			moveAndResize: vi.fn(),
 		};
 		canvas.nodes.set(id, node);
@@ -145,6 +146,44 @@ afterEach(() => {
 });
 
 describe("context picker request paths", () => {
+	it.each([false, true])("fills a response whose content has not rendered yet (regeneration: %s)", async (regenerate) => {
+		const { app, canvas, prompt, settings } = fixture(false);
+		const makeNode = canvas.makeNode;
+		canvas.makeNode = (id: string, text: string) => {
+			const node = makeNode(id, text);
+			delete node.contentEl;
+			node.initialized = false;
+			node.setText = (value: string) => { node.text = value; };
+			node.render.mockImplementation(() => {
+				if (!node.initialized) {
+					node.initialized = true;
+					node.contentEl = new Element();
+				}
+			});
+			return node;
+		};
+		const existing = regenerate ? canvas.makeNode("existing", "old answer") : undefined;
+		await run(() => noteGenerator(app, settings, prompt, existing).generateNote());
+		const response = existing ?? canvas.nodes.get("response");
+		expect(streamResponse).toHaveBeenCalledOnce();
+		expect(response.text).toBe("ANSWER");
+		expect(response.initialized).toBe(true);
+		expect(badge(response).attributes.get("data-state")).toBe("complete");
+		expect(canvas.requestSave).toHaveBeenCalledTimes(2);
+	});
+
+	it("saves a visible error if rendering the response card fails", async () => {
+		const { app, canvas, prompt, settings } = fixture(false);
+		const response = canvas.makeNode("existing", "old answer");
+		delete response.contentEl;
+		response.setText = (text: string) => { response.text = text; };
+		response.render.mockImplementation(() => { throw new Error("Card rendering failed"); });
+		await run(() => noteGenerator(app, settings, prompt, response).generateNote());
+		expect(streamResponse).not.toHaveBeenCalled();
+		expect(response.text).toBe("**Error:** Card rendering failed");
+		expect(canvas.requestSave).toHaveBeenCalledTimes(2);
+	});
+
 	it.each([false, true])("starts with an empty body and a generating badge (regeneration: %s)", async (regenerate) => {
 		const { app, canvas, prompt, settings } = fixture(false);
 		const existing = regenerate ? canvas.makeNode("existing", "old answer") : undefined;

@@ -708,17 +708,20 @@ export function noteGenerator(
 				});
 			}
 
-			addModelIndicator(created, provider.type, model.model, true);
-			created.nodeEl?.addClass("ai-generating");
-
-			const isGpt = provider?.type === "OpenAI";
-			let noticeMessage = `Sending ${messages.length} notes to the AI`;
-			if (isGpt) {
-				noticeMessage = `Sending ${messages.length} notes with ${tokenCount} tokens to the AI`;
-			}
-			new Notice(noticeMessage);
-
 			try {
+				// Unfocused cards can lack contentEl until Canvas renders them.
+				// Render this card before attaching UI, without selecting or focusing it.
+				created.render();
+				addModelIndicator(created, provider.type, model.model, true);
+				created.nodeEl?.addClass("ai-generating");
+
+				const isGpt = provider?.type === "OpenAI";
+				let noticeMessage = `Sending ${messages.length} notes to the AI`;
+				if (isGpt) {
+					noticeMessage = `Sending ${messages.length} notes with ${tokenCount} tokens to the AI`;
+				}
+				new Notice(noticeMessage);
+
 				// logDebug("messages", messages);
 
 				// Get MCP tools if enabled
@@ -986,7 +989,7 @@ export function noteGenerator(
 				});
 			} finally {
 				created.nodeEl?.removeClass("ai-generating");
-				addModelIndicator(created, provider.type, model.model);
+				if (created.contentEl) addModelIndicator(created, provider.type, model.model);
 			}
 
 			await canvas.requestSave();

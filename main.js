@@ -48330,15 +48330,16 @@ ${nodeText}`);
           y: created.y
         });
       }
-      addModelIndicator(created, provider.type, model.model, true);
-      (_a20 = created.nodeEl) == null ? void 0 : _a20.addClass("ai-generating");
-      const isGpt = (provider == null ? void 0 : provider.type) === "OpenAI";
-      let noticeMessage = `Sending ${messages.length} notes to the AI`;
-      if (isGpt) {
-        noticeMessage = `Sending ${messages.length} notes with ${tokenCount} tokens to the AI`;
-      }
-      new import_obsidian11.Notice(noticeMessage);
       try {
+        created.render();
+        addModelIndicator(created, provider.type, model.model, true);
+        (_a20 = created.nodeEl) == null ? void 0 : _a20.addClass("ai-generating");
+        const isGpt = (provider == null ? void 0 : provider.type) === "OpenAI";
+        let noticeMessage = `Sending ${messages.length} notes to the AI`;
+        if (isGpt) {
+          noticeMessage = `Sending ${messages.length} notes with ${tokenCount} tokens to the AI`;
+        }
+        new import_obsidian11.Notice(noticeMessage);
         let mcpTools;
         if (settings2.mcpEnabled && settings2.mcpServers.length > 0) {
           try {
@@ -48536,7 +48537,8 @@ ${nodeText}`);
         });
       } finally {
         (_g = created.nodeEl) == null ? void 0 : _g.removeClass("ai-generating");
-        addModelIndicator(created, provider.type, model.model);
+        if (created.contentEl)
+          addModelIndicator(created, provider.type, model.model);
       }
       await canvas.requestSave();
     }
