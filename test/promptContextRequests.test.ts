@@ -44,7 +44,12 @@ class Element {
 	}
 	appendChild(child: Element) { child.parent = this; this.children.push(child); }
 	querySelector(selector: string): Element | null {
-		return this.children.find(child => child.className === selector.slice(1)) ?? null;
+		for (const child of this.children) {
+			if (child.className.split(" ").includes(selector.slice(1))) return child;
+			const nested = child.querySelector(selector);
+			if (nested) return nested;
+		}
+		return null;
 	}
 	remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); }
 	setAttribute(name: string, value: string) { this.attributes.set(name, value); }
@@ -53,7 +58,8 @@ class Element {
 	setText(text: string) { this.textContent = text; }
 	getText() { return this.textContent; }
 	addClass(name: string) { this.className = `${this.className} ${name}`.trim(); }
-	removeClass(name: string) { this.className = this.className.split(" ").filter(value => value !== name).join(" "); }
+	removeClass(...names: string[]) { this.className = this.className.split(" ").filter(value => !names.includes(value)).join(" "); }
+	contains(child: Element): boolean { return this.children.some(entry => entry === child || entry.contains(child)); }
 }
 
 const fixture = (ancestors = true) => {
@@ -390,6 +396,36 @@ describe("context picker request paths", () => {
 		const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 		const rule = css.match(/\.ai-model-indicator\s*\{([^}]+)\}/)![1];
 		expect(rule).toMatch(/font-size:\s*12px !important;/);
+	});
+});
+
+describe("tool call pills", () => {
+	it.each([
+		{ result: "done", isError: false, state: "success", glyph: "✓" },
+		{ result: "failed", isError: true, state: "error", glyph: "✗" },
+		{ result: { error: "failed" }, state: "error", glyph: "✗" },
+		{ result: { isError: true, content: [] }, state: "error", glyph: "✗" },
+	])("renders a $state result in the existing status block", async ({ result, isError, state, glyph }) => {
+		const { app, canvas, settings } = fixture(false);
+		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
+			callback(null, null, { type: "tool-call", toolName: "lookup", toolCallId: "call", args: { q: "test" } }, null);
+			const response = canvas.nodes.get("response");
+			const pill = response.contentEl.querySelector(".mcp-tool-call")!;
+			const summary = pill.children[0];
+			const summaryChildren = [...summary.children];
+			const status = pill.querySelector(".mcp-tool-status")!;
+			const glyphEl = status.querySelector(".mcp-tool-status-glyph")!;
+			expect(glyphEl.textContent).toBe("⏳");
+			callback(null, null, { type: "tool-result", toolCallId: "call", result, isError }, null);
+			expect(status.className).toContain(`mcp-tool-${state}`);
+			expect(status.querySelector(".mcp-tool-status-glyph")).toBe(glyphEl);
+			expect(glyphEl.textContent).toBe(glyph);
+			expect(summary.children).toEqual(summaryChildren);
+			callback("answer", null, null, null);
+			callback(null, { text: "answer" }, null, null);
+			expect(response.contentEl.querySelector(".mcp-tool-call")).toBe(pill);
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
 	});
 });
 

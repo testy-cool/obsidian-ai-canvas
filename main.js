@@ -46141,7 +46141,7 @@ var streamResponse = async (provider, messages, {
   timeoutMs,
   onComplete
 } = {}, cb) => {
-  var _a20, _b19, _c, _d;
+  var _a20, _b19, _c, _d, _e, _f;
   if (provider.type === "Codex") {
     return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete }, cb);
   }
@@ -46238,17 +46238,19 @@ var streamResponse = async (provider, messages, {
             type: "tool-call",
             toolName: part.toolName,
             toolCallId: part.toolCallId,
-            args: part.args
+            args: (_b19 = part.input) != null ? _b19 : part.args
           }, null);
           break;
         case "tool-result":
+        case "tool-error":
           deliveredOutput = true;
-          console.log("[AI Canvas] Tool result:", part.toolName, "length:", (_b19 = String(part.result)) == null ? void 0 : _b19.length);
+          console.log("[AI Canvas] Tool result:", part.toolName, "length:", (_c = String(part.result)) == null ? void 0 : _c.length);
           cb(null, null, {
             type: "tool-result",
             toolName: part.toolName,
             toolCallId: part.toolCallId,
-            result: part.result
+            result: part.type === "tool-error" ? part.error instanceof Error ? part.error.message : part.error : (_d = part.output) != null ? _d : part.result,
+            isError: part.type === "tool-error"
           }, null);
           break;
         case "error":
@@ -46266,8 +46268,8 @@ var streamResponse = async (provider, messages, {
     if (onComplete) {
       const usage = await finalResult.usage;
       onComplete({
-        inputTokens: (_c = usage == null ? void 0 : usage.inputTokens) != null ? _c : 0,
-        outputTokens: (_d = usage == null ? void 0 : usage.outputTokens) != null ? _d : 0,
+        inputTokens: (_e = usage == null ? void 0 : usage.inputTokens) != null ? _e : 0,
+        outputTokens: (_f = usage == null ? void 0 : usage.outputTokens) != null ? _f : 0,
         totalText: finalText != null ? finalText : ""
       });
     }
@@ -48351,7 +48353,7 @@ ${nodeText}`);
           providerParams: model.providerParams,
           timeoutMs: model.timeoutMs
         }, (delta, final, tool3, reasoningDelta) => {
-          var _a21, _b20, _c2, _d2, _e2, _f2, _g2;
+          var _a21, _b20, _c2, _d2, _e2, _f2, _g2, _h, _i;
           if (firstDelta) {
             created.setText("");
             if (hasMcpTools || usesUrlContext || usesSearchGrounding) {
@@ -48383,7 +48385,9 @@ ${nodeText}`);
                 summary.createEl("span", { text: `\u{1F527} ${tool3.toolName}`, cls: "mcp-tool-name" });
                 const argsText = truncateText2(JSON.stringify(tool3.args), 50);
                 summary.createEl("span", { text: `(${argsText})`, cls: "mcp-tool-args" });
-                const statusEl = toolEl.createEl("div", { text: "\u23F3 Running...", cls: "mcp-tool-status" });
+                const statusEl = toolEl.createEl("div", { cls: "mcp-tool-status" });
+                statusEl.createEl("span", { text: "\u23F3", cls: "mcp-tool-status-glyph" });
+                statusEl.createEl("span", { text: "Running...", cls: "mcp-tool-status-text" });
                 if (tool3.toolCallId) {
                   toolRefs.set(tool3.toolCallId, toolEl);
                 }
@@ -48395,8 +48399,11 @@ ${nodeText}`);
                   const statusEl = toolEl.querySelector(".mcp-tool-status");
                   if (statusEl) {
                     const resultText = truncateText2(typeof tool3.result === "string" ? tool3.result : JSON.stringify(tool3.result), 200);
-                    statusEl.setText(`\u2713 ${resultText}`);
-                    statusEl.addClass("mcp-tool-success");
+                    const isError = tool3.isError || ((_a21 = tool3.result) == null ? void 0 : _a21.isError) || ((_b20 = tool3.result) == null ? void 0 : _b20.error);
+                    statusEl.querySelector(".mcp-tool-status-glyph").setText(isError ? "\u2717" : "\u2713");
+                    statusEl.querySelector(".mcp-tool-status-text").setText(resultText);
+                    statusEl.removeClass("mcp-tool-success", "mcp-tool-error");
+                    statusEl.addClass(isError ? "mcp-tool-error" : "mcp-tool-success");
                   }
                 }
                 break;
@@ -48418,12 +48425,12 @@ ${nodeText}`);
                   x: created.x,
                   y: created.y
                 });
-                void ((_b20 = (_a21 = created.canvas) == null ? void 0 : _a21.requestFrame) == null ? void 0 : _b20.call(_a21));
+                void ((_d2 = (_c2 = created.canvas) == null ? void 0 : _c2.requestFrame) == null ? void 0 : _d2.call(_c2));
               }
             }
           }
           if (final) {
-            (_c2 = created.nodeEl) == null ? void 0 : _c2.removeClass("ai-generating");
+            (_e2 = created.nodeEl) == null ? void 0 : _e2.removeClass("ai-generating");
             const finalDimensions = calculateNoteDimensions(created.text);
             created.moveAndResize({
               height: finalDimensions.height,
@@ -48431,15 +48438,17 @@ ${nodeText}`);
               x: created.x,
               y: created.y
             });
-            void ((_e2 = (_d2 = created.canvas) == null ? void 0 : _d2.requestFrame) == null ? void 0 : _e2.call(_d2));
+            void ((_g2 = (_f2 = created.canvas) == null ? void 0 : _f2.requestFrame) == null ? void 0 : _g2.call(_f2));
             const htmlBlocks = extractHtmlCodeBlocks(created.text);
-            console.log("[HTML Preview] Text length:", (_f2 = created.text) == null ? void 0 : _f2.length, "HTML blocks found:", htmlBlocks.length);
+            console.log("[HTML Preview] Text length:", (_h = created.text) == null ? void 0 : _h.length, "HTML blocks found:", htmlBlocks.length);
             if (htmlBlocks.length > 0) {
               console.log("[HTML Preview] Adding preview to node, contentEl:", !!created.contentEl);
-              const previewEl = addHtmlPreviewToNode(created, htmlBlocks, (_g2 = settings2.autoPreviewHtml) != null ? _g2 : false);
+              const previewEl = addHtmlPreviewToNode(created, htmlBlocks, (_i = settings2.autoPreviewHtml) != null ? _i : false);
               console.log("[HTML Preview] Preview element created:", !!previewEl);
             }
           }
+          if (!created.contentEl.contains(toolsContainer))
+            created.contentEl.appendChild(toolsContainer);
           setModelIndicatorText(created, provider.type, model.model, !final);
         });
         if (isNewNode) {

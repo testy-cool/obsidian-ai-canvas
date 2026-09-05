@@ -364,6 +364,7 @@ export type ToolEvent = {
 	toolCallId?: string;
 	args?: any;
 	result?: any;
+	isError?: boolean;
 };
 
 export const streamResponse = async (
@@ -490,17 +491,21 @@ export const streamResponse = async (
 						type: 'tool-call',
 						toolName: (part as any).toolName,
 						toolCallId: (part as any).toolCallId,
-						args: (part as any).args,
+						args: (part as any).input ?? (part as any).args,
 					}, null);
 					break;
 				case 'tool-result':
+				case 'tool-error':
 					deliveredOutput = true;
 					console.log("[AI Canvas] Tool result:", (part as any).toolName, "length:", String((part as any).result)?.length);
 					cb(null, null, {
 						type: 'tool-result',
 						toolName: (part as any).toolName,
 						toolCallId: (part as any).toolCallId,
-						result: (part as any).result,
+						result: part.type === 'tool-error'
+							? (part.error instanceof Error ? part.error.message : part.error)
+							: (part as any).output ?? (part as any).result,
+						isError: part.type === 'tool-error',
 					}, null);
 					break;
 				case 'error':

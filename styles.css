@@ -728,6 +728,7 @@
 
 /* MCP Tool Display in Canvas Notes */
 .mcp-tools-container {
+	width: 100%;
 	margin: 8px 0;
 	font-size: var(--font-ui-small);
 }
@@ -756,19 +757,27 @@
 .mcp-tool-args {
 	color: var(--text-muted);
 	font-family: var(--font-monospace);
-	font-size: 0.9em;
+	font-size: 12px;
 }
 
 .mcp-tool-status {
+	border-left: 2px solid transparent;
+	display: grid;
+	grid-template-columns: 20px minmax(0, 1fr);
 	margin-top: 6px;
 	padding: 4px 8px;
 	border-radius: var(--radius-s);
 	background: var(--background-primary);
 	color: var(--text-muted);
 	font-family: var(--font-monospace);
-	font-size: 0.85em;
+	font-size: 12px;
 	white-space: pre-wrap;
 	word-break: break-word;
+}
+
+.mcp-tool-status-glyph {
+	width: 20px;
+	text-align: center;
 }
 
 .mcp-tool-status.mcp-tool-success {

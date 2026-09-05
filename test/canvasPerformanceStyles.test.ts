@@ -34,3 +34,17 @@ describe("canvas sizing and motion", () => {
 		expect(badge).toContain("font-size: 12px !important;");
 	});
 });
+
+
+describe("tool pill sizing", () => {
+	it("keeps result text readable and reserves a fixed status glyph cell", () => {
+		const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+		for (const selector of [".mcp-tool-status", ".mcp-tool-args"]) {
+			expect(block(css, selector)).toContain("font-size: 12px;");
+		}
+		expect(block(css, ".mcp-tool-status")).toContain("border-left: 2px solid transparent;");
+		expect(block(css, ".mcp-tool-status")).toContain("grid-template-columns: 20px minmax(0, 1fr);");
+		expect(block(css, ".mcp-tool-status-glyph")).toContain("width: 20px;");
+		expect(block(css, ".mcp-tools-container")).toContain("width: 100%;");
+	});
+});

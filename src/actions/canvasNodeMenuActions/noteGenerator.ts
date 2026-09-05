@@ -800,7 +800,9 @@ export function noteGenerator(
 									summary.createEl("span", { text: `🔧 ${tool.toolName}`, cls: "mcp-tool-name" });
 									const argsText = truncateText(JSON.stringify(tool.args), 50);
 									summary.createEl("span", { text: `(${argsText})`, cls: "mcp-tool-args" });
-									const statusEl = toolEl.createEl("div", { text: "⏳ Running...", cls: "mcp-tool-status" });
+									const statusEl = toolEl.createEl("div", { cls: "mcp-tool-status" });
+									statusEl.createEl("span", { text: "⏳", cls: "mcp-tool-status-glyph" });
+									statusEl.createEl("span", { text: "Running...", cls: "mcp-tool-status-text" });
 									if (tool.toolCallId) {
 										toolRefs.set(tool.toolCallId, toolEl);
 									}
@@ -815,8 +817,11 @@ export function noteGenerator(
 												typeof tool.result === "string" ? tool.result : JSON.stringify(tool.result),
 												200
 											);
-											statusEl.setText(`✓ ${resultText}`);
-											statusEl.addClass("mcp-tool-success");
+											const isError = tool.isError || tool.result?.isError || tool.result?.error;
+											statusEl.querySelector(".mcp-tool-status-glyph")!.setText(isError ? "✗" : "✓");
+											statusEl.querySelector(".mcp-tool-status-text")!.setText(resultText);
+											statusEl.removeClass("mcp-tool-success", "mcp-tool-error");
+											statusEl.addClass(isError ? "mcp-tool-error" : "mcp-tool-success");
 										}
 									}
 									break;
@@ -866,6 +871,7 @@ export function noteGenerator(
 								console.log("[HTML Preview] Preview element created:", !!previewEl);
 							}
 						}
+						if (!created.contentEl.contains(toolsContainer)) created.contentEl.appendChild(toolsContainer);
 						setModelIndicatorText(created, provider.type, model.model, !final);
 					}
 				);
