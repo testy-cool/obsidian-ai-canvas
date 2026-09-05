@@ -1117,3 +1117,27 @@
 	white-space: nowrap;
 	font-size: max(12px, var(--font-ui-small));
 }
+
+/* Keep validation beneath its field, with space for a one-line message. */
+.ac-settings-field {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 4px;
+	min-width: 0;
+}
+
+.ac-setting-hint,
+.ac-setting-error {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.ac-setting-error {
+	min-height: 1.5em;
+	color: var(--text-warning);
+}
+
+.ac-settings-field .mod-warning {
+	margin: 0;
+}

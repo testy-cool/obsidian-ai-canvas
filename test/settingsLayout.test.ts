@@ -20,6 +20,7 @@ class Element {
 	className = "";
 	text = "";
 	checked = false;
+	value = "";
 	disabled = false;
 	attributes = new Map<string, string>();
 	style: Record<string, string> = {};
@@ -33,7 +34,7 @@ class Element {
 		},
 	};
 	constructor(public tagName = "div") {}
-	focus = vi.fn();
+	focus = vi.fn(() => { (document as any).activeElement = this; });
 	get textContent(): string { return this.text + this.children.map(child => child.textContent).join(""); }
 	set textContent(value: string) { this.text = value; this.children = []; }
 	createEl(tag: string, options: string | { cls?: string; text?: string } = {}) {
@@ -462,5 +463,74 @@ describe("undo settings deletion", () => {
 		servers.forEach((server, i) => expect(plugin.settings.mcpServers[i]).toBe(server));
 		expect(plugin.saveSettings).toHaveBeenCalledTimes(2);
 		expect(display).toHaveBeenCalledTimes(2);
+	});
+});
+
+
+const settingNamed = (root: Element, name: string) => root.querySelectorAll(".setting-item")
+	.find(item => item.querySelector(".setting-item-name")?.textContent === name)!;
+
+describe("inline settings validation", () => {
+	it.each([
+		{ name: "Max agent steps", render: "renderMCPServers", key: "mcpMaxSteps", invalid: ["", "0", "21", "1.5", "2steps"], valid: ["1", "20"] },
+		{ name: "Max Response Tokens", render: "renderGenerationSettings", key: "maxResponseTokens", invalid: ["", "3.5", "12tokens", "Infinity"], valid: ["0", "-1", "4096"] },
+	])("shows $name errors without saving and clears them on valid input", async ({ name, render, key, invalid, valid }) => {
+		const plugin: any = { settings: { ...DEFAULT_SETTINGS }, saveSettings: vi.fn().mockResolvedValue(undefined) };
+		const tab: any = new SettingsTab({} as any, plugin);
+		const root = new Element();
+		tab[render](root);
+		const field = settingNamed(root, name);
+		const input = field.querySelector("input")!;
+		const warning = field.querySelector(".ac-setting-error")!;
+		expect(field.querySelector(".ac-setting-hint")!.textContent).toContain(name === "Max agent steps" ? "1 to 20" : "any integer; 0 means unlimited");
+		for (const value of invalid) {
+			input.value = value;
+			await input.listeners.get("input")!();
+			expect(input.classList.contains("mod-warning")).toBe(true);
+			expect(input.attributes.get("aria-invalid")).toBe("true");
+			expect(warning.textContent).not.toBe("");
+			expect(plugin.settings[key]).toBe(DEFAULT_SETTINGS[key]);
+		}
+		expect(plugin.saveSettings).not.toHaveBeenCalled();
+		for (const value of valid) {
+			input.value = value;
+			await input.listeners.get("input")!();
+			expect(input.classList.contains("mod-warning")).toBe(false);
+			expect(input.attributes.get("aria-invalid")).toBe("false");
+			expect(warning.textContent).toBe("");
+			expect(plugin.settings[key]).toBe(Number(value));
+		}
+		expect(plugin.saveSettings).toHaveBeenCalledTimes(valid.length);
+	});
+
+	it("focuses each missing provider field, keeps the modal open and clears corrected errors", async () => {
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave);
+		const close = vi.spyOn(modal, "close");
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		for (const [name, value, message] of [["Provider name", "My gateway", "Provider name is required."], ["Base URL", "https://example.test/v1", "Base URL is required."]]) {
+			const field = settingNamed(root, name);
+			const input = field.querySelector("input")!;
+			modal.save();
+			expect(input.classList.contains("mod-warning")).toBe(true);
+			expect(field.querySelector(".ac-setting-error")!.textContent).toBe(message);
+			expect(document.activeElement).toBe(input);
+			expect(onSave).not.toHaveBeenCalled();
+			expect(close).not.toHaveBeenCalled();
+			input.value = value;
+			await input.listeners.get("input")!();
+			expect(input.classList.contains("mod-warning")).toBe(false);
+			expect(field.querySelector(".ac-setting-error")!.textContent).toBe("");
+		}
+		modal.save();
+		expect(onSave).toHaveBeenCalledOnce();
+		expect(close).toHaveBeenCalledOnce();
+	});
+
+	it.each(["src/styles/settings.css", "styles.css"])("%s keeps validation text at 12px and reserves message space", path => {
+		const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+		expect(css).toContain(".ac-setting-hint,\n.ac-setting-error {\n\tfont-size: 12px;\n\tcolor: var(--text-muted);");
+		expect(css).toContain(".ac-setting-error {\n\tmin-height: 1.5em;");
 	});
 });

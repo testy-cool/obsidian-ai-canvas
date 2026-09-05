@@ -41,6 +41,8 @@ export class UnifiedProviderModal extends Modal {
   private static readonly MODEL_PAGE_SIZE = 50;
 
   private provider: Partial<LLMProvider>;
+	private nameField?: { input: HTMLInputElement; error: HTMLElement };
+	private baseUrlField?: { input: HTMLInputElement; error: HTMLElement };
   private selectedModelIds: Set<string> = new Set();
   private fetchedModelIds: string[] = [];
   private customModelInput = "";
@@ -110,12 +112,17 @@ export class UnifiedProviderModal extends Modal {
 
     // --- Provider name ---
 		let geminiNativeSetting: Setting | undefined;
-    new Setting(contentEl).setName("Provider name").addText((text) => {
+		const nameSetting = new Setting(contentEl).setName("Provider name");
+		nameSetting.controlEl.addClass("ac-settings-field");
+		nameSetting.addText((text) => {
+			this.nameField = { input: text.inputEl, error: nameSetting.controlEl.createDiv("ac-setting-error") };
+			this.nameField.error.setAttribute("aria-live", "polite");
       text
         .setPlaceholder("My Provider")
         .setValue(this.provider.type ?? "")
         .onChange((val) => {
           this.provider.type = val;
+					if (val.trim()) this.setFieldError(this.nameField, "");
 					if (geminiNativeSetting) geminiNativeSetting.settingEl.style.display = val === "Bifrost" ? "" : "none";
           if (!this.editing) this.provider.id = val.toLowerCase().replace(/\s+/g, "-");
         });
@@ -136,14 +143,17 @@ export class UnifiedProviderModal extends Modal {
       !isCodexType(this.provider.type ?? "")
     ) {
       const isAzure = this.provider.type === "Azure";
-      new Setting(contentEl)
-        .setName("Base URL")
+			const baseUrlSetting = new Setting(contentEl).setName("Base URL");
+			baseUrlSetting.controlEl.addClass("ac-settings-field");
+			baseUrlSetting
         .setDesc(
           isAzure
             ? "Azure OpenAI resource endpoint — no path, no api-version"
             : "OpenAI-compatible endpoint."
         )
         .addText((text) => {
+					this.baseUrlField = { input: text.inputEl, error: baseUrlSetting.controlEl.createDiv("ac-setting-error") };
+					this.baseUrlField.error.setAttribute("aria-live", "polite");
           text
             .setPlaceholder(
               isAzure
@@ -151,7 +161,10 @@ export class UnifiedProviderModal extends Modal {
                 : "https://api.example.com/v1"
             )
             .setValue(this.provider.baseUrl ?? "")
-            .onChange((val) => (this.provider.baseUrl = val));
+            .onChange((val) => {
+							this.provider.baseUrl = val;
+							if (val.trim()) this.setFieldError(this.baseUrlField, "");
+						});
         });
     }
 
@@ -449,10 +462,19 @@ export class UnifiedProviderModal extends Modal {
     }
   }
 
+	private setFieldError(field: { input: HTMLInputElement; error: HTMLElement } | undefined, message: string, focus = false) {
+		if (!field) return;
+		field.input.classList.toggle("mod-warning", !!message);
+		field.input.setAttribute("aria-invalid", String(!!message));
+		field.error.setText(message);
+		if (focus) field.input.focus();
+	}
+
   private save(): void {
     const p = this.provider;
-    if (!p.id || !p.type) {
+    if (!p.id || !p.type?.trim()) {
       new Notice("Provider name is required.");
+			this.setFieldError(this.nameField, "Provider name is required.", true);
       return;
     }
 
@@ -463,6 +485,7 @@ export class UnifiedProviderModal extends Modal {
       !p.baseUrl?.trim()
     ) {
       new Notice("Base URL is required.");
+			this.setFieldError(this.baseUrlField, "Base URL is required.", true);
       return;
     }
 

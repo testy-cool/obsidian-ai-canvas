@@ -49133,10 +49133,16 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
       });
     }
     let geminiNativeSetting;
-    new import_obsidian17.Setting(contentEl).setName("Provider name").addText((text2) => {
+    const nameSetting = new import_obsidian17.Setting(contentEl).setName("Provider name");
+    nameSetting.controlEl.addClass("ac-settings-field");
+    nameSetting.addText((text2) => {
       var _a21;
+      this.nameField = { input: text2.inputEl, error: nameSetting.controlEl.createDiv("ac-setting-error") };
+      this.nameField.error.setAttribute("aria-live", "polite");
       text2.setPlaceholder("My Provider").setValue((_a21 = this.provider.type) != null ? _a21 : "").onChange((val) => {
         this.provider.type = val;
+        if (val.trim())
+          this.setFieldError(this.nameField, "");
         if (geminiNativeSetting)
           geminiNativeSetting.settingEl.style.display = val === "Bifrost" ? "" : "none";
         if (!this.editing)
@@ -49152,9 +49158,17 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
     geminiNativeSetting.settingEl.style.display = this.provider.type === "Bifrost" ? "" : "none";
     if (!isGeminiType((_a20 = this.provider.type) != null ? _a20 : "") && !isVertexType((_b19 = this.provider.type) != null ? _b19 : "") && !isCodexType((_c = this.provider.type) != null ? _c : "")) {
       const isAzure = this.provider.type === "Azure";
-      new import_obsidian17.Setting(contentEl).setName("Base URL").setDesc(isAzure ? "Azure OpenAI resource endpoint \u2014 no path, no api-version" : "OpenAI-compatible endpoint.").addText((text2) => {
+      const baseUrlSetting = new import_obsidian17.Setting(contentEl).setName("Base URL");
+      baseUrlSetting.controlEl.addClass("ac-settings-field");
+      baseUrlSetting.setDesc(isAzure ? "Azure OpenAI resource endpoint \u2014 no path, no api-version" : "OpenAI-compatible endpoint.").addText((text2) => {
         var _a21;
-        text2.setPlaceholder(isAzure ? "https://<resource>.services.ai.azure.com" : "https://api.example.com/v1").setValue((_a21 = this.provider.baseUrl) != null ? _a21 : "").onChange((val) => this.provider.baseUrl = val);
+        this.baseUrlField = { input: text2.inputEl, error: baseUrlSetting.controlEl.createDiv("ac-setting-error") };
+        this.baseUrlField.error.setAttribute("aria-live", "polite");
+        text2.setPlaceholder(isAzure ? "https://<resource>.services.ai.azure.com" : "https://api.example.com/v1").setValue((_a21 = this.provider.baseUrl) != null ? _a21 : "").onChange((val) => {
+          this.provider.baseUrl = val;
+          if (val.trim())
+            this.setFieldError(this.baseUrlField, "");
+        });
       });
     }
     if (!isVertexType((_d = this.provider.type) != null ? _d : "") && !isCodexType((_e = this.provider.type) != null ? _e : "")) {
@@ -49395,24 +49409,35 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
       }
     }
   }
+  setFieldError(field, message, focus = false) {
+    if (!field)
+      return;
+    field.input.classList.toggle("mod-warning", !!message);
+    field.input.setAttribute("aria-invalid", String(!!message));
+    field.error.setText(message);
+    if (focus)
+      field.input.focus();
+  }
   save() {
-    var _a20, _b19, _c, _d, _e;
+    var _a20, _b19, _c, _d, _e, _f;
     const p = this.provider;
-    if (!p.id || !p.type) {
+    if (!p.id || !((_a20 = p.type) == null ? void 0 : _a20.trim())) {
       new import_obsidian17.Notice("Provider name is required.");
+      this.setFieldError(this.nameField, "Provider name is required.", true);
       return;
     }
-    if (!isGeminiType(p.type) && !isVertexType(p.type) && !isCodexType(p.type) && !((_a20 = p.baseUrl) == null ? void 0 : _a20.trim())) {
+    if (!isGeminiType(p.type) && !isVertexType(p.type) && !isCodexType(p.type) && !((_b19 = p.baseUrl) == null ? void 0 : _b19.trim())) {
       new import_obsidian17.Notice("Base URL is required.");
+      this.setFieldError(this.baseUrlField, "Base URL is required.", true);
       return;
     }
     const provider = {
       id: p.id,
       type: p.type,
-      baseUrl: isGeminiType(p.type) ? GEMINI_BASE_URL : (_b19 = p.baseUrl) != null ? _b19 : "",
-      apiKey: (_c = p.apiKey) != null ? _c : "",
-      enabled: (_d = p.enabled) != null ? _d : true,
-      geminiNative: p.type === "Bifrost" && ((_e = p.geminiNative) != null ? _e : false),
+      baseUrl: isGeminiType(p.type) ? GEMINI_BASE_URL : (_c = p.baseUrl) != null ? _c : "",
+      apiKey: (_d = p.apiKey) != null ? _d : "",
+      enabled: (_e = p.enabled) != null ? _e : true,
+      geminiNative: p.type === "Bifrost" && ((_f = p.geminiNative) != null ? _f : false),
       capabilityReport: p.capabilityReport,
       projectId: p.projectId,
       location: p.location,
@@ -49420,7 +49445,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
       binaryPath: p.binaryPath
     };
     const models = [...this.selectedModelIds].map((modelId) => {
-      var _a21, _b20, _c2, _d2, _e2, _f;
+      var _a21, _b20, _c2, _d2, _e2, _f2;
       const existing = this.existingModels.find((m) => m.model === modelId);
       const price = (_a21 = this.pricingData) == null ? void 0 : _a21.get(modelId);
       const defaultParams = getDefaultProviderParams(modelId, provider.type);
@@ -49433,7 +49458,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
         maxRetries: existing == null ? void 0 : existing.maxRetries,
         inputCostPerMillion: (existing == null ? void 0 : existing.costOverridden) ? existing.inputCostPerMillion : (_c2 = price == null ? void 0 : price.inputCostPerMillion) != null ? _c2 : existing == null ? void 0 : existing.inputCostPerMillion,
         outputCostPerMillion: (existing == null ? void 0 : existing.costOverridden) ? existing.outputCostPerMillion : (_d2 = price == null ? void 0 : price.outputCostPerMillion) != null ? _d2 : existing == null ? void 0 : existing.outputCostPerMillion,
-        providerParams: (_f = (_e2 = this.modelParams.get(modelId)) != null ? _e2 : existing == null ? void 0 : existing.providerParams) != null ? _f : Object.keys(defaultParams).length > 0 ? defaultParams : void 0
+        providerParams: (_f2 = (_e2 = this.modelParams.get(modelId)) != null ? _e2 : existing == null ? void 0 : existing.providerParams) != null ? _f2 : Object.keys(defaultParams).length > 0 ? defaultParams : void 0
       };
     });
     this.onSave(provider, models);
@@ -50037,13 +50062,10 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
       new import_obsidian18.Notice("MCP servers copied to clipboard");
     }));
     const settingsRow = containerEl.createDiv("mcp-settings-row");
-    new import_obsidian18.Setting(settingsRow).setName("Max agent steps").setDesc("Maximum tool call iterations before stopping.").addText((text2) => text2.setValue(this.plugin.settings.mcpMaxSteps.toString()).onChange(async (value) => {
-      const parsed = parseInt(value);
-      if (!isNaN(parsed) && parsed > 0 && parsed <= 20) {
-        this.plugin.settings.mcpMaxSteps = parsed;
-        await this.plugin.saveSettings();
-      }
-    }));
+    this.addIntegerInput(new import_obsidian18.Setting(settingsRow).setName("Max agent steps").setDesc("Maximum tool call iterations before stopping."), this.plugin.settings.mcpMaxSteps, "Enter an integer from 1 to 20.", (value) => value >= 1 && value <= 20, async (value) => {
+      this.plugin.settings.mcpMaxSteps = value;
+      await this.plugin.saveSettings();
+    });
     const serversContainer = containerEl.createDiv("mcp-server-list");
     if (!this.plugin.settings.mcpServers.length) {
       serversContainer.createDiv({
@@ -50186,13 +50208,26 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
       this.plugin.settings.temperature = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian18.Setting(containerEl).setName("Max Response Tokens").setDesc("The maximum number of tokens to generate. (0 for unlimited)").addText((text2) => text2.setValue(this.plugin.settings.maxResponseTokens.toString()).onChange(async (value) => {
-      const parsed = parseInt(value);
-      if (!isNaN(parsed)) {
-        this.plugin.settings.maxResponseTokens = parsed;
-        await this.plugin.saveSettings();
-      }
-    }));
+    this.addIntegerInput(new import_obsidian18.Setting(containerEl).setName("Max Response Tokens").setDesc("The maximum number of tokens to generate. (0 for unlimited)"), this.plugin.settings.maxResponseTokens, "Enter any integer; 0 means unlimited.", () => true, async (value) => {
+      this.plugin.settings.maxResponseTokens = value;
+      await this.plugin.saveSettings();
+    });
+  }
+  addIntegerInput(setting, value, hint, inRange, onChange) {
+    const field = setting.controlEl.createDiv("ac-settings-field");
+    const text2 = new import_obsidian18.TextComponent(field).setValue(String(value));
+    field.createDiv({ cls: "ac-setting-hint", text: hint });
+    const error40 = field.createDiv("ac-setting-error");
+    error40.setAttribute("aria-live", "polite");
+    text2.onChange(async (input) => {
+      const parsed = Number(input);
+      const valid = /^[+-]?\d+$/.test(input.trim()) && Number.isInteger(parsed) && inRange(parsed);
+      text2.inputEl.classList.toggle("mod-warning", !valid);
+      text2.inputEl.setAttribute("aria-invalid", String(!valid));
+      error40.setText(valid ? "" : hint);
+      if (valid)
+        await onChange(parsed);
+    });
   }
   renderImageSettings(containerEl) {
     var _a20;

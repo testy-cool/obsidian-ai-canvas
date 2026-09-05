@@ -671,18 +671,17 @@ export default class SettingsTab extends PluginSettingTab {
         // MCP Settings
         const settingsRow = containerEl.createDiv("mcp-settings-row");
 
-        new Setting(settingsRow)
-            .setName("Max agent steps")
-            .setDesc("Maximum tool call iterations before stopping.")
-            .addText(text => text
-                .setValue(this.plugin.settings.mcpMaxSteps.toString())
-                .onChange(async value => {
-                    const parsed = parseInt(value);
-                    if (!isNaN(parsed) && parsed > 0 && parsed <= 20) {
-                        this.plugin.settings.mcpMaxSteps = parsed;
-                        await this.plugin.saveSettings();
-                    }
-                }));
+		this.addIntegerInput(
+			new Setting(settingsRow).setName("Max agent steps")
+				.setDesc("Maximum tool call iterations before stopping."),
+			this.plugin.settings.mcpMaxSteps,
+			"Enter an integer from 1 to 20.",
+			value => value >= 1 && value <= 20,
+			async value => {
+				this.plugin.settings.mcpMaxSteps = value;
+				await this.plugin.saveSettings();
+			}
+		);
 
         // Server list
         const serversContainer = containerEl.createDiv("mcp-server-list");
@@ -866,19 +865,40 @@ export default class SettingsTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        new Setting(containerEl)
-            .setName("Max Response Tokens")
-            .setDesc("The maximum number of tokens to generate. (0 for unlimited)")
-                .addText(text => text
-                    .setValue(this.plugin.settings.maxResponseTokens.toString())
-                    .onChange(async (value) => {
-                        const parsed = parseInt(value);
-                        if (!isNaN(parsed)) {
-                            this.plugin.settings.maxResponseTokens = parsed;
-                            await this.plugin.saveSettings();
-                        }
-                    }));
+		this.addIntegerInput(
+			new Setting(containerEl).setName("Max Response Tokens")
+				.setDesc("The maximum number of tokens to generate. (0 for unlimited)"),
+			this.plugin.settings.maxResponseTokens,
+			"Enter any integer; 0 means unlimited.",
+			() => true,
+			async value => {
+				this.plugin.settings.maxResponseTokens = value;
+				await this.plugin.saveSettings();
+			}
+		);
     }
+
+	private addIntegerInput(
+		setting: Setting,
+		value: number,
+		hint: string,
+		inRange: (value: number) => boolean,
+		onChange: (value: number) => Promise<void>
+	) {
+		const field = setting.controlEl.createDiv("ac-settings-field");
+		const text = new TextComponent(field).setValue(String(value));
+		field.createDiv({ cls: "ac-setting-hint", text: hint });
+		const error = field.createDiv("ac-setting-error");
+		error.setAttribute("aria-live", "polite");
+		text.onChange(async input => {
+			const parsed = Number(input);
+			const valid = /^[+-]?\d+$/.test(input.trim()) && Number.isInteger(parsed) && inRange(parsed);
+			text.inputEl.classList.toggle("mod-warning", !valid);
+			text.inputEl.setAttribute("aria-invalid", String(!valid));
+			error.setText(valid ? "" : hint);
+			if (valid) await onChange(parsed);
+		});
+	}
 
 	private renderImageSettings(containerEl: HTMLElement) {
 		new Setting(containerEl).setHeading().setName("Image Generation");
