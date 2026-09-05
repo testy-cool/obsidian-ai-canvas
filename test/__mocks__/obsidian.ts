@@ -1,6 +1,13 @@
 // Mock Obsidian module for testing
 export class Notice {
-	constructor(message: string, timeout?: number) {}
+	noticeEl!: HTMLElement;
+	constructor(message: string, timeout?: number) {
+		if (typeof document !== "undefined") {
+			this.noticeEl = document.createElement("div");
+			this.noticeEl.textContent = message;
+		}
+	}
+	hide = () => { this.noticeEl?.remove(); };
 }
 
 export class App {}

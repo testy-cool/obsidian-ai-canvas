@@ -35,6 +35,7 @@ class Element {
 	constructor(public tagName = "div") {}
 	focus = vi.fn();
 	get textContent(): string { return this.text + this.children.map(child => child.textContent).join(""); }
+	set textContent(value: string) { this.text = value; this.children = []; }
 	createEl(tag: string, options: string | { cls?: string; text?: string } = {}) {
 		const child = new Element(tag);
 		child.className = typeof options === "string" ? options : options.cls ?? "";
@@ -401,5 +402,65 @@ describe("busy settings buttons", () => {
 		}
 		const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 		expect(css).toContain("flex-shrink: 0;\n\twhite-space: nowrap;\n\tfont-size: max(12px, var(--font-ui-small));");
+	});
+});
+
+
+describe("undo settings deletion", () => {
+	it.each(["first", "middle", "last"])("restores the %s provider and interleaved models as the same objects in order", async (id) => {
+		const providers = ["first", "middle", "last"].map(id => ({ id, type: id, baseUrl: "https://example.test", enabled: true }));
+		const models = ["first", "middle", "last", "middle", "first", "last"].map((providerId, index) => ({ id: `model-${index}`, model: `model-${index}`, providerId, enabled: true }));
+		const activeModel = models.find(model => model.providerId === id)!.id;
+		const plugin: any = {
+			settings: { ...DEFAULT_SETTINGS, providers: [...providers], models: [...models], activeProvider: id, apiModel: activeModel },
+			saveSettings: vi.fn().mockResolvedValue(undefined),
+		};
+		const tab: any = new SettingsTab({} as any, plugin);
+		const display = vi.spyOn(tab, "display").mockImplementation(() => {});
+		const notice = vi.spyOn(obsidian, "Notice");
+		const root = new Element();
+		tab.renderProviders(root);
+		const card = root.querySelectorAll(".provider-block")[providers.findIndex(provider => provider.id === id)];
+		await card.querySelectorAll("button").find(button => button.textContent === "Delete")!.listeners.get("click")!();
+		expect(plugin.settings.providers.map((provider: any) => provider.id)).not.toContain(id);
+		expect(plugin.settings.models.some((model: any) => model.providerId === id)).toBe(false);
+		expect(plugin.settings.activeProvider).not.toBe(id);
+		expect(plugin.saveSettings).toHaveBeenCalledOnce();
+		expect(notice).toHaveBeenCalledWith(`Deleted ${id}.`, 8000);
+		const undo = (notice.mock.instances[0].noticeEl as any as Element).querySelector("button")!;
+		expect(undo.textContent).toBe("Undo");
+		await undo.listeners.get("click")!();
+		await undo.listeners.get("click")!();
+		expect(plugin.settings.providers).toEqual(providers);
+		expect(plugin.settings.models).toEqual(models);
+		providers.forEach((provider, index) => expect(plugin.settings.providers[index]).toBe(provider));
+		models.forEach((model, index) => expect(plugin.settings.models[index]).toBe(model));
+		expect(plugin.settings.activeProvider).toBe(id);
+		expect(plugin.settings.apiModel).toBe(activeModel);
+		expect(plugin.saveSettings).toHaveBeenCalledTimes(2);
+		expect(display).toHaveBeenCalledTimes(2);
+	});
+
+	it.each([0, 1, 2])("restores an MCP server at index %s as the same object", async (index) => {
+		const servers = ["first", "middle", "last"].map(id => ({ id, name: id, transport: "sse", url: "https://example.test", enabled: true }));
+		const plugin: any = {
+			settings: { ...DEFAULT_SETTINGS, mcpServers: [...servers] },
+			saveSettings: vi.fn().mockResolvedValue(undefined),
+		};
+		const tab: any = new SettingsTab({} as any, plugin);
+		const display = vi.spyOn(tab, "display").mockImplementation(() => {});
+		const notice = vi.spyOn(obsidian, "Notice");
+		const root = new Element();
+		tab.renderMCPServers(root);
+		const card = root.querySelectorAll(".mcp-server-block")[index];
+		await card.querySelectorAll("button").find(button => button.textContent === "Delete")!.listeners.get("click")!();
+		expect(plugin.settings.mcpServers).toEqual(servers.filter((_, i) => i !== index));
+		expect(notice).toHaveBeenCalledWith(`Deleted ${servers[index].name}.`, 8000);
+		const undo = (notice.mock.instances[0].noticeEl as any as Element).querySelector("button")!;
+		await undo.listeners.get("click")!();
+		expect(plugin.settings.mcpServers).toEqual(servers);
+		servers.forEach((server, i) => expect(plugin.settings.mcpServers[i]).toBe(server));
+		expect(plugin.saveSettings).toHaveBeenCalledTimes(2);
+		expect(display).toHaveBeenCalledTimes(2);
 	});
 });

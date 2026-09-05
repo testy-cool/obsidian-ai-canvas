@@ -340,6 +340,13 @@ export default class SettingsTab extends PluginSettingTab {
                     return;
                 }
 
+				const providerIndex = this.plugin.settings.providers.indexOf(provider);
+				const removedModels = this.plugin.settings.models
+					.map((model, index) => ({ model, index }))
+					.filter(({ model }) => model.providerId === provider.id);
+				const previousActiveProvider = this.plugin.settings.activeProvider;
+				const previousApiModel = this.plugin.settings.apiModel;
+
                 if (this.plugin.settings.activeProvider === provider.id) {
                     const remainingProviders = this.plugin.settings.providers.filter(p => p.id !== provider.id);
                     if (remainingProviders.length > 0) {
@@ -358,6 +365,14 @@ export default class SettingsTab extends PluginSettingTab {
 
                 await this.plugin.saveSettings();
                 this.display();
+				this.showUndoNotice(`Deleted ${provider.type}.`, () => {
+					this.plugin.settings.providers.splice(providerIndex, 0, provider);
+					for (const { model, index } of removedModels) {
+						this.plugin.settings.models.splice(index, 0, model);
+					}
+					this.plugin.settings.activeProvider = previousActiveProvider;
+					this.plugin.settings.apiModel = previousApiModel;
+				});
             });
 
             const metaRow = providerBlock.createDiv("provider-meta");
@@ -733,9 +748,13 @@ export default class SettingsTab extends PluginSettingTab {
             const deleteBtn = new ButtonComponent(controls);
             deleteBtn.setButtonText("Delete");
             deleteBtn.onClick(async () => {
+				const serverIndex = this.plugin.settings.mcpServers.indexOf(server);
                 this.plugin.settings.mcpServers = this.plugin.settings.mcpServers.filter(s => s.id !== server.id);
                 await this.plugin.saveSettings();
                 this.display();
+				this.showUndoNotice(`Deleted ${server.name}.`, () => {
+					this.plugin.settings.mcpServers.splice(serverIndex, 0, server);
+				});
             });
 
             const metaRow = serverBlock.createDiv("mcp-server-meta");
@@ -749,6 +768,22 @@ export default class SettingsTab extends PluginSettingTab {
             }
         });
     }
+
+	private showUndoNotice(message: string, undo: () => void) {
+		const notice = new Notice(message, 8000);
+		const button = new ButtonComponent(notice.noticeEl).setButtonText("Undo");
+		button.buttonEl.style.fontSize = "max(12px, var(--font-ui-small))";
+		let undone = false;
+		button.onClick(async () => {
+			if (undone) return;
+			undone = true;
+			button.setDisabled(true);
+			undo();
+			notice.hide();
+			await this.plugin.saveSettings();
+			this.display();
+		});
+	}
 
     private openMCPServerModal(server: MCPServer | null, onSave: (server: MCPServer) => void) {
         const modal = new MCPServerModal(this.app, server, onSave);
