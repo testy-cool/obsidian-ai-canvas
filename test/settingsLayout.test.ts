@@ -80,6 +80,27 @@ const cssRule = (path: string, selector: string) => {
 	return css.split(`${selector} {`)[1]?.split("}")[0];
 };
 
+describe("observability connection check", () => {
+	it.each([
+		{ status: 200, json: { data: [{ name: "test project" }] }, expected: "Credentials verified" },
+		{ status: 401, json: {}, expected: "Failed (HTTP 401)" },
+		{ status: 200, json: { status: "OK" }, expected: "No accessible Langfuse project" },
+	])("checks project credentials for $status / $expected", async ({ status, json, expected }) => {
+		const request = vi.spyOn(obsidian, "requestUrl").mockResolvedValue({ status, json } as any);
+		const plugin: any = { settings: { ...DEFAULT_SETTINGS, observability: {
+			enabled: true, provider: "langfuse", host: "https://example.test", publicKey: "public", secretKey: "secret",
+		} } };
+		const tab: any = new SettingsTab({} as any, plugin);
+		const root = new Element();
+		tab.renderObservability(root);
+		const button = root.querySelectorAll("button").find(element => element.textContent === "Test connection")!;
+		await button.listeners.get("click")!();
+		expect(request).toHaveBeenCalledWith(expect.objectContaining({ url: "https://example.test/api/public/projects" }));
+		expect(root.textContent).toContain(expected);
+		expect(button.disabled).toBe(false);
+	});
+});
+
 beforeEach(() => {
 	vi.stubGlobal("document", { createElement: (tag: string) => new Element(tag) });
 });

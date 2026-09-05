@@ -50,6 +50,7 @@ import { insertWebsiteContent } from "./actions/commands/websiteContent";
 import { noteGenerator } from "./actions/canvasNodeMenuActions/noteGenerator";
 import { setupHtmlPreviewPersistence } from "./utils/htmlPreview";
 import { ObservabilityClient } from "./utils/observability";
+import { configureLLMObservability } from "./utils/llmObservability";
 import { getImageGenerationPrompt } from "./utils/imageGenerationPrompt";
 
 // @ts-expect-error
@@ -67,6 +68,16 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		this.observabilityClient = new ObservabilityClient(this.settings.observability);
+		configureLLMObservability(this.observabilityClient, (provider, model) => {
+			const pricing = this.settings.models.find(entry => entry.providerId === provider.id && entry.model === model);
+			return {
+				pluginVersion: this.manifest.version,
+				vaultName: this.app.vault.getName(),
+				canvasName: this.app.workspace.getActiveFile()?.name,
+				inputCostPerMillion: pricing?.inputCostPerMillion,
+				outputCostPerMillion: pricing?.outputCostPerMillion,
+			};
+		});
 		this.addSettingTab(new SettingsTab(this.app, this));
 
 		// this.registerCommands();
@@ -140,7 +151,8 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		if (this.cleanupHtmlPreviewPersistence) {
 			this.cleanupHtmlPreviewPersistence();
 		}
-		this.observabilityClient?.shutdown();
+		configureLLMObservability(null);
+		void this.observabilityClient?.shutdown();
 	}
 
 	async loadSettings() {

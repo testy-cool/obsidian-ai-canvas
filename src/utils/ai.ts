@@ -526,7 +526,7 @@ export const streamResponse = async (
 		logDebug("[AI Canvas] Final result text length:", finalText?.length);
 		cb(null, finalResult, null, null);
 		if (onComplete) {
-			const usage = await finalResult.usage;
+			const usage = await (finalResult.totalUsage ?? finalResult.usage);
 			onComplete({
 				inputTokens: usage?.inputTokens ?? 0,
 				outputTokens: usage?.outputTokens ?? 0,

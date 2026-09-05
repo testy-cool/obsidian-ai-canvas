@@ -1224,7 +1224,7 @@ export default class SettingsTab extends PluginSettingTab {
 
         const testSetting = new Setting(containerEl)
             .setName("Test connection")
-            .setDesc("Verify the host and credentials are reachable.");
+            .setDesc(this.plugin.observabilityClient?.lastError ?? "Verify access to your observability project.");
 
         testSetting.addButton(button => {
             button.setButtonText("Test connection").onClick(async () => {
@@ -1233,11 +1233,15 @@ export default class SettingsTab extends PluginSettingTab {
                     new Notice("Host URL is required");
                     return;
                 }
+                if (provider === "langfuse" && (!publicKey || !secretKey)) {
+                    testSetting.setDesc("✗ Public and secret keys are required.");
+                    return;
+                }
 
-                button.setButtonText("Testing...").setDisabled(true);
+                button.setButtonText("Testing…").setDisabled(true);
 
                 const healthPath = provider === "langfuse"
-                    ? "/api/public/health"
+                    ? "/api/public/projects"
                     : "/v1/health";
 
                 const url = host.replace(/\/$/, "") + healthPath;
@@ -1251,7 +1255,11 @@ export default class SettingsTab extends PluginSettingTab {
                         throw: false,
                     });
                     if (response.status >= 200 && response.status < 300) {
-                        testSetting.setDesc("✓ Connected");
+                        testSetting.setDesc(provider === "langfuse"
+                            ? (response.json?.data?.length > 0
+                                ? "✓ Credentials verified. Traces are sent after text generation."
+                                : "✗ No accessible Langfuse project found.")
+                            : "✓ Host reachable");
                     } else {
                         testSetting.setDesc(`✗ Failed (HTTP ${response.status})`);
                     }

@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { createTracePayload, formatLangfuseBatch } from "../src/utils/observability";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import * as obsidian from "obsidian";
+import { createTracePayload, formatLangfuseBatch, ObservabilityClient } from "../src/utils/observability";
 
 describe("observability", () => {
   describe("createTracePayload", () => {
@@ -82,9 +83,41 @@ describe("observability", () => {
       });
 
       const batch = formatLangfuseBatch([payload]);
-      expect(batch.batch).toHaveLength(1);
-      expect(batch.batch[0].type).toBe("trace-create");
-      expect(batch.batch[0].body.name).toBe("chat");
+      const span = batch.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(span.name).toBe("chat");
+      expect(span.traceId).toMatch(/^[a-f0-9]{32}$/);
+      expect(span.spanId).toMatch(/^[a-f0-9]{16}$/);
+      expect(BigInt(span.endTimeUnixNano)).toBeGreaterThan(BigInt(span.startTimeUnixNano));
+      expect(new Date(Number(BigInt(span.startTimeUnixNano) / BigInt(1_000_000))).toISOString()).toBe("2026-05-08T00:00:00.000Z");
+      const attributes = Object.fromEntries(span.attributes.map(a => [a.key, a.value]));
+      expect(attributes["langfuse.observation.type"]).toEqual({ stringValue: "generation" });
+      expect(attributes["gen_ai.request.model"]).toEqual({ stringValue: "test" });
+      expect(attributes["gen_ai.usage.input_tokens"]).toEqual({ intValue: "5" });
+      expect(attributes["gen_ai.usage.output_tokens"]).toEqual({ intValue: "10" });
     });
   });
+});
+
+const config = () => ({ enabled: false, provider: "langfuse" as const, host: "https://example.test/", publicKey: "public", secretKey: "secret" });
+const payload = () => createTracePayload({name:"chat",model:"test",provider:"test",input:"hello",output:"ok",startTime:new Date().toISOString(),endTime:new Date().toISOString(),inputTokens:2,outputTokens:3,pluginVersion:"test"});
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
+it("starts exporting when tracing is enabled after plugin load", async () => {
+  vi.useFakeTimers();
+  const settings=config();
+  const client=new ObservabilityClient(settings);
+  const request=vi.spyOn(obsidian,"requestUrl").mockResolvedValue({status:200,json:{}} as any);
+  settings.enabled=true;
+  client.track(payload());
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(request).toHaveBeenCalledWith(expect.objectContaining({url:"https://example.test/api/public/otel/v1/traces",method:"POST"}));
+  await client.shutdown();
+});
+it("records export failures without throwing into generation", async () => {
+  const client=new ObservabilityClient({...config(),enabled:true});
+  vi.spyOn(obsidian,"requestUrl").mockResolvedValue({status:200,json:{partialSuccess:{rejectedSpans:1}}} as any);
+  vi.spyOn(console,"warn").mockImplementation(()=>{});
+  client.track(payload());
+  await expect(client.flush()).resolves.toBeUndefined();
+  expect(client.lastError).toContain("rejected");
+  await client.shutdown();
 });

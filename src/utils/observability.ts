@@ -76,41 +76,63 @@ export function createTracePayload(input: TraceInput): TracePayload {
   };
 }
 
-export function formatLangfuseBatch(
-  payloads: TracePayload[]
-): { batch: Array<{ id: string; type: string; timestamp: string; body: Record<string, unknown> }> } {
-  return {
-    batch: payloads.map((p) => ({
-      id: p.traceId,
-      type: "trace-create",
-      timestamp: new Date().toISOString(),
-      body: {
-        id: p.traceId,
-        name: p.name,
-        input: { prompt: p.input },
-        output: { response: p.output },
-        metadata: {
-          ...p.metadata,
-          model: p.model,
-          provider: p.provider,
-          providerParams: p.providerParams,
-          tokens: p.tokens,
-          cost: p.cost,
-        },
-        statusMessage: p.error,
-      },
-    })),
-  };
+const OBS_TYPE_GENERATION = "generation";
+
+function otlpAttributes(values: Record<string, string | number | undefined>) {
+	return Object.entries(values).filter(([, value]) => value !== undefined).map(([key, value]) => ({
+		key,
+		value: typeof value === "number"
+			? (Number.isInteger(value) ? { intValue: String(value) } : { doubleValue: value })
+			: { stringValue: String(value) },
+	}));
+}
+
+export function formatLangfuseBatch(payloads: TracePayload[]) {
+	return {
+		resourceSpans: [{
+			resource: { attributes: otlpAttributes({ "service.name": "obsidian-ai-canvas" }) },
+			scopeSpans: [{
+				scope: { name: "obsidian-ai-canvas" },
+				spans: payloads.map(p => ({
+					traceId: p.traceId.replace(/-/g, ""),
+					spanId: p.traceId.replace(/-/g, "").slice(0, 16),
+					name: p.name,
+					kind: 3,
+					startTimeUnixNano: `${Date.parse(p.startTime)}000000`,
+					endTimeUnixNano: `${Date.parse(p.endTime)}000000`,
+					status: { code: p.error ? 2 : 1, ...(p.error ? { message: p.error } : {}) },
+					attributes: otlpAttributes({
+						"langfuse.observation.type": OBS_TYPE_GENERATION,
+						"langfuse.trace.name": p.name,
+						"langfuse.observation.input": p.input,
+						"langfuse.observation.output": JSON.stringify(p.output),
+						"langfuse.observation.model.parameters": JSON.stringify(p.providerParams ?? {}),
+						"gen_ai.system": p.provider,
+						"gen_ai.request.model": p.model,
+						"gen_ai.usage.input_tokens": p.tokens.input,
+						"gen_ai.usage.output_tokens": p.tokens.output,
+						"langfuse.observation.cost_details": p.cost ? JSON.stringify(p.cost) : undefined,
+						"langfuse.version": p.metadata.pluginVersion,
+						"langfuse.trace.metadata.vault": p.metadata.vaultName,
+						"langfuse.trace.metadata.canvas": p.metadata.canvasName,
+					}),
+				})),
+			}],
+		}],
+	};
 }
 
 export class ObservabilityClient {
   private buffer: TracePayload[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
 
+  lastError: string | null = null;
+
+  get enabled(): boolean { return this.settings.enabled && this.settings.provider !== "none"; }
+
   constructor(private settings: ObservabilitySettings) {
-    if (settings.enabled && settings.provider !== "none") {
-      this.flushTimer = setInterval(() => this.flush(), 5000);
-    }
+    // Settings can be enabled after plugin load; the idle flush is a no-op.
+    this.flushTimer = setInterval(() => void this.flush(), 5000);
   }
 
   track(payload: TracePayload): void {
@@ -119,6 +141,7 @@ export class ObservabilityClient {
   }
 
   async flush(): Promise<void> {
+    if (!this.enabled) { this.buffer = []; return; }
     if (this.buffer.length === 0) return;
     const batch = [...this.buffer];
     this.buffer = [];
@@ -135,22 +158,30 @@ export class ObservabilityClient {
           await this.sendCustom(batch);
           break;
       }
-    } catch {
-      // Observability should never break the plugin
+      this.lastError = null;
+    } catch (error) {
+      // Keep export failures visible without logging prompts, keys, or response bodies.
+      this.lastError = error instanceof TraceExportError ? error.message : "Trace delivery failed. Check the host and credentials.";
+      console.warn(`[AI Canvas] ${this.lastError}`);
     }
   }
 
   private async sendLangfuse(batch: TracePayload[]): Promise<void> {
     const auth = btoa(`${this.settings.publicKey}:${this.settings.secretKey}`);
-    await requestUrl({
-      url: `${this.settings.host}/api/public/ingestion`,
+    const response = await requestUrl({
+      url: `${this.settings.host.replace(/\/+$/, "")}/api/public/otel/v1/traces`,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Basic ${auth}`,
       },
       body: JSON.stringify(formatLangfuseBatch(batch)),
+      throw: false,
     });
+    if (response.status >= 300) throw new TraceExportError(`Trace delivery failed (HTTP ${response.status}).`);
+    if (Number(response.json?.partialSuccess?.rejectedSpans) > 0) {
+      throw new TraceExportError("Langfuse rejected one or more trace spans.");
+    }
   }
 
   private async sendLaminar(batch: TracePayload[]): Promise<void> {
@@ -184,3 +215,5 @@ export class ObservabilityClient {
     await this.flush();
   }
 }
+
+class TraceExportError extends Error {}

@@ -5,6 +5,7 @@ import { getResponse as getResponseFromAI, streamResponse as streamResponseFromA
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
 import { ModelMessage } from "@ai-sdk/provider-utils";
 import { randomHexString } from "src/utils";
+import { observeLLM } from "./llmObservability";
 
 export type Message = ModelMessage;
 export type { StreamOptions, ToolEvent };
@@ -15,7 +16,7 @@ export const streamResponse = async (
 	options: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ) => {
-	return streamResponseFromAI(provider, messages, options, cb);
+	return observeLLM(provider, messages, options, observed => streamResponseFromAI(provider, messages, observed, cb));
 };
 
 export const getResponse = async (
@@ -23,7 +24,7 @@ export const getResponse = async (
 	messages: Message[],
 	options: Parameters<typeof getResponseFromAI>[2] = {}
 ) => {
-	return getResponseFromAI(provider, messages, options);
+	return observeLLM(provider, messages, options, observed => getResponseFromAI(provider, messages, observed));
 };
 
 let count = 0;
@@ -407,4 +408,3 @@ export const createImage = async (
 		raw: safeStringify(response),
 	};
 };
-
