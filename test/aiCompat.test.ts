@@ -247,3 +247,22 @@ describe("Google provider tools", () => {
 		expect((await requests[1].json()).tools).toBeUndefined();
 	});
 });
+
+describe("OpenAI-compatible media serialization", () => {
+	it("sends images and PDFs through Bifrost chat completions", async () => {
+		const requests = installFetchStub();
+		await getResponse(makeProvider(), [{
+			role: "user",
+			content: [
+				{ type: "image", image: new Uint8Array([1, 2, 3, 4]), mediaType: "image/png" },
+				{ type: "file", data: "AQIDBA==", mediaType: "application/pdf", filename: "attachment.pdf" },
+			],
+		}], { model: "test-model" });
+		expect(requests).toHaveLength(1);
+		expect(requests[0].url).toBe("https://example.test/v1/chat/completions");
+		expect((await requests[0].json()).messages[0].content).toEqual([
+			{ type: "image_url", image_url: { url: "data:image/png;base64,AQIDBA==" } },
+			{ type: "file", file: { filename: "attachment.pdf", file_data: "data:application/pdf;base64,AQIDBA==" } },
+		]);
+	});
+});

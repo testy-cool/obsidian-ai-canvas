@@ -34,6 +34,7 @@ const IMAGE_EXTENSIONS_BY_MIME: Record<string, string> = {
 
 const MEDIA_MIME_TYPES: Record<string, string> = {
 	...IMAGE_MIME_TYPES,
+	pdf: "application/pdf",
 	mp4: "video/mp4",
 	m4v: "video/x-m4v",
 	mov: "video/quicktime",
@@ -60,7 +61,7 @@ const MAX_INLINE_MEDIA_BYTES = 20 * 1024 * 1024;
 
 const getImageMimeType = (extension: string) =>
 	IMAGE_MIME_TYPES[extension.toLowerCase()] || null;
-const getMediaMimeType = (extension: string) =>
+export const getMediaMimeType = (extension: string) =>
 	MEDIA_MIME_TYPES[extension.toLowerCase()] || null;
 const getImageExtensionForMime = (mimeType?: string) =>
 	IMAGE_EXTENSIONS_BY_MIME[mimeType?.toLowerCase() || ""] || "png";

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
+import * as obsidian from "obsidian";
 import AugmentedCanvasPlugin from "../src/AugmentedCanvasPlugin";
 import { PromptContextModal } from "../src/Modals/PromptContextModal";
 import { ModelSelectionModal } from "../src/Modals/ModelSelectionModal";
@@ -116,6 +117,7 @@ beforeEach(() => {
 	vi.stubGlobal("document", { createElement: () => new Element() });
 	vi.stubGlobal("createEl", () => new Element());
 	vi.spyOn(PromptContextModal.prototype, "open");
+	vi.spyOn(obsidian, "Notice");
 	vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
 		callback("ANSWER", null, null, null);
 		callback(null, { text: "ANSWER" }, null, null);
@@ -280,5 +282,84 @@ describe("context picker request paths", () => {
 		const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 		const rule = css.match(/\.ai-model-indicator\s*\{([^}]+)\}/)![1];
 		expect(rule).toMatch(/font-size:\s*12px !important;/);
+	});
+});
+
+describe("provider media input", () => {
+	const attachFile = (app: any, node: any, extension: string, size = 4) => {
+		const bytes = new Uint8Array([1, 2, 3, 4]);
+		const file = Object.assign(new obsidian.TFile(), {
+			extension, basename: "attachment", path: `attachment.${extension}`, stat: { size },
+		});
+		app.vault = {
+			getAbstractFileByPath: vi.fn().mockReturnValue(file),
+			readBinary: vi.fn().mockResolvedValue(bytes.buffer),
+		};
+		node.app = app;
+		node.setData({ type: "file", file: file.path });
+		return bytes;
+	};
+
+	const sentParts = () => vi.mocked(streamResponse).mock.calls[0][1].flatMap((message: any) =>
+		Array.isArray(message.content) ? message.content : []
+	);
+
+	it("reads and sends an image card through Bifrost", async () => {
+		const { app, settings, provider, prompt } = fixture(false);
+		provider.type = "Bifrost";
+		const bytes = attachFile(app, prompt, "png");
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(app.vault.readBinary).toHaveBeenCalledOnce();
+		expect(sentParts()).toContainEqual({ type: "image", image: bytes, mediaType: "image/png" });
+	});
+
+	it("reads and sends a PDF card through Bifrost", async () => {
+		const { app, settings, provider, prompt } = fixture(false);
+		provider.type = "Bifrost";
+		attachFile(app, prompt, "pdf");
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(app.vault.readBinary).toHaveBeenCalled();
+		expect(sentParts()).toContainEqual({ type: "file", data: "AQIDBA==", mediaType: "application/pdf", filename: "attachment" });
+	});
+
+	it.each([4, 30 * 1024 * 1024])("skips Bifrost video bytes and emits one notice (file size: %s)", async (size) => {
+		const { app, settings, provider, prompt } = fixture(false);
+		provider.type = "Bifrost";
+		attachFile(app, prompt, "mp4", size);
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(app.vault.readBinary).not.toHaveBeenCalled();
+		expect(sentParts().filter((part: any) => part.type === "file")).toEqual([]);
+		expect(vi.mocked(obsidian.Notice).mock.calls.filter(([message]) => message.includes("cannot take"))).toEqual([
+			["Bifrost cannot take video files. Use a Gemini provider for this card."],
+		]);
+	});
+
+	it("warns once for Bifrost YouTube cards and sends no video file parts", async () => {
+		const { app, settings, provider, prompt, canvas } = fixture();
+		provider.type = "Bifrost";
+		prompt.setData({ type: "link", url: "https://youtu.be/dQw4w9WgXcQ" });
+		canvas.nodes.get("parent").text = "Also read https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentParts().filter((part: any) => part.type === "file")).toEqual([]);
+		expect(vi.mocked(obsidian.Notice).mock.calls.filter(([message]) => message.includes("cannot take"))).toEqual([
+			["Bifrost cannot take YouTube links. Use a Gemini provider for this card."],
+		]);
+	});
+
+	it("keeps sending YouTube cards as video inputs for Gemini", async () => {
+		const { app, settings, provider, prompt } = fixture(false);
+		provider.type = "Gemini";
+		prompt.setData({ type: "link", url: "https://youtu.be/dQw4w9WgXcQ" });
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentParts()).toContainEqual({ type: "file", data: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", mediaType: "video/mp4" });
+		expect(vi.mocked(obsidian.Notice).mock.calls.filter(([message]) => message.includes("cannot take"))).toEqual([]);
+	});
+
+	it("keeps sending video files for Gemini", async () => {
+		const { app, settings, provider, prompt } = fixture(false);
+		provider.type = "Gemini";
+		attachFile(app, prompt, "mp4");
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentParts()).toContainEqual({ type: "file", data: "AQIDBA==", mediaType: "video/mp4", filename: "attachment" });
 	});
 });

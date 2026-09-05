@@ -5,6 +5,12 @@ export class Notice {
 
 export class App {}
 
+export class TFile {}
+
+export function loadPdfJs() {
+	return Promise.resolve({ getDocument: () => ({ promise: Promise.resolve({ numPages: 0 }) }) });
+}
+
 export class Plugin {}
 
 export class PluginSettingTab {}

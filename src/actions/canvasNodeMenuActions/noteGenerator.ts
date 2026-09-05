@@ -23,12 +23,13 @@ import {
 	isPromptContextNodeIncluded,
 	visitNodeAndAncestors,
 } from "../../obsidian/canvasUtil";
-import { readNodeContent, readNodeMediaData } from "../../obsidian/fileUtil";
+import { getMediaMimeType, readNodeContent, readNodeMediaData } from "../../obsidian/fileUtil";
 import { handleGenerateImage } from "../canvasNodeContextMenuActions/generateImage";
 import { getResponse, streamResponse, ToolEvent } from "../../utils/llm";
 import { addModelIndicator, getYouTubeVideoId } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { getAllMCPTools } from "../../utils/mcpClient";
+import { getProviderCapabilities } from "../../utils/providerCapabilities";
 import { extractHtmlCodeBlocks, addHtmlPreviewToNode } from "../../utils/htmlPreview";
 import {
 	PromptContextModal,
@@ -343,11 +344,13 @@ export function noteGenerator(
 		const provider = resolveProvider();
 		const model = resolveModel(provider);
 		const isGpt = provider?.type === "OpenAI";
-		const supportsVisionInput =
-			provider?.type === "Gemini" ||
-			provider?.type === "Google" ||
-			provider?.type === "Vertex" ||
-			provider?.type === "Azure";
+		const capabilities = getProviderCapabilities(provider);
+		const warnedMedia = new Set<string>();
+		const warnUnsupportedMedia = (media: "video files" | "YouTube links") => {
+			if (warnedMedia.has(media)) return;
+			warnedMedia.add(media);
+			new Notice(`${provider?.type || "This provider"} cannot take ${media}. Use a Gemini provider for this card.`);
+		};
 		const canCountTokens = isGpt && typeof encodingForModel === "function";
 		const modelName = model?.model || settings.apiModel;
 
@@ -377,7 +380,11 @@ export function noteGenerator(
 				typeof (nodeData as { url?: string }).url === "string"
 					? (nodeData as { url?: string }).url!
 					: "";
-			let nodeMedia = supportsVisionInput
+			const filePath = (nodeData as { file?: string }).file;
+			const isUnsupportedVideo = !capabilities.video &&
+				getMediaMimeType(filePath?.split(".").pop() || "")?.startsWith("video/");
+			if (isUnsupportedVideo) warnUnsupportedMedia("video files");
+			let nodeMedia = !isUnsupportedVideo && (capabilities.image || capabilities.pdf)
 				? await readNodeMediaData(node)
 				: null;
 			const inputLimit = getTokenLimit(settings);
@@ -429,10 +436,12 @@ export function noteGenerator(
 				});
 			}
 
-			const youtubeUrls =
-				supportsVisionInput && !nodeMedia
-					? extractYouTubeUrls(`${nodeLinkUrl}\n${nodeText}`)
-					: [];
+			const youtubeUrls = extractYouTubeUrls(`${nodeLinkUrl}\n${nodeText}`);
+			if (youtubeUrls.length && !capabilities.youtube) warnUnsupportedMedia("YouTube links");
+			if (nodeMedia?.kind === "file" && nodeMedia.mimeType.startsWith("video/") && !capabilities.video) {
+				warnUnsupportedMedia("video files");
+				nodeMedia = null;
+			}
 
 			if (nodeMedia?.kind === "too-large") {
 				const sizeMb = (nodeMedia.size / (1024 * 1024)).toFixed(1);
@@ -443,7 +452,7 @@ export function noteGenerator(
 				nodeMedia = null;
 			}
 
-			if (nodeMedia?.kind === "image") {
+			if (nodeMedia?.kind === "image" && capabilities.image) {
 				const parts: any[] = [];
 				if (nodeText) {
 					parts.push({ type: "text", text: nodeText });
@@ -462,7 +471,7 @@ export function noteGenerator(
 					content: parts,
 					role: role === "assistant" ? "user" : role,
 				});
-			} else if (nodeMedia?.kind === "file") {
+			} else if (nodeMedia?.kind === "file" && (nodeMedia.mimeType !== "application/pdf" || capabilities.pdf)) {
 				const parts: any[] = [];
 				parts.push({
 					type: "file",
@@ -482,7 +491,7 @@ export function noteGenerator(
 					content: parts,
 					role: role === "assistant" ? "user" : role,
 				});
-			} else if (youtubeUrls.length) {
+			} else if (youtubeUrls.length && capabilities.youtube) {
 				const parts: any[] = [];
 				for (const url of youtubeUrls) {
 					try {

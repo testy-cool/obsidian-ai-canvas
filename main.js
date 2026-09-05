@@ -189,6 +189,7 @@ var init_fileUtil = __esm({
     };
     MEDIA_MIME_TYPES = {
       ...IMAGE_MIME_TYPES,
+      pdf: "application/pdf",
       mp4: "video/mp4",
       m4v: "video/x-m4v",
       mov: "video/quicktime",
@@ -47327,6 +47328,36 @@ var addGenerateGroupNameButton = (app, settings2, menuEl) => {
   });
 };
 
+// src/utils/providerCapabilities.ts
+var openAICompatible = {
+  image: true,
+  pdf: true,
+  video: false,
+  youtube: false,
+  search: false,
+  urlContext: false
+};
+var google2 = {
+  image: true,
+  pdf: true,
+  video: true,
+  youtube: true,
+  search: true,
+  urlContext: true
+};
+var capabilitiesByProvider = {
+  Gemini: google2,
+  Google: google2,
+  Vertex: google2,
+  Azure: openAICompatible
+};
+var getProviderCapabilities = (provider) => {
+  var _a20, _b19;
+  return {
+    ...(_b19 = capabilitiesByProvider[(_a20 = provider == null ? void 0 : provider.type) != null ? _a20 : ""]) != null ? _b19 : openAICompatible
+  };
+};
+
 // src/utils/htmlPreview.ts
 var import_obsidian9 = require("obsidian");
 function extractHtmlCodeBlocks(text2) {
@@ -47828,7 +47859,14 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
     const provider = resolveProvider();
     const model = resolveModel(provider);
     const isGpt = (provider == null ? void 0 : provider.type) === "OpenAI";
-    const supportsVisionInput = (provider == null ? void 0 : provider.type) === "Gemini" || (provider == null ? void 0 : provider.type) === "Google" || (provider == null ? void 0 : provider.type) === "Vertex" || (provider == null ? void 0 : provider.type) === "Azure";
+    const capabilities = getProviderCapabilities(provider);
+    const warnedMedia = /* @__PURE__ */ new Set();
+    const warnUnsupportedMedia = (media) => {
+      if (warnedMedia.has(media))
+        return;
+      warnedMedia.add(media);
+      new import_obsidian11.Notice(`${(provider == null ? void 0 : provider.type) || "This provider"} cannot take ${media}. Use a Gemini provider for this card.`);
+    };
     const canCountTokens = isGpt && typeof encodingForModel2 === "function";
     const modelName = (model == null ? void 0 : model.model) || settings2.apiModel;
     if (canCountTokens) {
@@ -47839,7 +47877,7 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
       }
     }
     const visit3 = async (node2, depth, edgeLabel) => {
-      var _a20;
+      var _a20, _b19;
       if (settings2.maxDepth && depth > settings2.maxDepth)
         return false;
       if (!isPromptContextNodeIncluded(node2.id, selectedNodeIds))
@@ -47847,7 +47885,11 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
       const nodeData = node2.getData();
       let nodeText = ((_a20 = await readNodeContent(node2)) == null ? void 0 : _a20.trim()) || "";
       const nodeLinkUrl = typeof nodeData.url === "string" ? nodeData.url : "";
-      let nodeMedia = supportsVisionInput ? await readNodeMediaData(node2) : null;
+      const filePath = nodeData.file;
+      const isUnsupportedVideo = !capabilities.video && ((_b19 = getMediaMimeType((filePath == null ? void 0 : filePath.split(".").pop()) || "")) == null ? void 0 : _b19.startsWith("video/"));
+      if (isUnsupportedVideo)
+        warnUnsupportedMedia("video files");
+      let nodeMedia = !isUnsupportedVideo && (capabilities.image || capabilities.pdf) ? await readNodeMediaData(node2) : null;
       const inputLimit = getTokenLimit(settings2);
       let shouldContinue = true;
       if (nodeText) {
@@ -47878,15 +47920,21 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
           role: "user"
         });
       }
-      const youtubeUrls = supportsVisionInput && !nodeMedia ? extractYouTubeUrls(`${nodeLinkUrl}
-${nodeText}`) : [];
+      const youtubeUrls = extractYouTubeUrls(`${nodeLinkUrl}
+${nodeText}`);
+      if (youtubeUrls.length && !capabilities.youtube)
+        warnUnsupportedMedia("YouTube links");
+      if ((nodeMedia == null ? void 0 : nodeMedia.kind) === "file" && nodeMedia.mimeType.startsWith("video/") && !capabilities.video) {
+        warnUnsupportedMedia("video files");
+        nodeMedia = null;
+      }
       if ((nodeMedia == null ? void 0 : nodeMedia.kind) === "too-large") {
         const sizeMb = (nodeMedia.size / (1024 * 1024)).toFixed(1);
         const limitMb = (nodeMedia.limit / (1024 * 1024)).toFixed(1);
         new import_obsidian11.Notice(`Skipping ${nodeMedia.filename || "media"} (${sizeMb} MB). Limit is ${limitMb} MB.`);
         nodeMedia = null;
       }
-      if ((nodeMedia == null ? void 0 : nodeMedia.kind) === "image") {
+      if ((nodeMedia == null ? void 0 : nodeMedia.kind) === "image" && capabilities.image) {
         const parts = [];
         if (nodeText) {
           parts.push({ type: "text", text: nodeText });
@@ -47905,7 +47953,7 @@ ${nodeText}`) : [];
           content: parts,
           role: role === "assistant" ? "user" : role
         });
-      } else if ((nodeMedia == null ? void 0 : nodeMedia.kind) === "file") {
+      } else if ((nodeMedia == null ? void 0 : nodeMedia.kind) === "file" && (nodeMedia.mimeType !== "application/pdf" || capabilities.pdf)) {
         const parts = [];
         parts.push({
           type: "file",
@@ -47925,7 +47973,7 @@ ${nodeText}`) : [];
           content: parts,
           role: role === "assistant" ? "user" : role
         });
-      } else if (youtubeUrls.length) {
+      } else if (youtubeUrls.length && capabilities.youtube) {
         const parts = [];
         for (const url2 of youtubeUrls) {
           try {
