@@ -117,3 +117,58 @@ describe("MCP settings layout", () => {
 		}
 	});
 });
+
+describe("settings navigation layout", () => {
+	it("keeps navigation outside the scrolling content and resets the scroll when switching sections", () => {
+		const plugin: any = {
+			manifest: { version: "test" },
+			settings: {
+				...DEFAULT_SETTINGS,
+				providers: [{ id: "test", type: "Custom", enabled: true }],
+				models: ["first", "second", "third"].map(id => ({ id, model: id, providerId: "test", enabled: true })),
+				mcpServers: [],
+			},
+			saveSettings: vi.fn(),
+		};
+		const tab: any = new SettingsTab({} as any, plugin);
+		const root = new Element();
+		tab.containerEl = root;
+		tab.display();
+
+		const nav = root.querySelector(".ac-settings-nav")!;
+		const content = root.querySelector(".ac-settings-content")!;
+		expect(root.children.map(child => child.className)).toEqual([
+			"ac-settings-header", "ac-settings-nav", "ac-settings-content",
+		]);
+		expect(nav.parentElement).toBe(root);
+		expect(content.parentElement).toBe(root);
+		expect(content.querySelector(".ac-settings-nav")).toBeNull();
+
+		const navigate = (label: string) => {
+			(content as any).scrollTop = 300;
+			nav.children.find(child => child.textContent === label)!.listeners.get("click")!();
+			expect((content as any).scrollTop).toBe(0);
+			expect(root.querySelector(".ac-settings-content")).toBe(content);
+		};
+		navigate("Providers");
+		expect(content.querySelector(".provider-models-title")!.textContent).toContain("Models (3/3)");
+		expect(content.querySelector(".provider-models-desc")!.textContent).toBe("Use Add Model to fetch and enable models.");
+		navigate("MCP servers");
+		expect(content.querySelector(".mcp-section-header")).not.toBeNull();
+	});
+
+	it.each(["src/styles/settings.css", "styles.css"])("%s reserves the navigation height outside the content scroll area", (path) => {
+		const layout = cssRule(path, ".augmented-canvas-settings");
+		expect(layout).toContain("display: flex;");
+		expect(layout).toContain("flex-direction: column;");
+		expect(layout).toContain("height: 100%;");
+		expect(layout).toContain("overflow: hidden;");
+		const nav = cssRule(path, ".augmented-canvas-settings .ac-settings-nav");
+		expect(nav).toContain("position: static;");
+		expect(nav).toContain("flex-shrink: 0;");
+		const content = cssRule(path, ".augmented-canvas-settings .ac-settings-content");
+		expect(content).toContain("min-height: 0;");
+		expect(content).toContain("overflow-y: auto;");
+		expect(content).toContain("scrollbar-gutter: stable;");
+	});
+});

@@ -49216,6 +49216,7 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
     const navButtons = /* @__PURE__ */ new Map();
     const renderContent = () => {
       content.empty();
+      content.scrollTop = 0;
       const query = this.searchQuery.trim().toLowerCase();
       navButtons.forEach((button, id) => button.classList.toggle("is-active", !query && id === this.activeSectionId));
       if (!query) {

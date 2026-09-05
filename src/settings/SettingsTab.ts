@@ -81,6 +81,7 @@ export default class SettingsTab extends PluginSettingTab {
 
         const renderContent = () => {
             content.empty();
+			content.scrollTop = 0;
             const query = this.searchQuery.trim().toLowerCase();
 
             navButtons.forEach((button, id) =>

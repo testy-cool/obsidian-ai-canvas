@@ -8,6 +8,32 @@
 }
 
 /* Existing styles */
+.augmented-canvas-settings {
+	display: flex;
+	flex-direction: column;
+	box-sizing: border-box;
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.augmented-canvas-settings .ac-settings-header {
+	flex-shrink: 0;
+}
+
+.augmented-canvas-settings .ac-settings-nav {
+	position: static;
+	flex-shrink: 0;
+	background: var(--background-primary);
+}
+
+.augmented-canvas-settings .ac-settings-content {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+}
+
 .augmented-canvas-settings .setting-item {
 	padding: 18px 0;
 	border-bottom: 1px solid var(--background-modifier-border);

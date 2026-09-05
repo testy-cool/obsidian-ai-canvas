@@ -99,6 +99,10 @@ export function setTooltip(element: { setAttribute(name: string, value: string):
 	element.setAttribute('aria-label', text);
 }
 
+export function debounce<T extends (...args: any[]) => any>(callback: T) {
+	return callback;
+}
+
 // Mutable so individual tests can flip isDesktopApp to exercise the mobile/
 // desktop branches of code that gates on it (e.g. codexCli.ts).
 export const Platform = {
