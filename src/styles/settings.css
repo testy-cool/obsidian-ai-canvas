@@ -444,6 +444,10 @@
 }
 
 .augmented-canvas-settings .provider-capability-chip {
+	box-sizing: border-box;
+	width: 8em;
+	flex: 0 0 8em;
+	white-space: nowrap;
 	padding: 2px 6px;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 4px;

@@ -4,7 +4,7 @@ import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
 import { LLMModel, LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
 import { testMCPServer } from "src/utils/mcpClient";
 import { getParamsForModel, detectProviderLabel } from "src/utils/providerParams";
-import { getProviderCapabilities, providerCapabilityKeys } from "src/utils/providerCapabilities";
+import { getProviderCapabilities, providerCapabilityKeys, type ProviderCapability, type ProviderCapabilityReport } from "src/utils/providerCapabilities";
 import { probeProviderCapabilities } from "src/utils/capabilityProbe";
 
 interface SettingsSection {
@@ -33,6 +33,7 @@ const filterSection = (sectionEl: HTMLElement, query: string): boolean => {
 
 export default class SettingsTab extends PluginSettingTab {
 	private capabilityTests = new Set<string>();
+	private capabilityProgress = new Map<string, ProviderCapabilityReport>();
 	private capabilityViews = new Map<string, () => void>();
     plugin: AugmentedCanvasPlugin;
     private modelFilters: Record<string, string> = {};
@@ -433,26 +434,35 @@ export default class SettingsTab extends PluginSettingTab {
         });
 
 		const reportEl = modelsWrapper.createDiv("provider-capability-report");
+		const chips = reportEl.createDiv("provider-meta");
+		const chipElements = new Map<ProviderCapability, HTMLButtonElement>();
+		const testedLine = reportEl.createDiv({ cls: "provider-models-desc provider-capability-tested", text: "Not tested yet" });
+		const noteLine = reportEl.createDiv("provider-capability-note");
+		noteLine.setAttribute("aria-live", "polite");
+		let selectedCapability: ProviderCapability | undefined;
+		for (const capability of providerCapabilityKeys) {
+			const chip = chips.createEl("button", { cls: "provider-capability-chip" });
+			chip.type = "button";
+			chip.addEventListener("click", () => {
+				selectedCapability = selectedCapability === capability ? undefined : capability;
+				renderReport();
+			});
+			chipElements.set(capability, chip);
+		}
 		const renderReport = () => {
-			reportEl.empty();
 			const current = this.plugin.settings.providers.find(item => item.id === provider.id);
-			const report = current?.capabilityReport;
-			const chips = reportEl.createDiv("provider-meta");
-			for (const capability of providerCapabilityKeys) {
+			const report = this.capabilityProgress.get(provider.id) ?? current?.capabilityReport;
+			for (const [capability, chip] of chipElements) {
 				const verdict = report?.[capability] ?? "untested";
 				const symbol = verdict === "yes" ? "✓" : verdict === "no" ? "✗" : "?";
-				const chip = chips.createSpan({
-					cls: "provider-capability-chip",
-					text: `${capability === "urlContext" ? "url" : capability} ${symbol}`,
-				});
+				chip.setText(`${capability === "urlContext" ? "url" : capability} ${symbol}`);
 				chip.setAttribute("title", report?.notes?.[capability] ?? "Not tested.");
+				chip.setAttribute("aria-expanded", String(selectedCapability === capability));
 			}
-			if (report?.testedAt) {
-				reportEl.createDiv({
-					cls: "provider-models-desc",
-					text: `Tested ${new Date(report.testedAt).toLocaleString()} with ${report.model ?? "unknown model"}`,
-				});
-			}
+			testedLine.setText(report?.testedAt
+				? `Tested ${new Date(report.testedAt).toLocaleString()} with ${report.model ?? "unknown model"}`
+				: "Not tested yet");
+			noteLine.setText(selectedCapability ? report?.notes?.[selectedCapability] ?? "Not tested." : "");
 		};
 		renderReport();
 		const testBtn = new ButtonComponent(actions);
@@ -474,17 +484,22 @@ export default class SettingsTab extends PluginSettingTab {
 			this.capabilityTests.add(provider.id);
 			updateTestButton();
 			try {
-				const report = await probeProviderCapabilities(current, model.model, this.plugin.settings);
+				const report = await probeProviderCapabilities(current, model.model, this.plugin.settings, progress => {
+					this.capabilityProgress.set(provider.id, progress);
+					renderReport();
+					this.capabilityViews.get(provider.id)?.();
+				});
 				const saved = this.plugin.settings.providers.find(item => item.id === provider.id);
 				if (saved) {
 					saved.capabilityReport = report;
 					await this.plugin.saveSettings();
-					renderReport();
 				}
 			} catch (error) {
 				new Notice(`Capability test failed: ${error instanceof Error ? error.message : String(error)}`);
 			} finally {
 				this.capabilityTests.delete(provider.id);
+				this.capabilityProgress.delete(provider.id);
+				renderReport();
 				updateTestButton();
 				this.capabilityViews.get(provider.id)?.();
 			}

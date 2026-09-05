@@ -49450,7 +49450,7 @@ UnifiedProviderModal.MODEL_PAGE_SIZE = 50;
 var RED_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 var PROBE_PDF = "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA0MDAgMjAwXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggNDkgPj4Kc3RyZWFtCkJUIC9GMSAyNCBUZiA0MCAxMDAgVGQgKENBTlZBUyBQUk9CRSA3NDMxKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwMzExIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDA5CiUlRU9GCg==";
 var TIMEOUT_MS = 3e4;
-var probeProviderCapabilities = async (provider, modelId, settings2) => {
+var probeProviderCapabilities = async (provider, modelId, settings2, onProgress) => {
   const notes = {};
   const report = {
     image: "untested",
@@ -49462,6 +49462,8 @@ var probeProviderCapabilities = async (provider, modelId, settings2) => {
     model: modelId,
     notes
   };
+  const reportProgress = () => onProgress == null ? void 0 : onProgress({ ...report, notes: { ...notes } });
+  reportProgress();
   const probeProvider = { ...provider, capabilityReport: void 0 };
   const model = settings2.models.find((item) => item.providerId === provider.id && item.model === modelId);
   const check2 = async (capability, content, accept, failure) => {
@@ -49493,6 +49495,7 @@ var probeProviderCapabilities = async (provider, modelId, settings2) => {
     } finally {
       clearTimeout(timer);
     }
+    reportProgress();
   };
   await check2("image", [
     { type: "text", text: "Reply with the colour of this image in one word." },
@@ -49512,6 +49515,7 @@ var probeProviderCapabilities = async (provider, modelId, settings2) => {
   } else {
     notes.video = "Video file upload was not tested.";
   }
+  reportProgress();
   await check2("search", "What is today's date and one news headline from today? Include the four-digit year.", (result) => {
     var _a20, _b19, _c;
     const grounding = (_b19 = (_a20 = result.providerMetadata) == null ? void 0 : _a20.google) == null ? void 0 : _b19.groundingMetadata;
@@ -49541,6 +49545,7 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.capabilityTests = /* @__PURE__ */ new Set();
+    this.capabilityProgress = /* @__PURE__ */ new Map();
     this.capabilityViews = /* @__PURE__ */ new Map();
     this.modelFilters = {};
     this.modelEnabledOnly = {};
@@ -49830,27 +49835,34 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
       }, provider, this.plugin.settings.models.filter((m) => m.providerId === provider.id)).open();
     });
     const reportEl = modelsWrapper.createDiv("provider-capability-report");
+    const chips = reportEl.createDiv("provider-meta");
+    const chipElements = /* @__PURE__ */ new Map();
+    const testedLine = reportEl.createDiv({ cls: "provider-models-desc provider-capability-tested", text: "Not tested yet" });
+    const noteLine = reportEl.createDiv("provider-capability-note");
+    noteLine.setAttribute("aria-live", "polite");
+    let selectedCapability;
+    for (const capability of providerCapabilityKeys) {
+      const chip = chips.createEl("button", { cls: "provider-capability-chip" });
+      chip.type = "button";
+      chip.addEventListener("click", () => {
+        selectedCapability = selectedCapability === capability ? void 0 : capability;
+        renderReport();
+      });
+      chipElements.set(capability, chip);
+    }
     const renderReport = () => {
-      var _a20, _b19, _c, _d;
-      reportEl.empty();
+      var _a20, _b19, _c, _d, _e, _f, _g;
       const current = this.plugin.settings.providers.find((item) => item.id === provider.id);
-      const report = current == null ? void 0 : current.capabilityReport;
-      const chips = reportEl.createDiv("provider-meta");
-      for (const capability of providerCapabilityKeys) {
-        const verdict = (_a20 = report == null ? void 0 : report[capability]) != null ? _a20 : "untested";
+      const report = (_a20 = this.capabilityProgress.get(provider.id)) != null ? _a20 : current == null ? void 0 : current.capabilityReport;
+      for (const [capability, chip] of chipElements) {
+        const verdict = (_b19 = report == null ? void 0 : report[capability]) != null ? _b19 : "untested";
         const symbol21 = verdict === "yes" ? "\u2713" : verdict === "no" ? "\u2717" : "?";
-        const chip = chips.createSpan({
-          cls: "provider-capability-chip",
-          text: `${capability === "urlContext" ? "url" : capability} ${symbol21}`
-        });
-        chip.setAttribute("title", (_c = (_b19 = report == null ? void 0 : report.notes) == null ? void 0 : _b19[capability]) != null ? _c : "Not tested.");
+        chip.setText(`${capability === "urlContext" ? "url" : capability} ${symbol21}`);
+        chip.setAttribute("title", (_d = (_c = report == null ? void 0 : report.notes) == null ? void 0 : _c[capability]) != null ? _d : "Not tested.");
+        chip.setAttribute("aria-expanded", String(selectedCapability === capability));
       }
-      if (report == null ? void 0 : report.testedAt) {
-        reportEl.createDiv({
-          cls: "provider-models-desc",
-          text: `Tested ${new Date(report.testedAt).toLocaleString()} with ${(_d = report.model) != null ? _d : "unknown model"}`
-        });
-      }
+      testedLine.setText((report == null ? void 0 : report.testedAt) ? `Tested ${new Date(report.testedAt).toLocaleString()} with ${(_e = report.model) != null ? _e : "unknown model"}` : "Not tested yet");
+      noteLine.setText(selectedCapability ? (_g = (_f = report == null ? void 0 : report.notes) == null ? void 0 : _f[selectedCapability]) != null ? _g : "Not tested." : "");
     };
     renderReport();
     const testBtn = new import_obsidian18.ButtonComponent(actions);
@@ -49876,17 +49888,23 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
       this.capabilityTests.add(provider.id);
       updateTestButton();
       try {
-        const report = await probeProviderCapabilities(current, model.model, this.plugin.settings);
+        const report = await probeProviderCapabilities(current, model.model, this.plugin.settings, (progress) => {
+          var _a21;
+          this.capabilityProgress.set(provider.id, progress);
+          renderReport();
+          (_a21 = this.capabilityViews.get(provider.id)) == null ? void 0 : _a21();
+        });
         const saved = this.plugin.settings.providers.find((item) => item.id === provider.id);
         if (saved) {
           saved.capabilityReport = report;
           await this.plugin.saveSettings();
-          renderReport();
         }
       } catch (error40) {
         new import_obsidian18.Notice(`Capability test failed: ${error40 instanceof Error ? error40.message : String(error40)}`);
       } finally {
         this.capabilityTests.delete(provider.id);
+        this.capabilityProgress.delete(provider.id);
+        renderReport();
         updateTestButton();
         (_a20 = this.capabilityViews.get(provider.id)) == null ? void 0 : _a20();
       }

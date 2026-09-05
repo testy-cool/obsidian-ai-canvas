@@ -9,13 +9,16 @@ const TIMEOUT_MS = 30_000;
 export const probeProviderCapabilities = async (
 	provider: LLMProvider,
 	modelId: string,
-	settings: AugmentedCanvasSettings
+	settings: AugmentedCanvasSettings,
+	onProgress?: (report: ProviderCapabilityReport) => void
 ): Promise<ProviderCapabilityReport> => {
 	const notes: Record<string, string> = {};
 	const report: ProviderCapabilityReport = {
 		image: "untested", pdf: "untested", video: "untested", youtube: "untested", search: "untested", urlContext: "untested",
 		model: modelId, notes,
 	};
+	const reportProgress = () => onProgress?.({ ...report, notes: { ...notes } });
+	reportProgress();
 	// A previous failed test must not disable the features being re-tested.
 	const probeProvider = { ...provider, capabilityReport: undefined };
 	const model = settings.models.find(item => item.providerId === provider.id && item.model === modelId);
@@ -52,6 +55,7 @@ export const probeProviderCapabilities = async (
 		} finally {
 			clearTimeout(timer);
 		}
+		reportProgress();
 	};
 
 	await check("image", [
@@ -77,6 +81,8 @@ export const probeProviderCapabilities = async (
 	} else {
 		notes.video = "Video file upload was not tested.";
 	}
+
+	reportProgress();
 
 	await check("search", "What is today's date and one news headline from today? Include the four-digit year.", result => {
 		const grounding = result.providerMetadata?.google?.groundingMetadata;

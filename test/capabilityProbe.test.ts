@@ -160,3 +160,22 @@ describe("provider capability probes", () => {
 		expect(capabilityReport.search).toBe("no");
 	});
 });
+
+
+it("reports independent progress snapshots as each capability finishes", async () => {
+	installAnswers();
+	const progress = vi.fn();
+	const report = await probeProviderCapabilities(provider, model.model, settings, progress);
+	const snapshots = progress.mock.calls.map(([snapshot]) => snapshot);
+	expect(snapshots).toHaveLength(7);
+	expect(snapshots[0].image).toBe("untested");
+	expect(snapshots[0].notes).toEqual({});
+	expect(snapshots[1]).toMatchObject({ image: "yes", pdf: "untested" });
+	expect(snapshots[2]).toMatchObject({ pdf: "yes", youtube: "untested" });
+	expect(snapshots[3]).toMatchObject({ youtube: "yes", search: "untested" });
+	expect(snapshots[4].notes.video).toBe("Video file upload was not tested.");
+	expect(snapshots[5]).toMatchObject({ search: "yes", urlContext: "untested" });
+	expect(snapshots[6].urlContext).toBe("yes");
+	expect(snapshots.every(snapshot => !snapshot.testedAt)).toBe(true);
+	expect(report.testedAt).toBeTruthy();
+});

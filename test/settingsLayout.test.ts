@@ -255,6 +255,8 @@ describe("provider capability settings", () => {
 	it("tests the first enabled model, disables duplicate requests, saves the report and renders its details", async () => {
 		const { tab, root, button, provider, plugin } = setup();
 		expect(button.parentElement?.className).toBe("provider-models-actions");
+		const testedLine = root.querySelector(".provider-capability-tested")!;
+		expect(testedLine.textContent).toBe("Not tested yet");
 		expect(root.querySelectorAll(".provider-capability-chip").map(item => item.textContent)).toEqual([
 			"image ?", "pdf ?", "video ?", "youtube ?", "search ?", "url ?",
 		]);
@@ -265,13 +267,22 @@ describe("provider capability settings", () => {
 		expect(button.classList.contains("provider-capability-test-button")).toBe(true);
 		expect(button.disabled).toBe(true);
 		await button.listeners.get("click")!();
-		expect(probeProviderCapabilities).toHaveBeenCalledExactlyOnceWith(provider, "test-model", plugin.settings);
+		expect(probeProviderCapabilities).toHaveBeenCalledExactlyOnceWith(provider, "test-model", plugin.settings, expect.any(Function));
 		const reopened = new Element();
 		tab.renderProviders(reopened);
 		const reopenedButton = reopened.querySelectorAll("button").find(item => item.textContent === "Testing…")!;
 		expect(reopenedButton.disabled).toBe(true);
+		const progress = vi.mocked(probeProviderCapabilities).mock.calls[0][3]!;
+		const chips = root.querySelectorAll(".provider-capability-chip");
+		progress({ ...report, pdf: "untested", testedAt: undefined });
+		expect(chips[0].textContent).toBe("image ✓");
+		expect(chips[1].textContent).toBe("pdf ?");
+		expect(root.querySelectorAll(".provider-capability-chip")).toEqual(chips);
+		expect(reopened.querySelector(".provider-capability-chip")!.textContent).toBe("image ✓");
+		expect(plugin.saveSettings).not.toHaveBeenCalled();
 		finish(report);
 		await pending;
+		expect(root.querySelector(".provider-capability-tested")).toBe(testedLine);
 		expect(provider.capabilityReport).toBe(report);
 		expect(plugin.saveSettings).toHaveBeenCalledOnce();
 		expect(button.textContent).toBe("Test capabilities");
@@ -288,6 +299,21 @@ describe("provider capability settings", () => {
 		tab.renderProviders(reloaded);
 		expect(reloaded.querySelectorAll(".provider-capability-chip").map(item => item.textContent))
 			.toEqual(root.querySelectorAll(".provider-capability-chip").map(item => item.textContent));
+	});
+
+	it("exposes chip notes with native keyboard buttons and keeps chips mounted while toggling", async () => {
+		const { root } = setup(report);
+		const chip = root.querySelector(".provider-capability-chip")!;
+		expect(chip.tagName).toBe("button");
+		expect(chip.attributes.get("aria-expanded")).toBe("false");
+		await chip.listeners.get("click")!();
+		expect(root.querySelector(".provider-capability-note")!.textContent).toBe("Saw red");
+		expect(chip.attributes.get("title")).toBe("Saw red");
+		expect(chip.attributes.get("aria-expanded")).toBe("true");
+		expect(root.querySelector(".provider-capability-chip")).toBe(chip);
+		await chip.listeners.get("click")!();
+		expect(root.querySelector(".provider-capability-note")!.textContent).toBe("");
+		expect(chip.attributes.get("aria-expanded")).toBe("false");
 	});
 
 	it("notifies without sending requests when no model is enabled", async () => {
@@ -326,6 +352,8 @@ describe("provider capability settings", () => {
 	it.each(["src/styles/settings.css", "styles.css"])("%s keeps capability text and actions at least 12px", (path) => {
 		expect(cssRule(path, ".augmented-canvas-settings .provider-models-actions button"))
 			.toContain("font-size: max(12px, var(--font-ui-small));");
+		expect(cssRule(path, ".augmented-canvas-settings .provider-capability-chip")).toContain("width: 8em;");
+		expect(cssRule(path, ".augmented-canvas-settings .provider-capability-chip")).toContain("flex: 0 0 8em;");
 		const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 		expect(css).toContain(".provider-capability-report *,\n.augmented-canvas-settings .provider-capability-note,");
 	});
