@@ -1,0 +1,11 @@
+{
+	"nodes":[
+		{"id":"fx-prompt","type":"text","x":0,"y":0,"width":400,"height":160,"text":"Explain in two sentences why the sky is blue."},
+		{"id":"fx-response","type":"text","x":0,"y":260,"width":600,"height":360,"color":"6","chat_role":"assistant","ai_provider":"Bifrost","ai_model":"vertex/gemini-3.1-pro-preview","text":"Sunlight is scattered by air molecules, and shorter blue wavelengths scatter far more than red ones. That scattered blue light reaches your eyes from every direction of the sky.\n\n<details><summary>Reasoning</summary>\nFixture reasoning block to exercise the details renderer.\n</details>"},
+		{"id":"fx-html","type":"text","x":700,"y":0,"width":600,"height":500,"text":"HTML preview card\n\n```html\n<!doctype html>\n<html><body style=\"font-family:sans-serif;padding:16px\">\n<h1 id=\"t\">Fixture preview</h1>\n<button onclick=\"document.getElementById('t').textContent='Clicked'\">Click me</button>\n</body></html>\n```"},
+		{"id":"fx-image","type":"file","x":700,"y":600,"width":400,"height":400,"file":"attachments/gpt-image-2-image-generated-2026-07-18T18-39-34-646Z.png","imagePrompt":"A fixture image prompt"}
+	],
+	"edges":[
+		{"id":"fx-edge","isGenerated":true,"fromNode":"fx-prompt","fromSide":"bottom","toNode":"fx-response","toSide":"top","label":"Ask AI"}
+	]
+}
