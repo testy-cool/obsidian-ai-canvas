@@ -405,3 +405,27 @@
 	word-break: break-word !important;
 	hyphens: auto !important;
 }
+
+/* Provider test results share the model section's width and text floor. */
+.augmented-canvas-settings .provider-capability-report {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.augmented-canvas-settings .provider-capability-chip {
+	padding: 2px 6px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+}
+
+.augmented-canvas-settings .provider-capability-report,
+.augmented-canvas-settings .provider-capability-report *,
+.augmented-canvas-settings .provider-capability-note,
+.augmented-canvas-settings .provider-models-actions button {
+	font-size: max(12px, var(--font-ui-small));
+}
+
+.augmented-canvas-settings .provider-capability-note {
+	color: var(--text-muted);
+}

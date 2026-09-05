@@ -9,6 +9,16 @@ export interface ProviderCapabilities {
 	urlContext: boolean;
 }
 
+export type ProviderCapability = keyof ProviderCapabilities;
+export type CapabilityVerdict = "yes" | "no" | "untested";
+export type ProviderCapabilityReport = Record<ProviderCapability, CapabilityVerdict> & {
+	testedAt?: string;
+	model?: string;
+	notes?: Record<string, string>;
+};
+
+export const providerCapabilityKeys: ProviderCapability[] = ["image", "pdf", "video", "youtube", "search", "urlContext"];
+
 const openAICompatible: ProviderCapabilities = {
 	image: true,
 	pdf: true,
@@ -36,7 +46,12 @@ export const supportsGoogleTools = (modelId: string): boolean =>
 	/^gemini-(?:2\.5|3(?:\.\d+)?)-/.test(modelId.split("/").pop() ?? "");
 
 export const getProviderCapabilities = (
-	provider?: ProviderKind
-): ProviderCapabilities => ({
-	...(isGoogleProvider(provider) ? google : openAICompatible),
-});
+	provider?: ProviderKind & Pick<LLMProvider, "capabilityReport">
+): ProviderCapabilities => {
+	const capabilities = { ...(isGoogleProvider(provider) ? google : openAICompatible) };
+	for (const key of providerCapabilityKeys) {
+		const verdict = provider?.capabilityReport?.[key];
+		if (verdict === "yes" || verdict === "no") capabilities[key] = verdict === "yes";
+	}
+	return capabilities;
+};

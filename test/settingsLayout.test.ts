@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import SettingsTab from "../src/settings/SettingsTab";
 import { UnifiedProviderModal } from "../src/Modals/UnifiedProviderModal";
 import { DEFAULT_SETTINGS } from "../src/settings/AugmentedCanvasSettings";
+import * as obsidian from "obsidian";
+import { probeProviderCapabilities } from "../src/utils/capabilityProbe";
+import type { ProviderCapabilityReport } from "../src/utils/providerCapabilities";
+
+vi.mock("../src/utils/capabilityProbe", () => ({ probeProviderCapabilities: vi.fn() }));
 
 class Element {
 	children: Element[] = [];
@@ -10,6 +15,8 @@ class Element {
 	className = "";
 	text = "";
 	checked = false;
+	disabled = false;
+	attributes = new Map<string, string>();
 	style: Record<string, string> = {};
 	listeners = new Map<string, () => unknown>();
 	classList = {
@@ -34,7 +41,7 @@ class Element {
 	createSpan(options?: string | { cls?: string; text?: string }) { return this.createEl("span", options); }
 	addClass(name: string) { this.className += ` ${name}`; }
 	setText(text: string) { this.text = text; }
-	setAttribute() {}
+	setAttribute(name: string, value: string) { this.attributes.set(name, value); }
 	empty() { this.children = []; this.text = ""; }
 	remove() {
 		if (this.parentElement) {
@@ -63,6 +70,8 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
+	vi.mocked(probeProviderCapabilities).mockReset();
 });
 
 describe("MCP settings layout", () => {
@@ -180,6 +189,7 @@ describe("Bifrost Gemini-native setting", () => {
 		const provider = {
 			id: "bifrost", type: "Bifrost", baseUrl: "https://example.test/v1",
 			apiKey: "test", enabled: true, geminiNative,
+			capabilityReport: { image: "no", pdf: "yes", video: "untested", youtube: "no", search: "no", urlContext: "no" } as ProviderCapabilityReport,
 		};
 		const model = { id: "selected", model: "vertex/gemini-3.1-pro-preview", providerId: provider.id, enabled: true };
 		const modal: any = new UnifiedProviderModal({} as any, onSave, provider, [model]);
@@ -194,7 +204,7 @@ describe("Bifrost Gemini-native setting", () => {
 		await toggle.listeners.get("change")!();
 		modal.save();
 		expect(onSave).toHaveBeenCalledWith(
-			expect.objectContaining({ type: "Bifrost", geminiNative: true, baseUrl: provider.baseUrl }),
+			expect.objectContaining({ type: "Bifrost", geminiNative: true, baseUrl: provider.baseUrl, capabilityReport: provider.capabilityReport }),
 			[expect.objectContaining({ model: model.model })],
 		);
 	});
@@ -207,5 +217,107 @@ describe("Bifrost Gemini-native setting", () => {
 		const nativeSetting = (modal.contentEl as Element).querySelectorAll(".setting-item")
 			.find(item => item.querySelector(".setting-item-name")?.textContent === "Use Gemini-native API")!;
 		expect(nativeSetting.style.display).toBe("none");
+	});
+});
+
+describe("provider capability settings", () => {
+	const report: ProviderCapabilityReport = {
+		image: "yes", pdf: "yes", video: "no", youtube: "untested", search: "no", urlContext: "no",
+		testedAt: "2026-09-05T12:00:00.000Z", model: "test-model",
+		notes: { image: "Saw red", search: "No grounding evidence" },
+	};
+	const setup = (capabilityReport?: ProviderCapabilityReport) => {
+		const provider = { id: "test", type: "Bifrost", baseUrl: "https://example.test/v1", enabled: true, capabilityReport };
+		const plugin: any = {
+			settings: {
+				...DEFAULT_SETTINGS, providers: [provider], activeProvider: provider.id,
+				models: [
+					{ id: "disabled", model: "disabled-model", providerId: provider.id, enabled: false },
+					{ id: "selected", model: "test-model", providerId: provider.id, enabled: true },
+				],
+			},
+			saveSettings: vi.fn().mockResolvedValue(undefined),
+		};
+		const tab: any = new SettingsTab({} as any, plugin);
+		const root = new Element();
+		tab.renderProviders(root);
+		const button = root.querySelectorAll("button").find(item => item.textContent === "Test capabilities")!;
+		return { tab, root, button, provider, plugin };
+	};
+
+	it("tests the first enabled model, disables duplicate requests, saves the report and renders its details", async () => {
+		const { tab, root, button, provider, plugin } = setup();
+		expect(button.parentElement?.className).toBe("provider-models-actions");
+		expect(root.querySelectorAll(".provider-capability-chip").map(item => item.textContent)).toEqual([
+			"image ?", "pdf ?", "video ?", "youtube ?", "search ?", "url ?",
+		]);
+		let finish!: (value: ProviderCapabilityReport) => void;
+		vi.mocked(probeProviderCapabilities).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+		const pending = button.listeners.get("click")!();
+		expect(button.textContent).toBe("Testing…");
+		expect(button.disabled).toBe(true);
+		await button.listeners.get("click")!();
+		expect(probeProviderCapabilities).toHaveBeenCalledExactlyOnceWith(provider, "test-model", plugin.settings);
+		const reopened = new Element();
+		tab.renderProviders(reopened);
+		const reopenedButton = reopened.querySelectorAll("button").find(item => item.textContent === "Testing…")!;
+		expect(reopenedButton.disabled).toBe(true);
+		finish(report);
+		await pending;
+		expect(provider.capabilityReport).toBe(report);
+		expect(plugin.saveSettings).toHaveBeenCalledOnce();
+		expect(button.textContent).toBe("Test capabilities");
+		expect(button.disabled).toBe(false);
+		expect(reopenedButton.disabled).toBe(false);
+		expect(reopenedButton.textContent).toBe("Test capabilities");
+		expect(root.querySelectorAll(".provider-capability-chip").map(item => item.textContent)).toEqual([
+			"image ✓", "pdf ✓", "video ✗", "youtube ?", "search ✗", "url ✗",
+		]);
+		expect(root.querySelector(".provider-capability-chip")!.attributes.get("title")).toBe("Saw red");
+		expect(root.textContent).toContain(`Tested ${new Date(report.testedAt!).toLocaleString()} with test-model`);
+		const reloaded = new Element();
+		tab.renderProviders(reloaded);
+		expect(reloaded.querySelectorAll(".provider-capability-chip").map(item => item.textContent))
+			.toEqual(root.querySelectorAll(".provider-capability-chip").map(item => item.textContent));
+	});
+
+	it("notifies without sending requests when no model is enabled", async () => {
+		const notice = vi.spyOn(obsidian, "Notice");
+		const { button, plugin } = setup();
+		plugin.settings.models.forEach((model: any) => { model.enabled = false; });
+		await button.listeners.get("click")!();
+		expect(notice).toHaveBeenCalledWith("Enable a model for Bifrost before testing capabilities.");
+		expect(probeProviderCapabilities).not.toHaveBeenCalled();
+		expect(button.disabled).toBe(false);
+	});
+
+	it("restores the button and reports an unexpected failure", async () => {
+		const notice = vi.spyOn(obsidian, "Notice");
+		const { button, provider } = setup(report);
+		vi.mocked(probeProviderCapabilities).mockRejectedValue(new Error("Probe failed"));
+		await button.listeners.get("click")!();
+		expect(notice).toHaveBeenCalledWith("Capability test failed: Probe failed");
+		expect(provider.capabilityReport).toBe(report);
+		expect(button.disabled).toBe(false);
+		expect(button.textContent).toBe("Test capabilities");
+	});
+
+	it("shows the grounding note from the active provider's folded report", () => {
+		const { tab, plugin } = setup(report);
+		plugin.settings.providers[0].geminiNative = true;
+		const root = new Element();
+		tab.renderGenerationSettings(root);
+		expect(root.querySelector(".provider-capability-note")!.textContent).toBe("The active provider (Bifrost) cannot do search grounding. Use a Gemini provider or Bifrost with the Gemini-native API.");
+		plugin.settings.providers[0].capabilityReport = { ...report, search: "yes" };
+		root.empty();
+		tab.renderGenerationSettings(root);
+		expect(root.querySelector(".provider-capability-note")).toBeNull();
+	});
+
+	it.each(["src/styles/settings.css", "styles.css"])("%s keeps capability text and actions at least 12px", (path) => {
+		expect(cssRule(path, ".augmented-canvas-settings .provider-models-actions button"))
+			.toContain("font-size: max(12px, var(--font-ui-small));");
+		const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+		expect(css).toContain(".provider-capability-report *,\n.augmented-canvas-settings .provider-capability-note,");
 	});
 });

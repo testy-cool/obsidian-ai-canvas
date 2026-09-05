@@ -4,6 +4,8 @@ import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
 import { LLMModel, LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
 import { testMCPServer } from "src/utils/mcpClient";
 import { getParamsForModel, detectProviderLabel } from "src/utils/providerParams";
+import { getProviderCapabilities, providerCapabilityKeys } from "src/utils/providerCapabilities";
+import { probeProviderCapabilities } from "src/utils/capabilityProbe";
 
 interface SettingsSection {
     id: string;
@@ -30,6 +32,8 @@ const filterSection = (sectionEl: HTMLElement, query: string): boolean => {
 };
 
 export default class SettingsTab extends PluginSettingTab {
+	private capabilityTests = new Set<string>();
+	private capabilityViews = new Map<string, () => void>();
     plugin: AugmentedCanvasPlugin;
     private modelFilters: Record<string, string> = {};
     private modelEnabledOnly: Record<string, boolean> = {};
@@ -428,6 +432,63 @@ export default class SettingsTab extends PluginSettingTab {
             ).open();
         });
 
+		const reportEl = modelsWrapper.createDiv("provider-capability-report");
+		const renderReport = () => {
+			reportEl.empty();
+			const current = this.plugin.settings.providers.find(item => item.id === provider.id);
+			const report = current?.capabilityReport;
+			const chips = reportEl.createDiv("provider-meta");
+			for (const capability of providerCapabilityKeys) {
+				const verdict = report?.[capability] ?? "untested";
+				const symbol = verdict === "yes" ? "✓" : verdict === "no" ? "✗" : "?";
+				const chip = chips.createSpan({
+					cls: "provider-capability-chip",
+					text: `${capability === "urlContext" ? "url" : capability} ${symbol}`,
+				});
+				chip.setAttribute("title", report?.notes?.[capability] ?? "Not tested.");
+			}
+			if (report?.testedAt) {
+				reportEl.createDiv({
+					cls: "provider-models-desc",
+					text: `Tested ${new Date(report.testedAt).toLocaleString()} with ${report.model ?? "unknown model"}`,
+				});
+			}
+		};
+		renderReport();
+		const testBtn = new ButtonComponent(actions);
+		const updateTestButton = () => testBtn
+			.setButtonText(this.capabilityTests.has(provider.id) ? "Testing…" : "Test capabilities")
+			.setDisabled(this.capabilityTests.has(provider.id));
+		updateTestButton();
+		this.capabilityViews.set(provider.id, () => { renderReport(); updateTestButton(); });
+		testBtn.onClick(async () => {
+			if (this.capabilityTests.has(provider.id)) return;
+			const model = getProviderModels().find(item => item.enabled);
+			if (!model) {
+				new Notice(`Enable a model for ${provider.type} before testing capabilities.`);
+				return;
+			}
+			const current = this.plugin.settings.providers.find(item => item.id === provider.id);
+			if (!current) return;
+			this.capabilityTests.add(provider.id);
+			updateTestButton();
+			try {
+				const report = await probeProviderCapabilities(current, model.model, this.plugin.settings);
+				const saved = this.plugin.settings.providers.find(item => item.id === provider.id);
+				if (saved) {
+					saved.capabilityReport = report;
+					await this.plugin.saveSettings();
+					renderReport();
+				}
+			} catch (error) {
+				new Notice(`Capability test failed: ${error instanceof Error ? error.message : String(error)}`);
+			} finally {
+				this.capabilityTests.delete(provider.id);
+				updateTestButton();
+				this.capabilityViews.get(provider.id)?.();
+			}
+		});
+
         updateHeader();
 
         let filterText = this.modelFilters[provider.id] || "";
@@ -713,6 +774,13 @@ export default class SettingsTab extends PluginSettingTab {
 
     private renderGenerationSettings(containerEl: HTMLElement) {
         new Setting(containerEl).setHeading().setName("Generation Settings");
+		const activeProvider = this.plugin.settings.providers.find(provider => provider.id === this.plugin.settings.activeProvider);
+		if (activeProvider && !getProviderCapabilities(activeProvider).search) {
+			containerEl.createDiv({
+				cls: "provider-capability-note",
+				text: `The active provider (${activeProvider.type}) cannot do search grounding. Use a Gemini provider or Bifrost with the Gemini-native API.`,
+			});
+		}
 
 		new Setting(containerEl)
 			.setName("Always ask which cards to include")

@@ -45882,6 +45882,7 @@ var streamCodexResponse = async (provider, messages, { model, providerParams, ti
 };
 
 // src/utils/providerCapabilities.ts
+var providerCapabilityKeys = ["image", "pdf", "video", "youtube", "search", "urlContext"];
 var openAICompatible = {
   image: true,
   pdf: true,
@@ -45906,9 +45907,16 @@ var supportsGoogleTools = (modelId) => {
   var _a20;
   return /^gemini-(?:2\.5|3(?:\.\d+)?)-/.test((_a20 = modelId.split("/").pop()) != null ? _a20 : "");
 };
-var getProviderCapabilities = (provider) => ({
-  ...isGoogleProvider(provider) ? google2 : openAICompatible
-});
+var getProviderCapabilities = (provider) => {
+  var _a20;
+  const capabilities = { ...isGoogleProvider(provider) ? google2 : openAICompatible };
+  for (const key of providerCapabilityKeys) {
+    const verdict = (_a20 = provider == null ? void 0 : provider.capabilityReport) == null ? void 0 : _a20[key];
+    if (verdict === "yes" || verdict === "no")
+      capabilities[key] = verdict === "yes";
+  }
+  return capabilities;
+};
 
 // src/utils/ai.ts
 var tokenCache = /* @__PURE__ */ new Map();
@@ -46124,11 +46132,12 @@ var supportsUrlContext = supportsGoogleTools;
 var supportsSearchGrounding = supportsUrlContext;
 var buildTools = (provider, modelId, mcpTools, { useSearchGrounding = true, useUrlContext = true } = {}) => {
   const allTools = { ...mcpTools };
+  const capabilities = getProviderCapabilities(provider);
   if (isGoogleProvider(provider) && Object.keys(allTools).length === 0) {
-    if (useSearchGrounding && supportsSearchGrounding(modelId)) {
+    if (useSearchGrounding && capabilities.search && supportsSearchGrounding(modelId)) {
       allTools.google_search = google.tools.googleSearch({});
     }
-    if (useUrlContext && supportsUrlContext(modelId)) {
+    if (useUrlContext && capabilities.urlContext && supportsUrlContext(modelId)) {
       allTools.url_context = google.tools.urlContext({});
     }
   }
@@ -46171,8 +46180,9 @@ var streamResponse = async (provider, messages, {
   const llm = getLlm(provider, providerParams);
   const modelId = model || "gemini-3-flash-preview";
   const useGoogle = isGoogleProvider(provider);
-  const canUseSearch = useGoogle && supportsSearchGrounding(modelId);
-  const canUseUrlContext = useGoogle && supportsUrlContext(modelId);
+  const capabilities = getProviderCapabilities(provider);
+  const canUseSearch = useGoogle && capabilities.search && supportsSearchGrounding(modelId);
+  const canUseUrlContext = useGoogle && capabilities.urlContext && supportsUrlContext(modelId);
   const isFlexTier = (providerParams == null ? void 0 : providerParams.serviceTier) === "flex";
   const wantsFlexFallback = isFlexTier && (providerParams == null ? void 0 : providerParams.flexFallback) === true;
   const effectiveTimeout = timeoutMs != null ? timeoutMs : isFlexTier ? 6e5 : 6e4;
@@ -46333,6 +46343,9 @@ var getResponse = async (provider, messages, {
   max_tokens,
   temperature,
   isJSON,
+  includeMetadata = false,
+  useSearchGrounding = true,
+  useUrlContext = true,
   providerParams,
   timeoutMs,
   onComplete
@@ -46344,6 +46357,8 @@ var getResponse = async (provider, messages, {
       if (chunk)
         text3 += chunk;
     });
+    if (includeMetadata)
+      return { text: text3, sources: [], providerMetadata: void 0 };
     return isJSON ? (() => {
       try {
         return JSON.parse(stripJsonFence(text3));
@@ -46363,20 +46378,21 @@ var getResponse = async (provider, messages, {
   const llm = getLlm(provider, providerParams);
   const modelId = model || "gemini-3-flash-preview";
   const useGoogle = isGoogleProvider(provider);
-  const canUseSearch = useGoogle && supportsSearchGrounding(modelId);
-  const canUseUrlContext = useGoogle && supportsUrlContext(modelId);
+  const capabilities = getProviderCapabilities(provider);
+  const canUseSearch = useSearchGrounding && useGoogle && capabilities.search && supportsSearchGrounding(modelId);
+  const canUseUrlContext = useUrlContext && useGoogle && capabilities.urlContext && supportsUrlContext(modelId);
   const isFlexTier = (providerParams == null ? void 0 : providerParams.serviceTier) === "flex";
   const wantsFlexFallback = isFlexTier && (providerParams == null ? void 0 : providerParams.flexFallback) === true;
   const effectiveTimeout = timeoutMs != null ? timeoutMs : isFlexTier ? 6e5 : 6e4;
   const abortController = new AbortController();
   const timer = setTimeout(() => abortController.abort(), effectiveTimeout);
-  const runGenerate = (useSearchGrounding, useUrlContext) => generateText({
+  const runGenerate = (useSearchGrounding2, useUrlContext2) => generateText({
     model: llm(modelId),
     messages,
     maxOutputTokens: max_tokens,
     temperature,
     abortSignal: abortController.signal,
-    tools: buildTools(provider, modelId, void 0, { useSearchGrounding, useUrlContext })
+    tools: buildTools(provider, modelId, void 0, { useSearchGrounding: useSearchGrounding2, useUrlContext: useUrlContext2 })
   });
   let textResult;
   try {
@@ -46399,6 +46415,9 @@ var getResponse = async (provider, messages, {
           max_tokens,
           temperature,
           isJSON,
+          includeMetadata,
+          useSearchGrounding,
+          useUrlContext,
           timeoutMs,
           onComplete,
           providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false }
@@ -46434,6 +46453,9 @@ var getResponse = async (provider, messages, {
           max_tokens,
           temperature,
           isJSON,
+          includeMetadata,
+          useSearchGrounding,
+          useUrlContext,
           timeoutMs,
           onComplete,
           providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false }
@@ -46461,6 +46483,8 @@ var getResponse = async (provider, messages, {
     });
   }
   logDebug("AI response", { text: text2 });
+  if (includeMetadata)
+    return { text: text2 != null ? text2 : "", sources: textResult.sources, providerMetadata: textResult.providerMetadata };
   if (isJSON) {
     try {
       return JSON.parse(text2);
@@ -49199,6 +49223,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
       apiKey: (_c = p.apiKey) != null ? _c : "",
       enabled: (_d = p.enabled) != null ? _d : true,
       geminiNative: p.type === "Bifrost" && ((_e = p.geminiNative) != null ? _e : false),
+      capabilityReport: p.capabilityReport,
       projectId: p.projectId,
       location: p.location,
       serviceAccountJson: p.serviceAccountJson,
@@ -49231,6 +49256,83 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
 var UnifiedProviderModal = _UnifiedProviderModal;
 UnifiedProviderModal.MODEL_PAGE_SIZE = 50;
 
+// src/utils/capabilityProbe.ts
+var RED_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
+var PROBE_PDF = "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA0MDAgMjAwXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggNDkgPj4Kc3RyZWFtCkJUIC9GMSAyNCBUZiA0MCAxMDAgVGQgKENBTlZBUyBQUk9CRSA3NDMxKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwMzExIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDA5CiUlRU9GCg==";
+var TIMEOUT_MS = 3e4;
+var probeProviderCapabilities = async (provider, modelId, settings2) => {
+  const notes = {};
+  const report = {
+    image: "untested",
+    pdf: "untested",
+    video: "untested",
+    youtube: "untested",
+    search: "untested",
+    urlContext: "untested",
+    model: modelId,
+    notes
+  };
+  const probeProvider = { ...provider, capabilityReport: void 0 };
+  const model = settings2.models.find((item) => item.providerId === provider.id && item.model === modelId);
+  const check2 = async (capability, content, accept, failure) => {
+    var _a20;
+    let timer;
+    try {
+      const response = await Promise.race([
+        getResponse2(probeProvider, [{ role: "user", content }], {
+          model: modelId,
+          temperature: settings2.temperature,
+          max_tokens: settings2.maxResponseTokens || void 0,
+          providerParams: model == null ? void 0 : model.providerParams,
+          timeoutMs: TIMEOUT_MS,
+          includeMetadata: true,
+          useSearchGrounding: capability === "search",
+          useUrlContext: capability === "urlContext"
+        }),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Timed out after 30 seconds.")), TIMEOUT_MS);
+        })
+      ]);
+      const result = typeof response === "string" ? { text: response } : response;
+      const passed = accept(result);
+      report[capability] = passed ? "yes" : "no";
+      notes[capability] = `${passed ? "Passed." : failure} ${(_a20 = result.text) != null ? _a20 : ""}`.trim().slice(0, 500);
+    } catch (error40) {
+      report[capability] = "no";
+      notes[capability] = error40 instanceof Error ? error40.message : String(error40);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  await check2("image", [
+    { type: "text", text: "Reply with the colour of this image in one word." },
+    { type: "image", image: RED_PNG, mediaType: "image/png" }
+  ], (result) => /red/i.test(result.text), "The reply did not identify red.");
+  await check2("pdf", [
+    { type: "text", text: "What number appears in this document? Reply with digits only." },
+    { type: "file", data: PROBE_PDF, mediaType: "application/pdf", filename: "canvas-probe.pdf" }
+  ], (result) => result.text.includes("7431"), "The reply did not contain 7431.");
+  await check2("youtube", [
+    { type: "text", text: "In one sentence, what is shown in this video?" },
+    { type: "file", data: "https://www.youtube.com/watch?v=jNQXAC9IVRw", mediaType: "video/mp4" }
+  ], (result) => /zoo|elephant/i.test(result.text) && !/(?:cannot|can['’]t|unable to|do not|don['’]t).{0,60}(?:see|access|watch|view)/i.test(result.text), "The reply did not describe the zoo video or reported it could not access it.");
+  if (!isGoogleProvider(provider)) {
+    report.video = "no";
+    notes.video = "The OpenAI-compatible SDK rejects video file parts; no request was sent.";
+  } else {
+    notes.video = "Video file upload was not tested.";
+  }
+  await check2("search", "What is today's date and one news headline from today? Include the four-digit year.", (result) => {
+    var _a20, _b19, _c;
+    const grounding = (_b19 = (_a20 = result.providerMetadata) == null ? void 0 : _a20.google) == null ? void 0 : _b19.groundingMetadata;
+    const grounded = Boolean(((_c = result.sources) == null ? void 0 : _c.length) || grounding && Object.keys(grounding).length);
+    return result.text.includes(String(new Date().getFullYear())) && grounded;
+  }, "The reply lacked the current year or grounding evidence in sources/provider metadata.");
+  await check2("urlContext", "Read https://example.com and quote its first heading verbatim.", (result) => /Example Domain/i.test(result.text), "The reply did not contain Example Domain.");
+  report.testedAt = new Date().toISOString();
+  return report;
+};
+
 // src/settings/SettingsTab.ts
 var filterSection = (sectionEl, query) => {
   let matches = 0;
@@ -49248,6 +49350,8 @@ var filterSection = (sectionEl, query) => {
 var SettingsTab = class extends import_obsidian18.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
+    this.capabilityTests = /* @__PURE__ */ new Set();
+    this.capabilityViews = /* @__PURE__ */ new Map();
     this.modelFilters = {};
     this.modelEnabledOnly = {};
     this.activeSectionId = "general";
@@ -49535,6 +49639,67 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
         new import_obsidian18.Notice(`Updated models for ${provider.type}.`);
       }, provider, this.plugin.settings.models.filter((m) => m.providerId === provider.id)).open();
     });
+    const reportEl = modelsWrapper.createDiv("provider-capability-report");
+    const renderReport = () => {
+      var _a20, _b19, _c, _d;
+      reportEl.empty();
+      const current = this.plugin.settings.providers.find((item) => item.id === provider.id);
+      const report = current == null ? void 0 : current.capabilityReport;
+      const chips = reportEl.createDiv("provider-meta");
+      for (const capability of providerCapabilityKeys) {
+        const verdict = (_a20 = report == null ? void 0 : report[capability]) != null ? _a20 : "untested";
+        const symbol21 = verdict === "yes" ? "\u2713" : verdict === "no" ? "\u2717" : "?";
+        const chip = chips.createSpan({
+          cls: "provider-capability-chip",
+          text: `${capability === "urlContext" ? "url" : capability} ${symbol21}`
+        });
+        chip.setAttribute("title", (_c = (_b19 = report == null ? void 0 : report.notes) == null ? void 0 : _b19[capability]) != null ? _c : "Not tested.");
+      }
+      if (report == null ? void 0 : report.testedAt) {
+        reportEl.createDiv({
+          cls: "provider-models-desc",
+          text: `Tested ${new Date(report.testedAt).toLocaleString()} with ${(_d = report.model) != null ? _d : "unknown model"}`
+        });
+      }
+    };
+    renderReport();
+    const testBtn = new import_obsidian18.ButtonComponent(actions);
+    const updateTestButton = () => testBtn.setButtonText(this.capabilityTests.has(provider.id) ? "Testing\u2026" : "Test capabilities").setDisabled(this.capabilityTests.has(provider.id));
+    updateTestButton();
+    this.capabilityViews.set(provider.id, () => {
+      renderReport();
+      updateTestButton();
+    });
+    testBtn.onClick(async () => {
+      var _a20;
+      if (this.capabilityTests.has(provider.id))
+        return;
+      const model = getProviderModels().find((item) => item.enabled);
+      if (!model) {
+        new import_obsidian18.Notice(`Enable a model for ${provider.type} before testing capabilities.`);
+        return;
+      }
+      const current = this.plugin.settings.providers.find((item) => item.id === provider.id);
+      if (!current)
+        return;
+      this.capabilityTests.add(provider.id);
+      updateTestButton();
+      try {
+        const report = await probeProviderCapabilities(current, model.model, this.plugin.settings);
+        const saved = this.plugin.settings.providers.find((item) => item.id === provider.id);
+        if (saved) {
+          saved.capabilityReport = report;
+          await this.plugin.saveSettings();
+          renderReport();
+        }
+      } catch (error40) {
+        new import_obsidian18.Notice(`Capability test failed: ${error40 instanceof Error ? error40.message : String(error40)}`);
+      } finally {
+        this.capabilityTests.delete(provider.id);
+        updateTestButton();
+        (_a20 = this.capabilityViews.get(provider.id)) == null ? void 0 : _a20();
+      }
+    });
     updateHeader();
     let filterText = this.modelFilters[provider.id] || "";
     let enabledOnly = this.modelEnabledOnly[provider.id] || false;
@@ -49760,6 +49925,13 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
   }
   renderGenerationSettings(containerEl) {
     new import_obsidian18.Setting(containerEl).setHeading().setName("Generation Settings");
+    const activeProvider = this.plugin.settings.providers.find((provider) => provider.id === this.plugin.settings.activeProvider);
+    if (activeProvider && !getProviderCapabilities(activeProvider).search) {
+      containerEl.createDiv({
+        cls: "provider-capability-note",
+        text: `The active provider (${activeProvider.type}) cannot do search grounding. Use a Gemini provider or Bifrost with the Gemini-native API.`
+      });
+    }
     new import_obsidian18.Setting(containerEl).setName("Always ask which cards to include").setDesc("Open the context picker before every request when a card has more than one connected card.").addToggle((toggle) => toggle.setValue(this.plugin.settings.alwaysAskPromptContext).onChange(async (value) => {
       this.plugin.settings.alwaysAskPromptContext = value;
       await this.plugin.saveSettings();

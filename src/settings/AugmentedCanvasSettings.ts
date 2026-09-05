@@ -1,3 +1,5 @@
+import type { ProviderCapabilityReport } from "../utils/providerCapabilities";
+
 let FuseIndex: any;
 
 // Dynamically import fuse.js
@@ -126,6 +128,9 @@ export interface LLMProvider {
 
 	/** Use Bifrost's Gemini-native endpoint. Defaults to false. */
 	geminiNative?: boolean;
+
+	/** Results of the most recent provider capability test. */
+	capabilityReport?: ProviderCapabilityReport;
 
 	/**
 	 * API key for the provider

@@ -57,7 +57,7 @@ export class ButtonComponent {
 	constructor(containerEl: HTMLElement) { this.buttonEl = containerEl.createEl("button"); }
 	setButtonText(text: string) { this.buttonEl.setText(text); return this; }
 	setCta() { return this; }
-	setDisabled(disabled: boolean) { return this; }
+	setDisabled(disabled: boolean) { this.buttonEl.disabled = disabled; return this; }
 	setTooltip(tooltip: string) { return this; }
 	onClick(cb: () => void) { this.buttonEl.addEventListener("click", cb); return this; }
 }

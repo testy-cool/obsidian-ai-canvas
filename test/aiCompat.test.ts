@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { LLMProvider } from "../src/settings/AugmentedCanvasSettings";
+import { DEFAULT_SETTINGS, type LLMProvider } from "../src/settings/AugmentedCanvasSettings";
 import { buildTools, getBifrostGeminiBaseUrl, getResponse, streamResponse } from "../src/utils/ai";
+import { probeProviderCapabilities } from "../src/utils/capabilityProbe";
 
 const originalFetch = globalThis.fetch;
 
@@ -332,5 +333,57 @@ describe("Bifrost Gemini-native requests", () => {
 			fileUri: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", mimeType: "video/mp4",
 		} });
 		expect(body.generationConfig.service_tier).toBe("priority");
+	});
+});
+
+describe("capability probe production routing", () => {
+	it("probes native Bifrost through the real SDK and reads grounding metadata and sources", async () => {
+		const requests: any[] = [];
+		globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			const request = new Request(input, init);
+			expect(request.url).toBe("https://example.test/genai/v1beta/models/vertex/gemini-3.1-pro-preview:generateContent");
+			const body = await request.json();
+			requests.push(body);
+			const text = ["red", "7431", "A man at the zoo with elephants.", `${new Date().getFullYear()} news`, "Example Domain"][requests.length - 1];
+			return new Response(JSON.stringify({ candidates: [{
+				content: { role: "model", parts: [{ text }] }, finishReason: "STOP",
+				...(body.tools?.[0]?.googleSearch ? { groundingMetadata: {
+					groundingChunks: [{ web: { uri: "https://example.test/news", title: "Today's news" } }],
+					webSearchQueries: ["today news"],
+				} } : {}),
+			}] }), { headers: { "Content-Type": "application/json" } });
+		});
+		const provider = makeProvider({ type: "Bifrost", geminiNative: true, capabilityReport: {
+			image: "no", pdf: "no", video: "untested", youtube: "no", search: "no", urlContext: "no",
+		} });
+		const report = await probeProviderCapabilities(provider, "vertex/gemini-3.1-pro-preview", { ...DEFAULT_SETTINGS, models: [] });
+		expect(report).toMatchObject({ image: "yes", pdf: "yes", video: "untested", youtube: "yes", search: "yes", urlContext: "yes" });
+		expect(requests).toHaveLength(5);
+		expect(requests.slice(0, 3).every(body => body.tools === undefined)).toBe(true);
+		expect(requests[0].contents[0].parts).toContainEqual(expect.objectContaining({ inlineData: expect.objectContaining({ mimeType: "image/png" }) }));
+		expect(requests[1].contents[0].parts).toContainEqual(expect.objectContaining({ inlineData: expect.objectContaining({ mimeType: "application/pdf" }) }));
+		expect(requests[2].contents[0].parts).toContainEqual({ fileData: { fileUri: "https://www.youtube.com/watch?v=jNQXAC9IVRw", mimeType: "video/mp4" } });
+		expect(requests[3].tools).toEqual([{ googleSearch: {} }]);
+		expect(requests[4].tools).toEqual([{ urlContext: {} }]);
+	});
+
+	it.each([false, true])("omits Google tools disabled by a saved report (streaming: %s)", async (streaming) => {
+		const requests: any[] = [];
+		globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			requests.push(await new Request(input, init).json());
+			const response = { candidates: [{ content: { role: "model", parts: [{ text: "ok" }] }, finishReason: "STOP" }] };
+			return new Response(streaming ? `data: ${JSON.stringify(response)}\n\n` : JSON.stringify(response), {
+				headers: { "Content-Type": streaming ? "text/event-stream" : "application/json" },
+			});
+		});
+		const provider = makeProvider({ type: "Bifrost", geminiNative: true, capabilityReport: {
+			image: "yes", pdf: "yes", video: "untested", youtube: "yes", search: "no", urlContext: "no",
+		} });
+		const messages = [{ role: "user" as const, content: "hello" }];
+		const options = { model: "vertex/gemini-3.1-pro-preview" };
+		if (streaming) await streamResponse(provider, messages, options, vi.fn());
+		else expect(await getResponse(provider, messages, options)).toBe("ok");
+		expect(requests).toHaveLength(1);
+		expect(requests[0].tools).toBeUndefined();
 	});
 });

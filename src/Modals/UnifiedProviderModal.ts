@@ -471,6 +471,7 @@ export class UnifiedProviderModal extends Modal {
       apiKey: p.apiKey ?? "",
       enabled: p.enabled ?? true,
 			geminiNative: p.type === "Bifrost" && (p.geminiNative ?? false),
+			capabilityReport: p.capabilityReport,
       projectId: p.projectId,
       location: p.location,
       serviceAccountJson: p.serviceAccountJson,

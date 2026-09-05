@@ -8,7 +8,7 @@ import { requestUrl } from "obsidian";
 import { getToolSchema, convertToGeminiSchema } from "./mcpClient";
 import { applyOpenAICompatParams } from "./providerParams";
 import { streamCodexResponse } from "./codexCli";
-import { isGoogleProvider, supportsGoogleTools } from "./providerCapabilities";
+import { getProviderCapabilities, isGoogleProvider, supportsGoogleTools } from "./providerCapabilities";
 
 // Cache for access tokens: serviceAccountEmail -> { token, expiresAt }
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -308,12 +308,13 @@ export const buildTools = (
 	{ useSearchGrounding = true, useUrlContext = true } = {}
 ) => {
 	const allTools: Record<string, any> = { ...mcpTools };
+	const capabilities = getProviderCapabilities(provider);
 	// Gemini cannot mix built-in tools with MCP function tools.
 	if (isGoogleProvider(provider) && Object.keys(allTools).length === 0) {
-		if (useSearchGrounding && supportsSearchGrounding(modelId)) {
+		if (useSearchGrounding && capabilities.search && supportsSearchGrounding(modelId)) {
 			allTools.google_search = google.tools.googleSearch({});
 		}
-		if (useUrlContext && supportsUrlContext(modelId)) {
+		if (useUrlContext && capabilities.urlContext && supportsUrlContext(modelId)) {
 			allTools.url_context = google.tools.urlContext({});
 		}
 	}
@@ -380,8 +381,9 @@ export const streamResponse = async (
 	const llm = getLlm(provider, providerParams) as any;
 	const modelId = model || "gemini-3-flash-preview";
 	const useGoogle = isGoogleProvider(provider);
-	const canUseSearch = useGoogle && supportsSearchGrounding(modelId);
-	const canUseUrlContext = useGoogle && supportsUrlContext(modelId);
+	const capabilities = getProviderCapabilities(provider);
+	const canUseSearch = useGoogle && capabilities.search && supportsSearchGrounding(modelId);
+	const canUseUrlContext = useGoogle && capabilities.urlContext && supportsUrlContext(modelId);
 
 	// Default timeout: 600s for flex tier, 60s otherwise
 	const isFlexTier = providerParams?.serviceTier === "flex";
@@ -562,6 +564,9 @@ export const getResponse = async (
 		max_tokens,
 		temperature,
 		isJSON,
+		includeMetadata = false,
+		useSearchGrounding = true,
+		useUrlContext = true,
 		providerParams,
 		timeoutMs,
 		onComplete,
@@ -570,6 +575,9 @@ export const getResponse = async (
 		max_tokens?: number;
 		temperature?: number;
 		isJSON?: boolean;
+		includeMetadata?: boolean;
+		useSearchGrounding?: boolean;
+		useUrlContext?: boolean;
 		providerParams?: Record<string, unknown>;
 		timeoutMs?: number;
 		onComplete?: (result: { inputTokens: number; outputTokens: number; totalText: string; error?: string }) => void;
@@ -580,6 +588,7 @@ export const getResponse = async (
 		await streamCodexResponse(provider, messages, { model, providerParams, timeoutMs, onComplete }, (chunk) => {
 			if (chunk) text += chunk;
 		});
+		if (includeMetadata) return { text, sources: [], providerMetadata: undefined };
 		return isJSON ? (() => { try { return JSON.parse(stripJsonFence(text)); } catch { return {}; } })() : text;
 	}
 
@@ -595,8 +604,9 @@ export const getResponse = async (
 	const llm = getLlm(provider, providerParams) as any;
 	const modelId = model || "gemini-3-flash-preview";
 	const useGoogle = isGoogleProvider(provider);
-	const canUseSearch = useGoogle && supportsSearchGrounding(modelId);
-	const canUseUrlContext = useGoogle && supportsUrlContext(modelId);
+	const capabilities = getProviderCapabilities(provider);
+	const canUseSearch = useSearchGrounding && useGoogle && capabilities.search && supportsSearchGrounding(modelId);
+	const canUseUrlContext = useUrlContext && useGoogle && capabilities.urlContext && supportsUrlContext(modelId);
 
 	// Default timeout: 600s for flex tier, 60s otherwise
 	const isFlexTier = providerParams?.serviceTier === "flex";
@@ -632,7 +642,7 @@ export const getResponse = async (
 				logDebug("[AI] Flex tier failed, retrying at standard tier");
 				clearTimeout(timer);
 				return getResponse(provider, messages, {
-					model, max_tokens, temperature, isJSON, timeoutMs, onComplete,
+					model, max_tokens, temperature, isJSON, includeMetadata, useSearchGrounding, useUrlContext, timeoutMs, onComplete,
 					providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false },
 				});
 			}
@@ -662,7 +672,7 @@ export const getResponse = async (
 				logDebug("[AI] Flex tier failed, retrying at standard tier");
 				clearTimeout(timer);
 				return getResponse(provider, messages, {
-					model, max_tokens, temperature, isJSON, timeoutMs, onComplete,
+					model, max_tokens, temperature, isJSON, includeMetadata, useSearchGrounding, useUrlContext, timeoutMs, onComplete,
 					providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false },
 				});
 			}
@@ -691,6 +701,7 @@ export const getResponse = async (
 	}
 
 	logDebug("AI response", { text });
+	if (includeMetadata) return { text: text ?? "", sources: textResult.sources, providerMetadata: textResult.providerMetadata };
 	if (isJSON) {
 		try {
 			return JSON.parse(text as string);

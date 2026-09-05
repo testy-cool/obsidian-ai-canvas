@@ -313,6 +313,27 @@ describe("provider media input", () => {
 		expect(sentParts()).toContainEqual({ type: "image", image: bytes, mediaType: "image/png" });
 	});
 
+	it.each(["png", "pdf"])("uses a saved no verdict to omit %s media", async (extension) => {
+		const { app, settings, provider, prompt } = fixture(false);
+		Object.assign(provider, { type: "Bifrost", capabilityReport: {
+			image: "no", pdf: "no", video: "untested", youtube: "untested", search: "untested", urlContext: "untested",
+		} });
+		attachFile(app, prompt, extension);
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentParts().filter((part: any) => part.type === "image" || part.type === "file")).toEqual([]);
+	});
+
+	it("uses a saved no verdict to omit native Bifrost YouTube input", async () => {
+		const { app, settings, provider, prompt } = fixture(false);
+		Object.assign(provider, { type: "Bifrost", geminiNative: true, capabilityReport: {
+			image: "yes", pdf: "yes", video: "untested", youtube: "no", search: "no", urlContext: "no",
+		} });
+		prompt.setData({ type: "link", url: "https://youtu.be/dQw4w9WgXcQ" });
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentParts().filter((part: any) => part.type === "file")).toEqual([]);
+		expect(obsidian.Notice).toHaveBeenCalledWith("Bifrost cannot take YouTube links. Use a Gemini provider for this card.");
+	});
+
 	it("reads and sends a PDF card through Bifrost", async () => {
 		const { app, settings, provider, prompt } = fixture(false);
 		provider.type = "Bifrost";
