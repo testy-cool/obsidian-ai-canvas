@@ -497,7 +497,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		// );
 		// const text = await response.text();
 		const parsedCsv = parseCsv(promptsCsvText);
-		// console.log({ parsedCsv });
+		// logDebug({ parsedCsv });
 
 		const systemPrompts: SystemPrompt[] = parsedCsv
 			.slice(1)
@@ -506,7 +506,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 				act: value[0],
 				prompt: value[1],
 			}));
-		// console.log({ systemPrompts });
+		// logDebug({ systemPrompts });
 
 		this.settings.systemPrompts = systemPrompts;
 
@@ -683,7 +683,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		// 	name: "Insert the content of a website as markdown",
 		// 	checkCallback: (checking: boolean) => {
 		// 		if (checking) {
-		// 			// console.log({ checkCallback: checking });
+		// 			// logDebug({ checkCallback: checking });
 		// 			if (!getActiveCanvas(app)) return false;
 
 		// 			return true;
@@ -711,7 +711,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		// 	name: "Insert captions of a Youtube video",
 		// 	checkCallback: (checking: boolean) => {
 		// 		if (checking) {
-		// 			// console.log({ checkCallback: checking });
+		// 			// logDebug({ checkCallback: checking });
 		// 			if (!getActiveCanvas(app)) return false;
 
 		// 			return true;
@@ -738,7 +738,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 			name: "Run a system prompt on a folder",
 			checkCallback: (checking: boolean) => {
 				if (checking) {
-					// console.log({ checkCallback: checking });
+					// logDebug({ checkCallback: checking });
 					if (!getActiveCanvas(app)) return false;
 
 					return true;
@@ -772,7 +772,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 			name: "Insert system prompt",
 			checkCallback: (checking: boolean) => {
 				if (checking) {
-					// console.log({ checkCallback: checking });
+					// logDebug({ checkCallback: checking });
 					if (!getActiveCanvas(app)) return false;
 
 					return true;
@@ -793,7 +793,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 			name: "Insert relevant questions",
 			checkCallback: (checking: boolean) => {
 				if (checking) {
-					// console.log({ checkCallback: checking });
+					// logDebug({ checkCallback: checking });
 					if (!getActiveCanvas(app)) return false;
 					return true;
 				}

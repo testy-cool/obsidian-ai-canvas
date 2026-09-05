@@ -1,3 +1,4 @@
+import { logDebug } from "src/logDebug";
 import { App, Notice } from "obsidian";
 import { AugmentedCanvasSettings } from "../../settings/AugmentedCanvasSettings";
 import { getFilesContent } from "../../obsidian/fileUtil";
@@ -28,7 +29,7 @@ export const handleAddRelevantQuestions = async (
 		0,
 		settings.insertRelevantQuestionsFilesCount
 	);
-	console.log({ actualFiles });
+	logDebug({ actualFiles });
 
 	const filesContent = await getFilesContent(app, actualFiles);
 
@@ -72,7 +73,7 @@ ${RELEVANT_QUESTION_SYSTEM_PROMPT}
 			timeoutMs: model.timeoutMs,
 		}
 	);
-	// console.log({ aiResponse });
+	// logDebug({ aiResponse });
 
 	await createCanvasGroup(app, "Questions", aiResponse.questions);
 

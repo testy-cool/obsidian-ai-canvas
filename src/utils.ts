@@ -1,3 +1,4 @@
+import { logDebug } from "src/logDebug";
 import {
 	App,
 	Canvas,
@@ -263,7 +264,7 @@ export const getImageSaveFolderPath = async (
 		.split("/")
 		.slice(0, -1)
 		.join("/");
-	console.log({ attachments });
+	logDebug({ attachments });
 
 	return attachments;
 	// // @ts-expect-error

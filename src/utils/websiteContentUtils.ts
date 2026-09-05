@@ -1,9 +1,9 @@
 export const getWebsiteContent = async (url: string) => {
-	// // console.log({ getWebsiteContent2: true })
+	// // logDebug({ getWebsiteContent2: true })
 	// const content = await fetch(url, {
 	// 	// mode: "no-cors",
 	// });
-	// console.log({ content, body: content.body });
+	// logDebug({ content, body: content.body });
 	// return {};
 	// const getMDForTagName = (tagName: string) => {
 	// 	if (tagName === "h1") {
@@ -48,7 +48,7 @@ export const getWebsiteContent = async (url: string) => {
 	// // Function to traverse all elements in the DOM
 	// function traverseDOM(element: Element): void {
 	// 	// Process the current element
-	// 	// console.log(element.tagName);
+	// 	// logDebug(element.tagName);
 	// 	const includedTags = ["p", "h1", "h2", "h3", "h4", "h5", "h6"];
 	// 	// const excludedTags = ["script", "button"]
 	// 	if (
@@ -62,7 +62,7 @@ export const getWebsiteContent = async (url: string) => {
 	// 			.replace(/\t/g, "")
 	// 			.replace(/\\t/g, "")
 	// 			.trim();
-	// 		// console.log({ text, tagName: element.tagName })
+	// 		// logDebug({ text, tagName: element.tagName })
 	// 		// * Example: 1. ### Title
 	// 		textContent +=
 	// 			"\n\n" +
@@ -85,7 +85,7 @@ export const getWebsiteContent = async (url: string) => {
 	// // document.addEventListener('DOMContentLoaded', () => {
 	// traverseDOM(document.documentElement);
 	// // });
-	// console.log({
+	// logDebug({
 	// 	// selectors,
 	// 	textContent,
 	// });

@@ -61,7 +61,7 @@ const handleRegenerateResponse = async (
 	// // @ts-expect-error
 	// const toNode = activeNode.to.node;
 
-	// console.log({ toNode });
+	// logDebug({ toNode });
 
 	// canvas!.removeNode(toNode);
 	// canvas?.requestSave();

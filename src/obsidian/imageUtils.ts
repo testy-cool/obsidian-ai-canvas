@@ -1,3 +1,4 @@
+import { logDebug } from "src/logDebug";
 import { App, base64ToArrayBuffer } from "obsidian";
 import { AugmentedCanvasSettings } from "src/settings/AugmentedCanvasSettings";
 
@@ -12,7 +13,7 @@ const writeImageToFile = async (
 
 		// Write the array buffer to the vault
 		await fileAdapter.writeBinary(imagePath, imageBuffer);
-		console.log("Image saved successfully.");
+		logDebug("Image saved successfully.");
 	} catch (error) {
 		console.error("Error saving the image:", error);
 	}

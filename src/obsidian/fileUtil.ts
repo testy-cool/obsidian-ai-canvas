@@ -1,3 +1,4 @@
+import { logDebug } from "src/logDebug";
 import {
 	App,
 	TAbstractFile,
@@ -171,7 +172,7 @@ const epubToMarkdown = async (app: App, file: TFile) => {
 };
 
 const readDifferentExtensionFileContent = async (app: App, file: TFile) => {
-	// console.log({ file });
+	// logDebug({ file });
 	switch (file.extension) {
 		case "md":
 			const body = await app.vault.cachedRead(file);
@@ -312,7 +313,7 @@ export const updateNodeAndSave = async (
 	// TODO: only accepts .text .size not working (is it Obsidian API?)
 	nodeOptions: CreateNodeOptions
 ) => {
-	// console.log({ nodeOptions });
+	// logDebug({ nodeOptions });
 	// node.setText(nodeOptions.text);
 	// @ts-expect-error
 	node.setData(nodeOptions);
@@ -338,7 +339,7 @@ export const generateFileName = (prefix: string = "file"): string => {
 export const cachedReadFile = async (app: App, file: TFile) => {
 	if (file.path.endsWith(".canvas")) {
 		const canvasJson = JSON.parse(await app.vault.cachedRead(file));
-		console.log({ canvasJson });
+		logDebug({ canvasJson });
 
 		const nodesContent: string[] = [];
 
@@ -357,7 +358,7 @@ export const cachedReadFile = async (app: App, file: TFile) => {
 			}
 		}
 
-		// console.log({ canvas: { file, nodesContent } });
+		// logDebug({ canvas: { file, nodesContent } });
 
 		return nodesContent.join("\n\n");
 	} else {
@@ -367,7 +368,7 @@ export const cachedReadFile = async (app: App, file: TFile) => {
 
 // TODO : if there is a canvas which link to a file in the same folder then the folder can be read two times
 export const readFolderMarkdownContent = async (app: App, folder: TFolder) => {
-	// console.log({ folder });
+	// logDebug({ folder });
 
 	const filesContent: string[] = [];
 	for await (const fileOrFolder of folder.children) {

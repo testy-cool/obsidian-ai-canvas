@@ -3354,6 +3354,17 @@ function around1(obj, method, createWrapper) {
 // src/actions/canvasNodeMenuActions/advancedCanvas.ts
 var import_obsidian14 = require("obsidian");
 
+// src/logDebug.ts
+var settings = null;
+var initLogDebug = (settings2) => {
+  settings = settings2;
+};
+var logDebug = (...params) => {
+  if (settings == null ? void 0 : settings.debug) {
+    console.log("[AI Canvas]", ...params);
+  }
+};
+
 // src/actions/canvasNodeMenuActions/noteGenerator.ts
 var import_obsidian11 = require("obsidian");
 
@@ -3562,7 +3573,7 @@ ${fileContent}
 var cachedReadFile = async (app, file2) => {
   if (file2.path.endsWith(".canvas")) {
     const canvasJson = JSON.parse(await app.vault.cachedRead(file2));
-    console.log({ canvasJson });
+    logDebug({ canvasJson });
     const nodesContent = [];
     if (canvasJson.nodes) {
       for await (const node of canvasJson.nodes) {
@@ -9615,17 +9626,6 @@ var openai_default = OpenAI;
 
 // src/utils/llm.ts
 var import_obsidian6 = require("obsidian");
-
-// src/logDebug.ts
-var settings = null;
-var initLogDebug = (settings2) => {
-  settings = settings2;
-};
-var logDebug = (...params) => {
-  if (settings == null ? void 0 : settings.debug) {
-    console.log("[AI Canvas]", ...params);
-  }
-};
 
 // node_modules/.pnpm/@ai-sdk+provider@3.0.14/node_modules/@ai-sdk/provider/dist/index.mjs
 var marker = "vercel.ai.error";
@@ -46156,7 +46156,7 @@ var streamResponse = async (provider, messages, {
     return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete }, cb);
   }
   const mcpToolCount = mcpTools ? Object.keys(mcpTools).length : 0;
-  console.log("[AI Canvas] Stream request:", {
+  logDebug("[AI Canvas] Stream request:", {
     model,
     provider: provider.type,
     mcpToolCount,
@@ -46175,7 +46175,7 @@ var streamResponse = async (provider, messages, {
   const runStream = (useSearchGrounding, useUrlContext) => {
     const tools = buildTools(provider, modelId, mcpTools, { useSearchGrounding, useUrlContext });
     const hasTools = tools && Object.keys(tools).length > 0;
-    console.log("[AI Canvas] Calling streamText:", {
+    logDebug("[AI Canvas] Calling streamText:", {
       modelId,
       useSearchGrounding,
       useUrlContext,
@@ -46196,7 +46196,7 @@ var streamResponse = async (provider, messages, {
     if (hasTools) {
       streamConfig.tools = tools;
       streamConfig.stopWhen = stepCountIs(maxSteps);
-      console.log("[AI Canvas] Adding tools to request, first tool:", Object.keys(tools)[0], tools[Object.keys(tools)[0]]);
+      logDebug("[AI Canvas] Adding tools to request, first tool:", Object.keys(tools)[0], tools[Object.keys(tools)[0]]);
     }
     const stream = streamText(streamConfig);
     stream.__timeoutTimer = timer;
@@ -46230,12 +46230,12 @@ var streamResponse = async (provider, messages, {
       }
       throw error40;
     }
-    console.log("[AI Canvas] Retrying without Google features...");
+    logDebug("[AI Canvas] Retrying without Google features...");
     result = await runStream(false, false);
   }
   try {
     for await (const part of result.fullStream) {
-      console.log("[AI Canvas] Stream event:", part.type, part.type === "text-delta" ? (_a20 = part.textDelta) == null ? void 0 : _a20.substring(0, 50) : "");
+      logDebug("[AI Canvas] Stream event:", part.type, part.type === "text-delta" ? (_a20 = part.textDelta) == null ? void 0 : _a20.substring(0, 50) : "");
       switch (part.type) {
         case "text-delta":
           deliveredOutput = true;
@@ -46243,7 +46243,7 @@ var streamResponse = async (provider, messages, {
           break;
         case "tool-call":
           deliveredOutput = true;
-          console.log("[AI Canvas] Tool call:", part.toolName, part.args);
+          logDebug("[AI Canvas] Tool call:", part.toolName, part.args);
           cb(null, null, {
             type: "tool-call",
             toolName: part.toolName,
@@ -46254,7 +46254,7 @@ var streamResponse = async (provider, messages, {
         case "tool-result":
         case "tool-error":
           deliveredOutput = true;
-          console.log("[AI Canvas] Tool result:", part.toolName, "length:", (_c = String(part.result)) == null ? void 0 : _c.length);
+          logDebug("[AI Canvas] Tool result:", part.toolName, "length:", (_c = String(part.result)) == null ? void 0 : _c.length);
           cb(null, null, {
             type: "tool-result",
             toolName: part.toolName,
@@ -46267,13 +46267,13 @@ var streamResponse = async (provider, messages, {
           logDebug("Stream error part:", part);
           throw part.error || new Error("Stream error");
         default:
-          console.log("[AI Canvas] Other event:", part.type);
+          logDebug("[AI Canvas] Other event:", part.type);
           break;
       }
     }
     const finalResult = await result;
     const finalText = await finalResult.text;
-    console.log("[AI Canvas] Final result text length:", finalText == null ? void 0 : finalText.length);
+    logDebug("[AI Canvas] Final result text length:", finalText == null ? void 0 : finalText.length);
     cb(null, finalResult, null, null);
     if (onComplete) {
       const usage = await finalResult.usage;
@@ -47850,7 +47850,6 @@ var NOTE_MIN_HEIGHT = 400;
 var NOTE_INCR_HEIGHT_STEP = 150;
 var YOUTUBE_URL_PATTERN = /https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtube\.com\/shorts\/|youtu\.be\/)[^\s)]+/gi;
 var MAX_YOUTUBE_URLS = 10;
-var logDebug2 = (text2) => null;
 var sleep2 = (ms) => new Promise((resolve2) => setTimeout(resolve2, ms));
 var calculateNoteDimensions = (text2, minWidth2 = 300, maxWidth = 800, padding = 40) => {
   const avgCharWidth = 8;
@@ -48085,7 +48084,7 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
             shouldContinue = false;
             const keepTokens = nodeTokens.slice(0, inputLimit - tokenCount - 1);
             const truncateTextTo = encoding.decode(keepTokens).length;
-            logDebug2(`Truncating node text from ${nodeText.length} to ${truncateTextTo} characters`);
+            logDebug(`Truncating node text from ${nodeText.length} to ${truncateTextTo} characters`);
             new import_obsidian11.Notice(`Truncating node text from ${nodeText.length} to ${truncateTextTo} characters`);
             nodeText = nodeText.slice(0, truncateTextTo);
             keptNodeTokens = keepTokens.length;
@@ -48224,10 +48223,10 @@ ${nodeText}`);
     }
     if (!canCallAI())
       return;
-    logDebug2("Creating AI note");
+    logDebug("Creating AI note");
     const canvas = getActiveCanvas3();
     if (!canvas) {
-      logDebug2("No active canvas");
+      logDebug("No active canvas");
       return;
     }
     await canvas.requestFrame();
@@ -48481,11 +48480,11 @@ ${nodeText}`);
             });
             void ((_g2 = (_f2 = created.canvas) == null ? void 0 : _f2.requestFrame) == null ? void 0 : _g2.call(_f2));
             const htmlBlocks = extractHtmlCodeBlocks(created.text);
-            console.log("[HTML Preview] Text length:", (_h = created.text) == null ? void 0 : _h.length, "HTML blocks found:", htmlBlocks.length);
+            logDebug("[HTML Preview] Text length:", (_h = created.text) == null ? void 0 : _h.length, "HTML blocks found:", htmlBlocks.length);
             if (htmlBlocks.length > 0) {
-              console.log("[HTML Preview] Adding preview to node, contentEl:", !!created.contentEl);
+              logDebug("[HTML Preview] Adding preview to node, contentEl:", !!created.contentEl);
               const previewEl = addHtmlPreviewToNode(created, htmlBlocks, (_i = settings2.autoPreviewHtml) != null ? _i : false);
-              console.log("[HTML Preview] Preview element created:", !!previewEl);
+              logDebug("[HTML Preview] Preview element created:", !!previewEl);
             }
           }
           if (featuresEl && !created.contentEl.contains(featuresEl))
@@ -50603,7 +50602,7 @@ var handleAddRelevantQuestions = async (app, settings2) => {
   const files = await app.vault.getMarkdownFiles();
   const sortedFiles = files.sort((a, b) => b.stat.mtime - a.stat.mtime);
   const actualFiles = sortedFiles.slice(0, settings2.insertRelevantQuestionsFilesCount);
-  console.log({ actualFiles });
+  logDebug({ actualFiles });
   const filesContent = await getFilesContent(app, actualFiles);
   const provider = settings2.providers.find((p) => p.id === settings2.activeProvider);
   if (!provider) {

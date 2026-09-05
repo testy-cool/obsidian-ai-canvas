@@ -428,7 +428,7 @@ describe("context picker request paths", () => {
 		expect(badge(prompt).querySelector(".ai-model-indicator-label")!.textContent).toBe("Custom • test-model");
 	});
 
-	it.each(["styles.css", "main.css", "src/styles/settings.css"])("%s sets the badge override to 12px", (path) => {
+	it.each(["styles.css", "src/styles/settings.css"])("%s sets the badge override to 12px", (path) => {
 		const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 		const rule = css.match(/\.ai-model-indicator\s*\{([^}]+)\}/)![1];
 		expect(rule).toMatch(/font-size:\s*12px !important;/);

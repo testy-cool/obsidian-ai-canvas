@@ -1,3 +1,4 @@
+import { logDebug } from "src/logDebug";
 let encodingForModel: any;
 
 // Dynamically import js-tiktoken
@@ -59,8 +60,6 @@ const YOUTUBE_URL_PATTERN =
 	/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtube\.com\/shorts\/|youtu\.be\/)[^\s)]+/gi;
 const MAX_YOUTUBE_URLS = 10;
 
-// TODO : remove
-const logDebug = (text: any) => null;
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
@@ -581,7 +580,7 @@ export function noteGenerator(
 			logDebug("No active canvas");
 			return;
 		}
-		// console.log({ canvas });
+		// logDebug({ canvas });
 
 		await canvas.requestFrame();
 
@@ -649,7 +648,7 @@ export function noteGenerator(
 				});
 				return;
 			}
-			// console.log({ messages });
+			// logDebug({ messages });
 			if (!messages.length) return;
 
 			let created: CanvasNode;
@@ -896,11 +895,11 @@ export function noteGenerator(
 
 							// Add HTML preview if there are HTML code blocks
 							const htmlBlocks = extractHtmlCodeBlocks(created.text);
-							console.log("[HTML Preview] Text length:", created.text?.length, "HTML blocks found:", htmlBlocks.length);
+							logDebug("[HTML Preview] Text length:", created.text?.length, "HTML blocks found:", htmlBlocks.length);
 							if (htmlBlocks.length > 0) {
-								console.log("[HTML Preview] Adding preview to node, contentEl:", !!created.contentEl);
+								logDebug("[HTML Preview] Adding preview to node, contentEl:", !!created.contentEl);
 								const previewEl = addHtmlPreviewToNode(created, htmlBlocks, settings.autoPreviewHtml ?? false);
-								console.log("[HTML Preview] Preview element created:", !!previewEl);
+								logDebug("[HTML Preview] Preview element created:", !!previewEl);
 							}
 						}
 						if (featuresEl && !created.contentEl.contains(featuresEl)) created.contentEl.appendChild(featuresEl);
@@ -1004,6 +1003,6 @@ export function getTokenLimit(settings: AugmentedCanvasSettings) {
 		? Math.min(settings.maxInputTokens, 4096)
 		: 4096;
 
-	// console.log({ settings, tokenLimit });
+	// logDebug({ settings, tokenLimit });
 	return tokenLimit;
 }

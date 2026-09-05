@@ -387,7 +387,7 @@ export const streamResponse = async (
 	}
 
 	const mcpToolCount = mcpTools ? Object.keys(mcpTools).length : 0;
-	console.log("[AI Canvas] Stream request:", {
+	logDebug("[AI Canvas] Stream request:", {
 		model,
 		provider: provider.type,
 		mcpToolCount,
@@ -411,7 +411,7 @@ export const streamResponse = async (
 		const tools = buildTools(provider, modelId, mcpTools, { useSearchGrounding, useUrlContext });
 		const hasTools = tools && Object.keys(tools).length > 0;
 
-		console.log("[AI Canvas] Calling streamText:", {
+		logDebug("[AI Canvas] Calling streamText:", {
 			modelId,
 			useSearchGrounding,
 			useUrlContext,
@@ -435,7 +435,7 @@ export const streamResponse = async (
 		if (hasTools) {
 			streamConfig.tools = tools;
 			streamConfig.stopWhen = stepCountIs(maxSteps);  // Use stopWhen instead of deprecated maxSteps
-			console.log("[AI Canvas] Adding tools to request, first tool:", Object.keys(tools!)[0], tools![Object.keys(tools!)[0]]);
+			logDebug("[AI Canvas] Adding tools to request, first tool:", Object.keys(tools!)[0], tools![Object.keys(tools!)[0]]);
 		}
 
 		const stream = streamText(streamConfig);
@@ -472,13 +472,13 @@ export const streamResponse = async (
 			}
 			throw error;
 		}
-		console.log("[AI Canvas] Retrying without Google features...");
+		logDebug("[AI Canvas] Retrying without Google features...");
 		result = await runStream(false, false);
 	}
 
 	try {
 		for await (const part of result.fullStream) {
-			console.log("[AI Canvas] Stream event:", part.type, part.type === 'text-delta' ? (part as any).textDelta?.substring(0, 50) : '');
+			logDebug("[AI Canvas] Stream event:", part.type, part.type === 'text-delta' ? (part as any).textDelta?.substring(0, 50) : '');
 			switch (part.type) {
 				case 'text-delta':
 					deliveredOutput = true;
@@ -486,7 +486,7 @@ export const streamResponse = async (
 					break;
 				case 'tool-call':
 					deliveredOutput = true;
-					console.log("[AI Canvas] Tool call:", (part as any).toolName, (part as any).args);
+					logDebug("[AI Canvas] Tool call:", (part as any).toolName, (part as any).args);
 					cb(null, null, {
 						type: 'tool-call',
 						toolName: (part as any).toolName,
@@ -497,7 +497,7 @@ export const streamResponse = async (
 				case 'tool-result':
 				case 'tool-error':
 					deliveredOutput = true;
-					console.log("[AI Canvas] Tool result:", (part as any).toolName, "length:", String((part as any).result)?.length);
+					logDebug("[AI Canvas] Tool result:", (part as any).toolName, "length:", String((part as any).result)?.length);
 					cb(null, null, {
 						type: 'tool-result',
 						toolName: (part as any).toolName,
@@ -513,13 +513,13 @@ export const streamResponse = async (
 					throw (part as any).error || new Error("Stream error");
 				default:
 					// Log other event types for debugging
-					console.log("[AI Canvas] Other event:", part.type);
+					logDebug("[AI Canvas] Other event:", part.type);
 					break;
 			}
 		}
 		const finalResult = await result;
 		const finalText = await finalResult.text;
-		console.log("[AI Canvas] Final result text length:", finalText?.length);
+		logDebug("[AI Canvas] Final result text length:", finalText?.length);
 		cb(null, finalResult, null, null);
 		if (onComplete) {
 			const usage = await finalResult.usage;

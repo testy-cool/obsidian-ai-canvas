@@ -18,12 +18,12 @@ async function getVideoSubtitles(
 	// 		part: ["snippet"],
 	// 		videoId: videoId,
 	// 	});
-	// 	console.log({ response });
+	// 	logDebug({ response });
 	// 	const items = response.data.items;
 	// 	if (items) {
 	// 		const subtitles = [];
 	// 		for await (const caption of items) {
-	// 			console.log({ caption });
+	// 			logDebug({ caption });
 	// 			try {
 	// 				const response = await youtube.captions.download(
 	// 					{
@@ -58,8 +58,8 @@ export const runYoutubeCaptions = async (
 	videoUrl: string
 ) => {
 	// const videoId = getYouTubeVideoId(videoUrl);
-	// console.log({ videoId });
+	// logDebug({ videoId });
 	// if (!videoId) return;
 	// const subtitles = await getVideoSubtitles(settings, videoId);
-	// console.log({ subtitles });
+	// logDebug({ subtitles });
 };

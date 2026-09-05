@@ -173,7 +173,7 @@ export async function handleGenerateImage(
 	const nodeContent = options?.prompt || node.text;
 	const trimmedEdgeLabel = options?.edgeLabel?.trim();
 	const edgeLabel = trimmedEdgeLabel ? trimmedEdgeLabel : undefined;
-	// console.log({ canvasView, nodeContent });
+	// logDebug({ canvasView, nodeContent });
 
 	// Per provider/model (and Azure quality tier) so "last time" is comparable.
 	const durationKey = `${imageProvider?.id ?? "default"}/${model ?? "default"}${
