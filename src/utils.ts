@@ -283,10 +283,16 @@ export function getYouTubeVideoId(url: string): string | null {
 	return match ? match[1] : null;
 }
 
+const generatingNodes = new WeakSet<object>();
+
 /**
- * Add a persistent model indicator to a canvas node
+ * Add a persistent context and model indicator to a canvas node
  */
-export const addModelIndicator = (node: any, provider: string, model: string) => {
+export const addModelIndicator = (node: any, provider: string, model: string, generating = false) => {
+	if (generating) generatingNodes.add(node);
+	else generatingNodes.delete(node);
+	const contextCount = node.getData().ai_context_count;
+	const contextLabel = typeof contextCount === "number" ? `${contextCount} cards • ` : "";
 	// Remove existing indicator if present
 	const existingIndicator = node.contentEl.querySelector(".ai-model-indicator");
 	if (existingIndicator) {
@@ -296,7 +302,7 @@ export const addModelIndicator = (node: any, provider: string, model: string) =>
 	// Create a subtle indicator at the bottom of the note
 	const indicator = node.contentEl.createEl("div", { 
 		cls: "ai-model-indicator",
-		text: `${provider} • ${model}`
+		text: `${contextLabel}${generating ? "generating" : `${provider} • ${model}`}`
 	});
 	
 	// Style the indicator to be subtle
@@ -304,7 +310,7 @@ export const addModelIndicator = (node: any, provider: string, model: string) =>
 		position: absolute;
 		bottom: 4px;
 		right: 8px;
-		font-size: 10px;
+		font-size: 12px;
 		color: var(--text-faint);
 		opacity: 0.6;
 		pointer-events: none;
@@ -332,7 +338,7 @@ export const restoreModelIndicators = (canvas: any) => {
 		if (nodeData.ai_model && nodeData.ai_provider) {
 			// Add the indicator if it doesn't already exist
 			if (!node.contentEl.querySelector(".ai-model-indicator")) {
-				addModelIndicator(node, nodeData.ai_provider, nodeData.ai_model);
+				addModelIndicator(node, nodeData.ai_provider, nodeData.ai_model, generatingNodes.has(node));
 			}
 		}
 	});

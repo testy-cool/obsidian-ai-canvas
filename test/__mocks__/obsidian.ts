@@ -31,6 +31,9 @@ export class Modal {
 	onClose() {}
 }
 
+export class FuzzySuggestModal extends Modal {}
+export class SuggestModal extends Modal {}
+
 export class ButtonComponent {
 	setButtonText(text: string) { return this; }
 	setCta() { return this; }
@@ -71,6 +74,10 @@ export function requestUrl(options: any) {
 
 export function setIcon(element: { setAttribute(name: string, value: string): void }, icon: string) {
 	element.setAttribute('data-icon', icon);
+}
+
+export function setTooltip(element: { setAttribute(name: string, value: string): void }, text: string, options?: any) {
+	element.setAttribute('aria-label', text);
 }
 
 // Mutable so individual tests can flip isDesktopApp to exercise the mobile/

@@ -436,7 +436,7 @@ function getYouTubeVideoId(url2) {
   const match = url2.match(pattern);
   return match ? match[1] : null;
 }
-var import_obsidian2, randomHexString, getActiveCanvas, createCanvasGroup, canvasNodeIsNote, getActiveCanvasNodes, getCanvasActiveNoteText, getImageSaveFolderPath, addModelIndicator, restoreModelIndicators, setupCanvasIndicatorPersistence;
+var import_obsidian2, randomHexString, getActiveCanvas, createCanvasGroup, canvasNodeIsNote, getActiveCanvasNodes, getCanvasActiveNoteText, getImageSaveFolderPath, generatingNodes, addModelIndicator, restoreModelIndicators, setupCanvasIndicatorPersistence;
 var init_utils = __esm({
   "src/utils.ts"() {
     import_obsidian2 = require("obsidian");
@@ -522,20 +522,27 @@ var init_utils = __esm({
       console.log({ attachments });
       return attachments;
     };
-    addModelIndicator = (node, provider, model) => {
+    generatingNodes = /* @__PURE__ */ new WeakSet();
+    addModelIndicator = (node, provider, model, generating = false) => {
+      if (generating)
+        generatingNodes.add(node);
+      else
+        generatingNodes.delete(node);
+      const contextCount = node.getData().ai_context_count;
+      const contextLabel = typeof contextCount === "number" ? `${contextCount} cards \u2022 ` : "";
       const existingIndicator = node.contentEl.querySelector(".ai-model-indicator");
       if (existingIndicator) {
         existingIndicator.remove();
       }
       const indicator = node.contentEl.createEl("div", {
         cls: "ai-model-indicator",
-        text: `${provider} \u2022 ${model}`
+        text: `${contextLabel}${generating ? "generating" : `${provider} \u2022 ${model}`}`
       });
       indicator.style.cssText = `
 		position: absolute;
 		bottom: 4px;
 		right: 8px;
-		font-size: 10px;
+		font-size: 12px;
 		color: var(--text-faint);
 		opacity: 0.6;
 		pointer-events: none;
@@ -556,7 +563,7 @@ var init_utils = __esm({
         const nodeData = node.getData();
         if (nodeData.ai_model && nodeData.ai_provider) {
           if (!node.contentEl.querySelector(".ai-model-indicator")) {
-            addModelIndicator(node, nodeData.ai_provider, nodeData.ai_model);
+            addModelIndicator(node, nodeData.ai_provider, nodeData.ai_model, generatingNodes.has(node));
           }
         }
       });
@@ -47971,7 +47978,7 @@ ${nodeText}`) : [];
       });
     return { messages, tokenCount };
   };
-  const generateNote = async (question, selectedNodeIds) => {
+  const generateNote = async (question, selectedNodeIds, chooseContext = false) => {
     var _a20, _b19, _c, _d, _e;
     const provider = resolveProvider();
     if (!provider) {
@@ -48005,9 +48012,9 @@ ${nodeText}`) : [];
     if (node) {
       await canvas.requestSave();
       await sleep2(200);
+      const contextEntries = await collectNodeAndAncestors(node);
       if (!selectedNodeIds) {
-        const contextEntries = await collectNodeAndAncestors(node);
-        if (contextEntries.length > 1) {
+        if (chooseContext || settings2.alwaysAskPromptContext && contextEntries.length > 1) {
           const contextOptions = await Promise.all(contextEntries.map(async ({ node: contextNode, depth }) => {
             var _a21;
             const canvasNode = contextNode;
@@ -48022,7 +48029,9 @@ ${nodeText}`) : [];
           }).open();
           return;
         }
+        selectedNodeIds = new Set(contextEntries.map(({ node: node2 }) => node2.id));
       }
+      const contextCount = contextEntries.filter(({ node: node2 }) => isPromptContextNodeIncluded(node2.id, selectedNodeIds)).length;
       const trimmedQuestion = question == null ? void 0 : question.trim();
       const { messages, tokenCount } = await buildMessages(node, {
         prompt: question,
@@ -48058,7 +48067,8 @@ ${nodeText}`) : [];
           color: assistantColor,
           chat_role: "assistant",
           ai_model: model.model,
-          ai_provider: provider.type
+          ai_provider: provider.type,
+          ai_context_count: contextCount
         }, question, directionBias);
       } else {
         created = toNode;
@@ -48068,7 +48078,8 @@ ${nodeText}`) : [];
         created.setData({
           ...nodeData,
           ai_model: model.model,
-          ai_provider: provider.type
+          ai_provider: provider.type,
+          ai_context_count: contextCount
         });
         const initialDimensions = calculateNoteDimensions(initialText, 300, 500);
         created.moveAndResize({
@@ -48078,6 +48089,7 @@ ${nodeText}`) : [];
           y: created.y
         });
       }
+      addModelIndicator(created, provider.type, model.model, true);
       const isGpt = (provider == null ? void 0 : provider.type) === "OpenAI";
       let noticeMessage = `Sending ${messages.length} notes to the AI`;
       if (isGpt) {
@@ -48201,7 +48213,6 @@ ${nodeText}`) : [];
               y: created.y
             });
             void ((_d2 = (_c2 = created.canvas) == null ? void 0 : _c2.requestFrame) == null ? void 0 : _d2.call(_c2));
-            addModelIndicator(created, provider.type, model.model);
             const htmlBlocks = extractHtmlCodeBlocks(created.text);
             console.log("[HTML Preview] Text length:", (_e2 = created.text) == null ? void 0 : _e2.length, "HTML blocks found:", htmlBlocks.length);
             if (htmlBlocks.length > 0) {
@@ -48210,6 +48221,7 @@ ${nodeText}`) : [];
               console.log("[HTML Preview] Preview element created:", !!previewEl);
             }
           }
+          addModelIndicator(created, provider.type, model.model, !final);
         });
         if (isNewNode) {
           await maybeAutoGenerateCardTitle(app, settings2, created);
@@ -48243,6 +48255,8 @@ ${nodeText}`) : [];
           x: created.x,
           y: created.y
         });
+      } finally {
+        addModelIndicator(created, provider.type, model.model);
       }
       await canvas.requestSave();
     }
@@ -48420,12 +48434,12 @@ var handleCallAI_Question = async (app, settings2, node, question) => {
   const { generateNote } = noteGenerator(app, settings2, node, void 0, provider, model);
   await generateNote(question);
 };
-var handleRegenerateResponse = async (app, settings2) => {
+var handleRegenerateResponse = async (app, settings2, chooseContext = false) => {
   const activeNode = getActiveCanvasNodes(app)[0];
   const provider = settings2.providers.find((p) => p.id === settings2.activeProvider);
   const model = settings2.models.find((m) => m.id === settings2.apiModel && m.providerId === (provider == null ? void 0 : provider.id) && m.enabled) || settings2.models.find((m) => m.providerId === (provider == null ? void 0 : provider.id) && m.enabled);
   const { generateNote } = noteGenerator(app, settings2, activeNode.from.node, activeNode.to.node, provider, model);
-  await generateNote();
+  await generateNote(void 0, void 0, chooseContext);
 };
 var addRegenerateResponse = async (app, settings2, menuEl) => {
   const buttonEl_AskAI = createEl("button", "clickable-icon ai-menu-item");
@@ -48435,6 +48449,11 @@ var addRegenerateResponse = async (app, settings2, menuEl) => {
   (0, import_obsidian14.setIcon)(buttonEl_AskAI, "lucide-rotate-cw");
   menuEl.appendChild(buttonEl_AskAI);
   buttonEl_AskAI.addEventListener("click", () => handleRegenerateResponse(app, settings2));
+  const contextButton = createEl("button", "clickable-icon ai-menu-item");
+  (0, import_obsidian14.setTooltip)(contextButton, "Regenerate with chosen context\u2026", { placement: "top" });
+  (0, import_obsidian14.setIcon)(contextButton, "lucide-list-filter");
+  menuEl.appendChild(contextButton);
+  contextButton.addEventListener("click", () => handleRegenerateResponse(app, settings2, true));
 };
 var addAskAIWithModelButton = async (app, settings2, menuEl) => {
   const buttonEl_AskAI = createEl("button", "clickable-icon ai-menu-item");
@@ -48566,6 +48585,7 @@ var DEFAULT_SETTINGS = {
   maxInputTokens: 0,
   maxResponseTokens: 0,
   maxDepth: 0,
+  alwaysAskPromptContext: false,
   systemPrompts: [],
   userSystemPrompts: [],
   flashcardsSystemPrompt: FLASHCARDS_SYSTEM_PROMPT,
@@ -49663,6 +49683,10 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
   }
   renderGenerationSettings(containerEl) {
     new import_obsidian18.Setting(containerEl).setHeading().setName("Generation Settings");
+    new import_obsidian18.Setting(containerEl).setName("Always ask which cards to include").setDesc("Open the context picker before every request when a card has more than one connected card.").addToggle((toggle) => toggle.setValue(this.plugin.settings.alwaysAskPromptContext).onChange(async (value) => {
+      this.plugin.settings.alwaysAskPromptContext = value;
+      await this.plugin.saveSettings();
+    }));
     new import_obsidian18.Setting(containerEl).setName("Render HTML previews by default").setDesc("Open fenced HTML cards in Render mode instead of showing their code.").addToggle((toggle) => toggle.setValue(this.plugin.settings.autoPreviewHtml).onChange(async (value) => {
       this.plugin.settings.autoPreviewHtml = value;
       await this.plugin.saveSettings();
@@ -50941,6 +50965,12 @@ var AugmentedCanvasPlugin = class extends import_obsidian26.Plugin {
           });
         });
       }
+      menu.addItem((item) => {
+        item.setTitle("Ask AI with chosen context\u2026").setIcon("lucide-list-filter").onClick(() => {
+          const { generateNote } = noteGenerator(this.app, settings2, node);
+          return generateNote(void 0, void 0, true);
+        });
+      });
       menu.addItem((item) => {
         item.setTitle("Copy node ID").setIcon("lucide-copy").onClick(() => {
           navigator.clipboard.writeText(node.id);

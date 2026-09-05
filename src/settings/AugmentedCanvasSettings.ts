@@ -218,6 +218,7 @@ export interface AugmentedCanvasSettings {
 	 * The maximum depth of ancestor notes to include. 0 means no limit.
 	 */
 	maxDepth: number;
+	alwaysAskPromptContext: boolean;
 
 	/**
 	 * System prompt list fetch from github
@@ -449,6 +450,7 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	maxInputTokens: 0,
 	maxResponseTokens: 0,
 	maxDepth: 0,
+	alwaysAskPromptContext: false,
 	systemPrompts: [],
 	userSystemPrompts: [],
 	flashcardsSystemPrompt: FLASHCARDS_SYSTEM_PROMPT,

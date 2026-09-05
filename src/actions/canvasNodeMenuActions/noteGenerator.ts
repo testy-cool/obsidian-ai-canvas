@@ -545,7 +545,8 @@ export function noteGenerator(
 
 	const generateNote = async (
 		question?: string,
-		selectedNodeIds?: ReadonlySet<string>
+		selectedNodeIds?: ReadonlySet<string>,
+		chooseContext = false
 	) => {
 		const provider = resolveProvider();
 		if (!provider) {
@@ -587,9 +588,9 @@ export function noteGenerator(
 			await canvas.requestSave();
 			await sleep(200);
 
+			const contextEntries = await collectNodeAndAncestors(node);
 			if (!selectedNodeIds) {
-				const contextEntries = await collectNodeAndAncestors(node);
-				if (contextEntries.length > 1) {
+				if (chooseContext || (settings.alwaysAskPromptContext && contextEntries.length > 1)) {
 					const contextOptions: PromptContextOption[] = await Promise.all(
 						contextEntries.map(async ({ node: contextNode, depth }) => {
 							const canvasNode = contextNode as CanvasNode;
@@ -614,7 +615,9 @@ export function noteGenerator(
 					}).open();
 					return;
 				}
+				selectedNodeIds = new Set(contextEntries.map(({ node }) => node.id));
 			}
+			const contextCount = contextEntries.filter(({ node }) => isPromptContextNodeIncluded(node.id, selectedNodeIds)).length;
 
 			const trimmedQuestion = question?.trim();
 			const { messages, tokenCount } = await buildMessages(node, {
@@ -663,6 +666,7 @@ export function noteGenerator(
 						chat_role: "assistant",
 						ai_model: model.model,
 						ai_provider: provider.type,
+						ai_context_count: contextCount,
 					},
 					question,
 					directionBias
@@ -678,6 +682,7 @@ export function noteGenerator(
 					...nodeData,
 					ai_model: model.model,
 					ai_provider: provider.type,
+					ai_context_count: contextCount,
 				});
 				
 				// Resize existing node to proper initial dimensions
@@ -689,6 +694,8 @@ export function noteGenerator(
 					y: created.y
 				});
 			}
+
+			addModelIndicator(created, provider.type, model.model, true);
 
 			const isGpt = provider?.type === "OpenAI";
 			let noticeMessage = `Sending ${messages.length} notes to the AI`;
@@ -841,9 +848,6 @@ export function noteGenerator(
 							});
 							void created.canvas?.requestFrame?.();
 
-							// Add subtle model indicator to the note
-							addModelIndicator(created, provider.type, model.model);
-
 							// Add HTML preview if there are HTML code blocks
 							const htmlBlocks = extractHtmlCodeBlocks(created.text);
 							console.log("[HTML Preview] Text length:", created.text?.length, "HTML blocks found:", htmlBlocks.length);
@@ -853,6 +857,7 @@ export function noteGenerator(
 								console.log("[HTML Preview] Preview element created:", !!previewEl);
 							}
 						}
+						addModelIndicator(created, provider.type, model.model, !final);
 					}
 				);
 
@@ -930,6 +935,8 @@ export function noteGenerator(
 					x: created.x,
 					y: created.y
 				});
+			} finally {
+				addModelIndicator(created, provider.type, model.model);
 			}
 
 			await canvas.requestSave();

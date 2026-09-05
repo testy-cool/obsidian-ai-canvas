@@ -315,7 +315,7 @@
 	position: absolute !important;
 	bottom: 4px !important;
 	right: 8px !important;
-	font-size: 24px !important;
+	font-size: 12px !important;
 	color: var(--text-faint) !important;
 	opacity: 0.6 !important;
 	pointer-events: none !important;

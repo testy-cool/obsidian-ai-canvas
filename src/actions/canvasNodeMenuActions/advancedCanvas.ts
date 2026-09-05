@@ -51,7 +51,8 @@ export const handleCallAI_Question = async (
 
 const handleRegenerateResponse = async (
 	app: App,
-	settings: AugmentedCanvasSettings
+	settings: AugmentedCanvasSettings,
+	chooseContext = false
 ) => {
 	const activeNode = getActiveCanvasNodes(app)![0];
 
@@ -80,7 +81,7 @@ const handleRegenerateResponse = async (
 		model
 	);
 
-	await generateNote();
+	await generateNote(undefined, undefined, chooseContext);
 };
 
 export const addRegenerateResponse = async (
@@ -98,6 +99,14 @@ export const addRegenerateResponse = async (
 
 	buttonEl_AskAI.addEventListener("click", () =>
 		handleRegenerateResponse(app, settings)
+	);
+
+	const contextButton = createEl("button", "clickable-icon ai-menu-item");
+	setTooltip(contextButton, "Regenerate with chosen context…", { placement: "top" });
+	setIcon(contextButton, "lucide-list-filter");
+	menuEl.appendChild(contextButton);
+	contextButton.addEventListener("click", () =>
+		handleRegenerateResponse(app, settings, true)
 	);
 };
 

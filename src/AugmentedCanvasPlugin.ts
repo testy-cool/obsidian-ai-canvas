@@ -587,6 +587,14 @@ export default class AugmentedCanvasPlugin extends Plugin {
 					});
 				}
 				menu.addItem((item) => {
+					item.setTitle("Ask AI with chosen context…")
+						.setIcon("lucide-list-filter")
+						.onClick(() => {
+							const { generateNote } = noteGenerator(this.app, settings, node as unknown as CanvasNode);
+							return generateNote(undefined, undefined, true);
+						});
+				});
+				menu.addItem((item) => {
 					item.setTitle("Copy node ID")
 						.setIcon("lucide-copy")
 						.onClick(() => {

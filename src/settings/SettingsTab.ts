@@ -708,6 +708,16 @@ export default class SettingsTab extends PluginSettingTab {
     private renderGenerationSettings(containerEl: HTMLElement) {
         new Setting(containerEl).setHeading().setName("Generation Settings");
 
+		new Setting(containerEl)
+			.setName("Always ask which cards to include")
+			.setDesc("Open the context picker before every request when a card has more than one connected card.")
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.alwaysAskPromptContext)
+				.onChange(async (value) => {
+					this.plugin.settings.alwaysAskPromptContext = value;
+					await this.plugin.saveSettings();
+				}));
+
         new Setting(containerEl)
             .setName("Render HTML previews by default")
             .setDesc("Open fenced HTML cards in Render mode instead of showing their code.")
