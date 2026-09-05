@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import SettingsTab from "../src/settings/SettingsTab";
+import { UnifiedProviderModal } from "../src/Modals/UnifiedProviderModal";
 import { DEFAULT_SETTINGS } from "../src/settings/AugmentedCanvasSettings";
 
 class Element {
@@ -170,5 +171,41 @@ describe("settings navigation layout", () => {
 		expect(content).toContain("min-height: 0;");
 		expect(content).toContain("overflow-y: auto;");
 		expect(content).toContain("scrollbar-gutter: stable;");
+	});
+});
+
+describe("Bifrost Gemini-native setting", () => {
+	it.each([undefined, false, true])("loads and saves the native toggle without changing model IDs (initial: %s)", async (geminiNative) => {
+		const onSave = vi.fn();
+		const provider = {
+			id: "bifrost", type: "Bifrost", baseUrl: "https://example.test/v1",
+			apiKey: "test", enabled: true, geminiNative,
+		};
+		const model = { id: "selected", model: "vertex/gemini-3.1-pro-preview", providerId: provider.id, enabled: true };
+		const modal: any = new UnifiedProviderModal({} as any, onSave, provider, [model]);
+		modal.onOpen();
+		const nativeSetting = (modal.contentEl as Element).querySelectorAll(".setting-item")
+			.find(item => item.querySelector(".setting-item-name")?.textContent === "Use Gemini-native API")!;
+		expect(nativeSetting.style.display).toBe("");
+		expect(nativeSetting.querySelector(".setting-item-description")!.textContent).toBe("Route requests through Bifrost's /genai endpoint so Google search grounding, URL context and YouTube links work. Model ids stay as listed (for example vertex/gemini-3.1-pro-preview).");
+		const toggle = nativeSetting.querySelector("input")!;
+		expect(toggle.checked).toBe(geminiNative ?? false);
+		toggle.checked = true;
+		await toggle.listeners.get("change")!();
+		modal.save();
+		expect(onSave).toHaveBeenCalledWith(
+			expect.objectContaining({ type: "Bifrost", geminiNative: true, baseUrl: provider.baseUrl }),
+			[expect.objectContaining({ model: model.model })],
+		);
+	});
+
+	it("hides the native toggle for other provider types", () => {
+		const modal: any = new UnifiedProviderModal({} as any, vi.fn(), {
+			id: "openai", type: "OpenAI", baseUrl: "https://example.test/v1", apiKey: "test", enabled: true,
+		});
+		modal.onOpen();
+		const nativeSetting = (modal.contentEl as Element).querySelectorAll(".setting-item")
+			.find(item => item.querySelector(".setting-item-name")?.textContent === "Use Gemini-native API")!;
+		expect(nativeSetting.style.display).toBe("none");
 	});
 });

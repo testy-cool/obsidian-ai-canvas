@@ -45881,13 +45881,47 @@ var streamCodexResponse = async (provider, messages, { model, providerParams, ti
   });
 };
 
+// src/utils/providerCapabilities.ts
+var openAICompatible = {
+  image: true,
+  pdf: true,
+  video: false,
+  youtube: false,
+  search: false,
+  urlContext: false
+};
+var google2 = {
+  image: true,
+  pdf: true,
+  video: true,
+  youtube: true,
+  search: true,
+  urlContext: true
+};
+var isGoogleProvider = (provider) => {
+  var _a20;
+  return (provider == null ? void 0 : provider.geminiNative) === true || ["Gemini", "Google", "Vertex"].includes((_a20 = provider == null ? void 0 : provider.type) != null ? _a20 : "");
+};
+var supportsGoogleTools = (modelId) => {
+  var _a20;
+  return /^gemini-(?:2\.5|3(?:\.\d+)?)-/.test((_a20 = modelId.split("/").pop()) != null ? _a20 : "");
+};
+var getProviderCapabilities = (provider) => ({
+  ...isGoogleProvider(provider) ? google2 : openAICompatible
+});
+
 // src/utils/ai.ts
 var tokenCache = /* @__PURE__ */ new Map();
-var createScopedGeminiFetch = (providerParams) => {
+var createScopedGeminiFetch = (providerParams, nativeBaseURL) => {
   const originalFetch = globalThis.fetch;
   return async (input, init2) => {
-    const url2 = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    if (!url2.includes("generativelanguage.googleapis.com") && !url2.includes("aiplatform.googleapis.com")) {
+    let url2 = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const isNativeRequest = nativeBaseURL && url2.startsWith(`${nativeBaseURL}/`);
+    if (isNativeRequest && !url2.startsWith(`${nativeBaseURL}/models/`) && /:(?:streamGenerateContent|generateContent)(?:\?|$)/.test(url2)) {
+      url2 = `${nativeBaseURL}/models/${url2.slice(nativeBaseURL.length + 1)}`;
+      input = typeof input === "string" ? url2 : input instanceof URL ? new URL(url2) : new Request(url2, input);
+    }
+    if (!isNativeRequest && !url2.includes("generativelanguage.googleapis.com") && !url2.includes("aiplatform.googleapis.com")) {
       return originalFetch(input, init2);
     }
     if ((init2 == null ? void 0 : init2.body) && typeof init2.body === "string") {
@@ -46024,7 +46058,17 @@ var createVertexProvider = (provider, providerParams) => {
     fetch: vertexFetch
   });
 };
+var getBifrostGeminiBaseUrl = (baseUrl) => `${baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/genai/v1beta`;
 var getLlm = (provider, providerParams) => {
+  if (provider.type === "Bifrost" && provider.geminiNative) {
+    const baseURL = getBifrostGeminiBaseUrl(provider.baseUrl);
+    return createGoogleGenerativeAI({
+      baseURL,
+      apiKey: provider.apiKey,
+      headers: { Authorization: `Bearer ${provider.apiKey}` },
+      fetch: createScopedGeminiFetch(providerParams, baseURL)
+    });
+  }
   switch (provider.type) {
     case "Vertex": {
       if (!provider.serviceAccountJson) {
@@ -46076,8 +46120,7 @@ var getLlm = (provider, providerParams) => {
       }));
   }
 };
-var isGoogleProvider = (provider) => provider.type === "Gemini" || provider.type === "Google" || provider.type === "Vertex";
-var supportsUrlContext = (modelId) => /^(?:models\/)?gemini-(?:2\.5|3(?:\.\d+)?)-/.test(modelId);
+var supportsUrlContext = supportsGoogleTools;
 var supportsSearchGrounding = supportsUrlContext;
 var buildTools = (provider, modelId, mcpTools, { useSearchGrounding = true, useUrlContext = true } = {}) => {
   const allTools = { ...mcpTools };
@@ -47328,36 +47371,6 @@ var addGenerateGroupNameButton = (app, settings2, menuEl) => {
   });
 };
 
-// src/utils/providerCapabilities.ts
-var openAICompatible = {
-  image: true,
-  pdf: true,
-  video: false,
-  youtube: false,
-  search: false,
-  urlContext: false
-};
-var google2 = {
-  image: true,
-  pdf: true,
-  video: true,
-  youtube: true,
-  search: true,
-  urlContext: true
-};
-var capabilitiesByProvider = {
-  Gemini: google2,
-  Google: google2,
-  Vertex: google2,
-  Azure: openAICompatible
-};
-var getProviderCapabilities = (provider) => {
-  var _a20, _b19;
-  return {
-    ...(_b19 = capabilitiesByProvider[(_a20 = provider == null ? void 0 : provider.type) != null ? _a20 : ""]) != null ? _b19 : openAICompatible
-  };
-};
-
 // src/utils/htmlPreview.ts
 var import_obsidian9 = require("obsidian");
 function extractHtmlCodeBlocks(text2) {
@@ -48165,11 +48178,10 @@ ${nodeText}`);
         const toolRefs = /* @__PURE__ */ new Map();
         const hasMcpTools = mcpTools && Object.keys(mcpTools).length > 0;
         const mcpToolCount = hasMcpTools ? Object.keys(mcpTools).length : 0;
-        const isGemini = provider.type === "Gemini" || provider.type === "Google" || provider.type === "Vertex";
-        const modelSupportsUrlContext = /^(?:models\/)?gemini-(?:2\.5|3)-/.test(model.model);
-        const modelSupportsSearchGrounding = /^(?:models\/)?gemini-2\.5-/.test(model.model);
-        const usesUrlContext = isGemini && modelSupportsUrlContext && !hasMcpTools;
-        const usesSearchGrounding = isGemini && modelSupportsSearchGrounding;
+        const capabilities = getProviderCapabilities(provider);
+        const canUseGoogleTools = supportsGoogleTools(model.model) && !hasMcpTools;
+        const usesUrlContext = capabilities.urlContext && canUseGoogleTools;
+        const usesSearchGrounding = capabilities.search && canUseGoogleTools;
         const truncateText2 = (text2, maxLen = 100) => {
           if (!text2)
             return "";
@@ -48908,14 +48920,24 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
         }
       });
     }
+    let geminiNativeSetting;
     new import_obsidian17.Setting(contentEl).setName("Provider name").addText((text2) => {
       var _a21;
       text2.setPlaceholder("My Provider").setValue((_a21 = this.provider.type) != null ? _a21 : "").onChange((val) => {
         this.provider.type = val;
+        if (geminiNativeSetting)
+          geminiNativeSetting.settingEl.style.display = val === "Bifrost" ? "" : "none";
         if (!this.editing)
           this.provider.id = val.toLowerCase().replace(/\s+/g, "-");
       });
     });
+    geminiNativeSetting = new import_obsidian17.Setting(contentEl).setName("Use Gemini-native API").setDesc("Route requests through Bifrost's /genai endpoint so Google search grounding, URL context and YouTube links work. Model ids stay as listed (for example vertex/gemini-3.1-pro-preview).").addToggle((toggle) => {
+      var _a21;
+      return toggle.setValue((_a21 = this.provider.geminiNative) != null ? _a21 : false).onChange((value) => {
+        this.provider.geminiNative = value;
+      });
+    });
+    geminiNativeSetting.settingEl.style.display = this.provider.type === "Bifrost" ? "" : "none";
     if (!isGeminiType((_a20 = this.provider.type) != null ? _a20 : "") && !isVertexType((_b19 = this.provider.type) != null ? _b19 : "") && !isCodexType((_c = this.provider.type) != null ? _c : "")) {
       const isAzure = this.provider.type === "Azure";
       new import_obsidian17.Setting(contentEl).setName("Base URL").setDesc(isAzure ? "Azure OpenAI resource endpoint \u2014 no path, no api-version" : "OpenAI-compatible endpoint.").addText((text2) => {
@@ -49160,7 +49182,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
     }
   }
   save() {
-    var _a20, _b19, _c, _d;
+    var _a20, _b19, _c, _d, _e;
     const p = this.provider;
     if (!p.id || !p.type) {
       new import_obsidian17.Notice("Provider name is required.");
@@ -49176,13 +49198,14 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
       baseUrl: isGeminiType(p.type) ? GEMINI_BASE_URL : (_b19 = p.baseUrl) != null ? _b19 : "",
       apiKey: (_c = p.apiKey) != null ? _c : "",
       enabled: (_d = p.enabled) != null ? _d : true,
+      geminiNative: p.type === "Bifrost" && ((_e = p.geminiNative) != null ? _e : false),
       projectId: p.projectId,
       location: p.location,
       serviceAccountJson: p.serviceAccountJson,
       binaryPath: p.binaryPath
     };
     const models = [...this.selectedModelIds].map((modelId) => {
-      var _a21, _b20, _c2, _d2, _e, _f;
+      var _a21, _b20, _c2, _d2, _e2, _f;
       const existing = this.existingModels.find((m) => m.model === modelId);
       const price = (_a21 = this.pricingData) == null ? void 0 : _a21.get(modelId);
       const defaultParams = getDefaultProviderParams(modelId, provider.type);
@@ -49195,7 +49218,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
         maxRetries: existing == null ? void 0 : existing.maxRetries,
         inputCostPerMillion: (existing == null ? void 0 : existing.costOverridden) ? existing.inputCostPerMillion : (_c2 = price == null ? void 0 : price.inputCostPerMillion) != null ? _c2 : existing == null ? void 0 : existing.inputCostPerMillion,
         outputCostPerMillion: (existing == null ? void 0 : existing.costOverridden) ? existing.outputCostPerMillion : (_d2 = price == null ? void 0 : price.outputCostPerMillion) != null ? _d2 : existing == null ? void 0 : existing.outputCostPerMillion,
-        providerParams: (_f = (_e = this.modelParams.get(modelId)) != null ? _e : existing == null ? void 0 : existing.providerParams) != null ? _f : Object.keys(defaultParams).length > 0 ? defaultParams : void 0
+        providerParams: (_f = (_e2 = this.modelParams.get(modelId)) != null ? _e2 : existing == null ? void 0 : existing.providerParams) != null ? _f : Object.keys(defaultParams).length > 0 ? defaultParams : void 0
       };
     });
     this.onSave(provider, models);

@@ -8,6 +8,7 @@ import { requestUrl } from "obsidian";
 import { getToolSchema, convertToGeminiSchema } from "./mcpClient";
 import { applyOpenAICompatParams } from "./providerParams";
 import { streamCodexResponse } from "./codexCli";
+import { isGoogleProvider, supportsGoogleTools } from "./providerCapabilities";
 
 // Cache for access tokens: serviceAccountEmail -> { token, expiresAt }
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -16,14 +17,21 @@ const tokenCache = new Map<string, { token: string; expiresAt: number }>();
  * Create a scoped fetch function that intercepts only Gemini/Vertex API requests.
  * Fixes broken tool schemas from @ai-sdk/google and injects provider params.
  */
-const createScopedGeminiFetch = (providerParams?: Record<string, unknown>): typeof fetch => {
+const createScopedGeminiFetch = (providerParams?: Record<string, unknown>, nativeBaseURL?: string): typeof fetch => {
 	const originalFetch = globalThis.fetch;
 
 	return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-		const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+		let url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+		const isNativeRequest = nativeBaseURL && url.startsWith(`${nativeBaseURL}/`);
+		// The SDK treats IDs containing '/' as complete paths. Bifrost still
+		// requires /models/ before its untouched provider-prefixed model ID.
+		if (isNativeRequest && !url.startsWith(`${nativeBaseURL}/models/`) && /:(?:streamGenerateContent|generateContent)(?:\?|$)/.test(url)) {
+			url = `${nativeBaseURL}/models/${url.slice(nativeBaseURL.length + 1)}`;
+			input = typeof input === "string" ? url : input instanceof URL ? new URL(url) : new Request(url, input);
+		}
 
-		// Only intercept Gemini/Vertex API requests, pass everything else through
-		if (!url.includes('generativelanguage.googleapis.com') && !url.includes('aiplatform.googleapis.com')) {
+		// Only intercept Google and the configured native gateway requests.
+		if (!isNativeRequest && !url.includes('generativelanguage.googleapis.com') && !url.includes('aiplatform.googleapis.com')) {
 			return originalFetch(input, init);
 		}
 
@@ -221,7 +229,19 @@ const createVertexProvider = (provider: LLMProvider, providerParams?: Record<str
 	});
 };
 
+export const getBifrostGeminiBaseUrl = (baseUrl: string): string =>
+	`${baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/genai/v1beta`;
+
 const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>) => {
+	if (provider.type === "Bifrost" && provider.geminiNative) {
+		const baseURL = getBifrostGeminiBaseUrl(provider.baseUrl);
+		return createGoogleGenerativeAI({
+			baseURL,
+			apiKey: provider.apiKey,
+			headers: { Authorization: `Bearer ${provider.apiKey}` },
+			fetch: createScopedGeminiFetch(providerParams, baseURL),
+		});
+	}
 	switch (provider.type) {
 		case "Vertex": {
 			if (!provider.serviceAccountJson) {
@@ -277,11 +297,7 @@ const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>)
 	}
 };
 
-const isGoogleProvider = (provider: LLMProvider) =>
-	provider.type === "Gemini" || provider.type === "Google" || provider.type === "Vertex";
-
-const supportsUrlContext = (modelId: string) =>
-	/^(?:models\/)?gemini-(?:2\.5|3(?:\.\d+)?)-/.test(modelId);
+const supportsUrlContext = supportsGoogleTools;
 
 const supportsSearchGrounding = supportsUrlContext;
 

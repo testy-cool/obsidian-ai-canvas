@@ -346,9 +346,10 @@ describe("provider media input", () => {
 		]);
 	});
 
-	it("keeps sending YouTube cards as video inputs for Gemini", async () => {
+	it.each(["Gemini", "Bifrost"])("sends YouTube cards as video inputs for %s with native Google support", async (type) => {
 		const { app, settings, provider, prompt } = fixture(false);
-		provider.type = "Gemini";
+		provider.type = type;
+		(provider as any).geminiNative = type === "Bifrost";
 		prompt.setData({ type: "link", url: "https://youtu.be/dQw4w9WgXcQ" });
 		await run(() => noteGenerator(app, settings).generateNote());
 		expect(sentParts()).toContainEqual({ type: "file", data: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", mediaType: "video/mp4" });

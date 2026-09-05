@@ -124,6 +124,9 @@ export interface LLMProvider {
 	 */
 	baseUrl: string;
 
+	/** Use Bifrost's Gemini-native endpoint. Defaults to false. */
+	geminiNative?: boolean;
+
 	/**
 	 * API key for the provider
 	 */

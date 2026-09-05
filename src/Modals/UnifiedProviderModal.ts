@@ -109,15 +109,25 @@ export class UnifiedProviderModal extends Modal {
     }
 
     // --- Provider name ---
+		let geminiNativeSetting: Setting | undefined;
     new Setting(contentEl).setName("Provider name").addText((text) => {
       text
         .setPlaceholder("My Provider")
         .setValue(this.provider.type ?? "")
         .onChange((val) => {
           this.provider.type = val;
+					if (geminiNativeSetting) geminiNativeSetting.settingEl.style.display = val === "Bifrost" ? "" : "none";
           if (!this.editing) this.provider.id = val.toLowerCase().replace(/\s+/g, "-");
         });
     });
+
+		geminiNativeSetting = new Setting(contentEl)
+			.setName("Use Gemini-native API")
+			.setDesc("Route requests through Bifrost's /genai endpoint so Google search grounding, URL context and YouTube links work. Model ids stay as listed (for example vertex/gemini-3.1-pro-preview).")
+			.addToggle(toggle => toggle
+				.setValue(this.provider.geminiNative ?? false)
+				.onChange(value => { this.provider.geminiNative = value; }));
+		geminiNativeSetting.settingEl.style.display = this.provider.type === "Bifrost" ? "" : "none";
 
     // --- Base URL (hidden for Gemini/Vertex/Codex) ---
     if (
@@ -460,6 +470,7 @@ export class UnifiedProviderModal extends Modal {
       baseUrl: isGeminiType(p.type!) ? GEMINI_BASE_URL : (p.baseUrl ?? ""),
       apiKey: p.apiKey ?? "",
       enabled: p.enabled ?? true,
+			geminiNative: p.type === "Bifrost" && (p.geminiNative ?? false),
       projectId: p.projectId,
       location: p.location,
       serviceAccountJson: p.serviceAccountJson,

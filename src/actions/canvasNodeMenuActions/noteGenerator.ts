@@ -29,7 +29,7 @@ import { getResponse, streamResponse, ToolEvent } from "../../utils/llm";
 import { addModelIndicator, getYouTubeVideoId } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { getAllMCPTools } from "../../utils/mcpClient";
-import { getProviderCapabilities } from "../../utils/providerCapabilities";
+import { getProviderCapabilities, supportsGoogleTools } from "../../utils/providerCapabilities";
 import { extractHtmlCodeBlocks, addHtmlPreviewToNode } from "../../utils/htmlPreview";
 import {
 	PromptContextModal,
@@ -739,11 +739,10 @@ export function noteGenerator(
 				// Determine what features are active
 				const hasMcpTools = mcpTools && Object.keys(mcpTools).length > 0;
 				const mcpToolCount = hasMcpTools ? Object.keys(mcpTools!).length : 0;
-				const isGemini = provider.type === "Gemini" || provider.type === "Google" || provider.type === "Vertex";
-				const modelSupportsUrlContext = /^(?:models\/)?gemini-(?:2\.5|3)-/.test(model.model);
-				const modelSupportsSearchGrounding = /^(?:models\/)?gemini-2\.5-/.test(model.model);
-				const usesUrlContext = isGemini && modelSupportsUrlContext && !hasMcpTools;
-				const usesSearchGrounding = isGemini && modelSupportsSearchGrounding;
+				const capabilities = getProviderCapabilities(provider);
+				const canUseGoogleTools = supportsGoogleTools(model.model) && !hasMcpTools;
+				const usesUrlContext = capabilities.urlContext && canUseGoogleTools;
+				const usesSearchGrounding = capabilities.search && canUseGoogleTools;
 
 				const truncateText = (text: string, maxLen = 100) => {
 					if (!text) return "";

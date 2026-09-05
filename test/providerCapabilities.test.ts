@@ -14,3 +14,17 @@ describe("provider capabilities", () => {
 		});
 	});
 });
+
+describe("Bifrost Gemini-native capabilities", () => {
+	it("returns Google capabilities when the flag is enabled", () => {
+		expect(getProviderCapabilities({ type: "Bifrost", geminiNative: true })).toEqual({
+			image: true, pdf: true, video: true, youtube: true, search: true, urlContext: true,
+		});
+	});
+
+	it.each([false, undefined])("keeps compatible capabilities when geminiNative is %s", (geminiNative) => {
+		expect(getProviderCapabilities({ type: "Bifrost", geminiNative })).toEqual({
+			image: true, pdf: true, video: false, youtube: false, search: false, urlContext: false,
+		});
+	});
+});

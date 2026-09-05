@@ -27,15 +27,16 @@ const google: ProviderCapabilities = {
 	urlContext: true,
 };
 
-const capabilitiesByProvider: Record<string, ProviderCapabilities> = {
-	Gemini: google,
-	Google: google,
-	Vertex: google,
-	Azure: openAICompatible,
-};
+type ProviderKind = Pick<LLMProvider, "type" | "geminiNative">;
+
+export const isGoogleProvider = (provider?: ProviderKind): boolean =>
+	provider?.geminiNative === true || ["Gemini", "Google", "Vertex"].includes(provider?.type ?? "");
+
+export const supportsGoogleTools = (modelId: string): boolean =>
+	/^gemini-(?:2\.5|3(?:\.\d+)?)-/.test(modelId.split("/").pop() ?? "");
 
 export const getProviderCapabilities = (
-	provider?: Pick<LLMProvider, "type">
+	provider?: ProviderKind
 ): ProviderCapabilities => ({
-	...(capabilitiesByProvider[provider?.type ?? ""] ?? openAICompatible),
+	...(isGoogleProvider(provider) ? google : openAICompatible),
 });

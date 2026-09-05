@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LLMProvider } from "../src/settings/AugmentedCanvasSettings";
-import { buildTools, getResponse, streamResponse } from "../src/utils/ai";
+import { buildTools, getBifrostGeminiBaseUrl, getResponse, streamResponse } from "../src/utils/ai";
 
 const originalFetch = globalThis.fetch;
 
@@ -264,5 +264,73 @@ describe("OpenAI-compatible media serialization", () => {
 			{ type: "image_url", image_url: { url: "data:image/png;base64,AQIDBA==" } },
 			{ type: "file", file: { filename: "attachment.pdf", file_data: "data:application/pdf;base64,AQIDBA==" } },
 		]);
+	});
+});
+
+describe("Bifrost Gemini-native requests", () => {
+	it.each([
+		"https://bifrost.voidxd.cloud/v1",
+		"https://bifrost.voidxd.cloud/v1/",
+		"https://bifrost.voidxd.cloud/",
+		"https://bifrost.voidxd.cloud",
+	])("derives the native base URL from %s", (baseUrl) => {
+		expect(getBifrostGeminiBaseUrl(baseUrl)).toBe("https://bifrost.voidxd.cloud/genai/v1beta");
+	});
+
+	it("enables both Google tools for an unchanged Vertex-prefixed model ID", () => {
+		const provider = makeProvider({ type: "Bifrost", geminiNative: true });
+		expect(buildTools(provider, "vertex/gemini-3.1-pro-preview")).toMatchObject({
+			google_search: { id: "google.google_search" },
+			url_context: { id: "google.url_context" },
+		});
+		const mcpTools = { lookup: { description: "Test function" } };
+		expect(buildTools(provider, "vertex/gemini-3.1-pro-preview", mcpTools)).toEqual(mcpTools);
+	});
+
+	it("keeps the OpenAI-compatible route when the flag is false", async () => {
+		const provider = makeProvider({ type: "Bifrost", geminiNative: false });
+		expect(buildTools(provider, "vertex/gemini-3.1-pro-preview")).toBeUndefined();
+		const requests = installFetchStub();
+		await getResponse(provider, [{ role: "user", content: "hello" }], { model: "vertex/gemini-3.1-pro-preview" });
+		expect(requests).toHaveLength(1);
+		expect(requests[0].url).toBe("https://example.test/v1/chat/completions");
+		expect((await requests[0].json()).model).toBe("vertex/gemini-3.1-pro-preview");
+	});
+
+	it.each([false, true])("sends the native URL, auth, Google tools and YouTube URI through the real SDK (streaming: %s)", async (streaming) => {
+		const requests: Request[] = [];
+		globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			requests.push(new Request(input, init));
+			const response = {
+				candidates: [{ content: { role: "model", parts: [{ text: "ok" }] }, finishReason: "STOP" }],
+				usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 },
+			};
+			return new Response(streaming ? `data: ${JSON.stringify(response)}\n\n` : JSON.stringify(response), {
+				headers: { "Content-Type": streaming ? "text/event-stream" : "application/json" },
+			});
+		});
+		const provider = makeProvider({ type: "Bifrost", geminiNative: true });
+		const messages: any = [{ role: "user", content: [
+			{ type: "text", text: "Summarize this video" },
+			{ type: "file", data: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", mediaType: "video/mp4" },
+		] }];
+		const options = { model: "vertex/gemini-3.1-pro-preview", providerParams: { serviceTier: "priority" } };
+		if (streaming) {
+			const callback = vi.fn();
+			await streamResponse(provider, messages, options, callback);
+			expect(callback).toHaveBeenCalledWith("ok", null, null, null);
+		} else {
+			expect(await getResponse(provider, messages, options)).toBe("ok");
+		}
+		expect(requests).toHaveLength(1);
+		expect(requests[0].url).toBe(`https://example.test/genai/v1beta/models/vertex/gemini-3.1-pro-preview:${streaming ? "streamGenerateContent?alt=sse" : "generateContent"}`);
+		expect(requests[0].headers.get("authorization")).toBe("Bearer test-api-key");
+		expect(requests[0].headers.get("x-goog-api-key")).toBe("test-api-key");
+		const body = await requests[0].json();
+		expect(body.tools).toEqual([{ googleSearch: {} }, { urlContext: {} }]);
+		expect(body.contents[0].parts).toContainEqual({ fileData: {
+			fileUri: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", mimeType: "video/mp4",
+		} });
+		expect(body.generationConfig.service_tier).toBe("priority");
 	});
 });
