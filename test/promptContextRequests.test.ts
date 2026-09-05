@@ -52,6 +52,8 @@ class Element {
 	click() { return this.listeners.get("click")?.(); }
 	setText(text: string) { this.textContent = text; }
 	getText() { return this.textContent; }
+	addClass(name: string) { this.className = `${this.className} ${name}`.trim(); }
+	removeClass(name: string) { this.className = this.className.split(" ").filter(value => value !== name).join(" "); }
 }
 
 const fixture = (ancestors = true) => {
@@ -72,6 +74,7 @@ const fixture = (ancestors = true) => {
 			id, text, canvas, x: 0, y: 0, width: 400, height: 400,
 			unknownData: { id, type: "text", text },
 			contentEl: new Element(),
+			nodeEl: new Element(),
 			getData() { return { ...this.unknownData, text: this.text }; },
 			setData(data: any) { Object.assign(this.unknownData, data); },
 			setText(text: string) { this.text = text; this.contentEl.children = []; },
@@ -133,6 +136,21 @@ afterEach(() => {
 });
 
 describe("context picker request paths", () => {
+	it.each([false, true])("scopes generating styles to the request and clears them (error: %s)", async (fail) => {
+		const { app, canvas, settings } = fixture(false);
+		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
+			const response = canvas.nodes.get("response");
+			expect(response.nodeEl.className).toContain("ai-generating");
+			callback("text", null, null, null);
+			expect(response.nodeEl.className).toContain("ai-generating");
+			expect(badge(response).style.cssText).not.toContain("backdrop-filter");
+			if (fail) throw new Error("failed");
+			callback(null, { text: "text" }, null, null);
+			expect(response.nodeEl.className).not.toContain("ai-generating");
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(canvas.nodes.get("response").nodeEl.className).not.toContain("ai-generating");
+	});
 	it("bounds streamed resizes and keeps one badge across 100 deltas", async () => {
 		const { app, canvas, settings } = fixture(false);
 		const add = vi.spyOn(indicators, "addModelIndicator");

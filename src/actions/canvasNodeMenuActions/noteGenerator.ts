@@ -705,6 +705,7 @@ export function noteGenerator(
 			}
 
 			addModelIndicator(created, provider.type, model.model, true);
+			created.nodeEl?.addClass("ai-generating");
 
 			const isGpt = provider?.type === "OpenAI";
 			let noticeMessage = `Sending ${messages.length} notes to the AI`;
@@ -845,6 +846,7 @@ export function noteGenerator(
 						}
 
 						if (final) {
+							created.nodeEl?.removeClass("ai-generating");
 							// Final resize to ensure optimal dimensions
 							const finalDimensions = calculateNoteDimensions(created.text);
 							created.moveAndResize({
@@ -943,6 +945,7 @@ export function noteGenerator(
 					y: created.y
 				});
 			} finally {
+				created.nodeEl?.removeClass("ai-generating");
 				addModelIndicator(created, provider.type, model.model);
 			}
 

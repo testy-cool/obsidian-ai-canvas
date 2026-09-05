@@ -323,7 +323,6 @@ export const addModelIndicator = (node: any, provider: string, model: string, ge
 		border-radius: 4px;
 		font-family: var(--font-monospace);
 		z-index: 1;
-		backdrop-filter: blur(2px);
 	`;
 };
 

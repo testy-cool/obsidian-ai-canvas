@@ -3837,7 +3837,6 @@ var addModelIndicator = (node, provider, model, generating = false) => {
 		border-radius: 4px;
 		font-family: var(--font-monospace);
 		z-index: 1;
-		backdrop-filter: blur(2px);
 	`;
 };
 var restoreModelIndicators = (canvas) => {
@@ -48183,7 +48182,7 @@ ${nodeText}`);
     return { messages, tokenCount };
   };
   const generateNote = async (question, selectedNodeIds, chooseContext = false) => {
-    var _a20, _b19, _c, _d, _e;
+    var _a20, _b19, _c, _d, _e, _f, _g;
     const provider = resolveProvider();
     if (!provider) {
       new import_obsidian11.Notice("No active provider found. Please check your settings.");
@@ -48294,6 +48293,7 @@ ${nodeText}`);
         });
       }
       addModelIndicator(created, provider.type, model.model, true);
+      (_a20 = created.nodeEl) == null ? void 0 : _a20.addClass("ai-generating");
       const isGpt = (provider == null ? void 0 : provider.type) === "OpenAI";
       let noticeMessage = `Sending ${messages.length} notes to the AI`;
       if (isGpt) {
@@ -48339,7 +48339,7 @@ ${nodeText}`);
           providerParams: model.providerParams,
           timeoutMs: model.timeoutMs
         }, (delta, final, tool3, reasoningDelta) => {
-          var _a21, _b20, _c2, _d2, _e2, _f;
+          var _a21, _b20, _c2, _d2, _e2, _f2, _g2;
           if (firstDelta) {
             created.setText("");
             if (hasMcpTools || usesUrlContext || usesSearchGrounding) {
@@ -48411,6 +48411,7 @@ ${nodeText}`);
             }
           }
           if (final) {
+            (_c2 = created.nodeEl) == null ? void 0 : _c2.removeClass("ai-generating");
             const finalDimensions = calculateNoteDimensions(created.text);
             created.moveAndResize({
               height: finalDimensions.height,
@@ -48418,12 +48419,12 @@ ${nodeText}`);
               x: created.x,
               y: created.y
             });
-            void ((_d2 = (_c2 = created.canvas) == null ? void 0 : _c2.requestFrame) == null ? void 0 : _d2.call(_c2));
+            void ((_e2 = (_d2 = created.canvas) == null ? void 0 : _d2.requestFrame) == null ? void 0 : _e2.call(_d2));
             const htmlBlocks = extractHtmlCodeBlocks(created.text);
-            console.log("[HTML Preview] Text length:", (_e2 = created.text) == null ? void 0 : _e2.length, "HTML blocks found:", htmlBlocks.length);
+            console.log("[HTML Preview] Text length:", (_f2 = created.text) == null ? void 0 : _f2.length, "HTML blocks found:", htmlBlocks.length);
             if (htmlBlocks.length > 0) {
               console.log("[HTML Preview] Adding preview to node, contentEl:", !!created.contentEl);
-              const previewEl = addHtmlPreviewToNode(created, htmlBlocks, (_f = settings2.autoPreviewHtml) != null ? _f : false);
+              const previewEl = addHtmlPreviewToNode(created, htmlBlocks, (_g2 = settings2.autoPreviewHtml) != null ? _g2 : false);
               console.log("[HTML Preview] Preview element created:", !!previewEl);
             }
           }
@@ -48434,22 +48435,22 @@ ${nodeText}`);
         }
       } catch (error40) {
         let errorDetail = error40.message || String(error40);
-        if ((_a20 = error40.cause) == null ? void 0 : _a20.message) {
+        if ((_b19 = error40.cause) == null ? void 0 : _b19.message) {
           errorDetail = error40.cause.message;
         }
         if (error40.responseBody) {
           try {
             const body = typeof error40.responseBody === "string" ? JSON.parse(error40.responseBody) : error40.responseBody;
-            if ((_b19 = body == null ? void 0 : body.error) == null ? void 0 : _b19.message) {
+            if ((_c = body == null ? void 0 : body.error) == null ? void 0 : _c.message) {
               errorDetail = body.error.message;
             }
           } catch (e) {
           }
         }
-        if ((_d = (_c = error40.data) == null ? void 0 : _c.error) == null ? void 0 : _d.message) {
+        if ((_e = (_d = error40.data) == null ? void 0 : _d.error) == null ? void 0 : _e.message) {
           errorDetail = error40.data.error.message;
         }
-        if (error40.statusCode && ((_e = error40.message) == null ? void 0 : _e.startsWith(`HTTP ${error40.statusCode}:`))) {
+        if (error40.statusCode && ((_f = error40.message) == null ? void 0 : _f.startsWith(`HTTP ${error40.statusCode}:`))) {
           errorDetail = error40.message;
         }
         new import_obsidian11.Notice(`Error calling the AI: ${errorDetail}`, 1e4);
@@ -48462,6 +48463,7 @@ ${nodeText}`);
           y: created.y
         });
       } finally {
+        (_g = created.nodeEl) == null ? void 0 : _g.removeClass("ai-generating");
         addModelIndicator(created, provider.type, model.model);
       }
       await canvas.requestSave();

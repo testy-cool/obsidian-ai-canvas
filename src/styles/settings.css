@@ -379,7 +379,6 @@
 	border-radius: 4px !important;
 	font-family: var(--font-monospace) !important;
 	z-index: 1 !important;
-	backdrop-filter: blur(2px) !important;
 	transition: opacity 0.2s ease !important;
 }
 
@@ -388,15 +387,25 @@
 	opacity: 0.8 !important;
 }
 
-/* Smooth transitions for note resizing */
-.canvas-node[data-node-type="text"] .canvas-node-content {
-	transition: width 0.1s ease-out, height 0.1s ease-out !important;
-}
-
-/* Ensure notes maintain proper 3:5 aspect ratio during resize */
-.canvas-node[data-node-type="text"] {
+/* Keep minimum sizing limited to cards currently generating. */
+.canvas-node.ai-generating {
 	min-width: 300px !important;
 	min-height: 500px !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.canvas-node.ai-generating {
+		transition: width 0.1s ease-out, height 0.1s ease-out !important;
+	}
+
+	.canvas-node.ai-image-placeholder .canvas-node-content {
+		animation: ai-image-pulse 1.4s ease-in-out infinite;
+	}
+
+	@keyframes ai-image-pulse {
+		0%, 100% { opacity: 0.45; }
+		50% { opacity: 0.9; }
+	}
 }
 
 /* Better text wrapping for AI generated content */
