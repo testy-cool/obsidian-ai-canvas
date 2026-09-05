@@ -49523,12 +49523,16 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
   }
   renderMCPServers(containerEl) {
     const header = new import_obsidian18.Setting(containerEl).setHeading().setName("MCP Servers");
+    header.settingEl.addClass("mcp-section-header");
     header.setDesc("Connect to Model Context Protocol servers to add tools for the AI.");
     header.addToggle((toggle) => toggle.setValue(this.plugin.settings.mcpEnabled).setTooltip("Enable MCP tools globally").onChange(async (value) => {
       this.plugin.settings.mcpEnabled = value;
       await this.plugin.saveSettings();
     }));
-    header.addButton((button) => button.setButtonText("Add Server").setCta().onClick(() => {
+    const actions = new import_obsidian18.Setting(containerEl);
+    actions.settingEl.addClass("mcp-server-actions");
+    actions.infoEl.remove();
+    actions.addButton((button) => button.setButtonText("Add Server").setCta().onClick(() => {
       this.openMCPServerModal(null, async (server) => {
         if (this.plugin.settings.mcpServers.some((s) => s.id === server.id)) {
           new import_obsidian18.Notice("A server with this ID already exists");
@@ -49539,7 +49543,7 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
         this.display();
       });
     }));
-    header.addButton((button) => button.setButtonText("Import JSON").onClick(() => {
+    actions.addButton((button) => button.setButtonText("Import JSON").onClick(() => {
       const modal = new MCPImportModal(this.app, async (servers) => {
         let added = 0;
         for (const server of servers) {
@@ -49554,7 +49558,7 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
       });
       modal.open();
     }));
-    header.addButton((button) => button.setButtonText("Export JSON").onClick(() => {
+    actions.addButton((button) => button.setButtonText("Export JSON").onClick(() => {
       const mcpServers = {};
       for (const server of this.plugin.settings.mcpServers) {
         const config2 = {

@@ -189,6 +189,35 @@
 	width: 100%;
 }
 
+.augmented-canvas-settings .setting-item.mcp-section-header {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.augmented-canvas-settings .mcp-section-header .setting-item-info {
+	flex: 1 1 240px;
+	min-width: 0;
+}
+
+.augmented-canvas-settings .setting-item.mcp-section-header .setting-item-control {
+	flex: 0 0 auto;
+	min-width: 0;
+}
+
+.augmented-canvas-settings .setting-item.mcp-server-actions {
+	padding-top: 0;
+}
+
+.augmented-canvas-settings .setting-item.mcp-server-actions .setting-item-control {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-start;
+	gap: 8px;
+	min-width: 0;
+	width: 100%;
+}
+
 .provider-list {
 	display: flex;
 	flex-direction: column;

@@ -504,6 +504,7 @@ export default class SettingsTab extends PluginSettingTab {
 
     private renderMCPServers(containerEl: HTMLElement) {
         const header = new Setting(containerEl).setHeading().setName("MCP Servers");
+		header.settingEl.addClass("mcp-section-header");
         header.setDesc("Connect to Model Context Protocol servers to add tools for the AI.");
 
         header.addToggle(toggle => toggle
@@ -514,7 +515,11 @@ export default class SettingsTab extends PluginSettingTab {
                 await this.plugin.saveSettings();
             }));
 
-        header.addButton(button => button
+		const actions = new Setting(containerEl);
+		actions.settingEl.addClass("mcp-server-actions");
+		actions.infoEl.remove();
+
+		actions.addButton(button => button
             .setButtonText("Add Server")
             .setCta()
             .onClick(() => {
@@ -529,7 +534,7 @@ export default class SettingsTab extends PluginSettingTab {
                 });
             }));
 
-        header.addButton(button => button
+		actions.addButton(button => button
             .setButtonText("Import JSON")
             .onClick(() => {
                 const modal = new MCPImportModal(this.app, async (servers) => {
@@ -547,7 +552,7 @@ export default class SettingsTab extends PluginSettingTab {
                 modal.open();
             }));
 
-        header.addButton(button => button
+		actions.addButton(button => button
             .setButtonText("Export JSON")
             .onClick(() => {
                 // Convert to standard mcpServers format

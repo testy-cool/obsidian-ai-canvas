@@ -10,14 +10,26 @@ export class Plugin {}
 export class PluginSettingTab {}
 
 export class Setting {
-	setName(name: string) { return this; }
-	setDesc(desc: string) { return this; }
-	setHeading() { return this; }
+	settingEl: HTMLElement;
+	infoEl: HTMLElement;
+	controlEl: HTMLElement;
+	nameEl: HTMLElement;
+	descEl: HTMLElement;
+	constructor(containerEl: HTMLElement) {
+		this.settingEl = containerEl.createDiv("setting-item");
+		this.infoEl = this.settingEl.createDiv("setting-item-info");
+		this.nameEl = this.infoEl.createDiv("setting-item-name");
+		this.descEl = this.infoEl.createDiv("setting-item-description");
+		this.controlEl = this.settingEl.createDiv("setting-item-control");
+	}
+	setName(name: string) { this.nameEl.setText(name); return this; }
+	setDesc(desc: string) { this.descEl.setText(desc); return this; }
+	setHeading() { this.settingEl.addClass("setting-item-heading"); return this; }
 	addText(cb: (text: any) => void) { return this; }
 	addTextArea(cb: (text: any) => void) { return this; }
 	addDropdown(cb: (dropdown: any) => void) { return this; }
-	addToggle(cb: (toggle: any) => void) { return this; }
-	addButton(cb: (button: any) => void) { return this; }
+	addToggle(cb: (toggle: any) => void) { cb(new ToggleComponent(this.controlEl)); return this; }
+	addButton(cb: (button: any) => void) { cb(new ButtonComponent(this.controlEl)); return this; }
 	addSlider(cb: (slider: any) => void) { return this; }
 }
 
@@ -35,11 +47,13 @@ export class FuzzySuggestModal extends Modal {}
 export class SuggestModal extends Modal {}
 
 export class ButtonComponent {
-	setButtonText(text: string) { return this; }
+	buttonEl: HTMLButtonElement;
+	constructor(containerEl: HTMLElement) { this.buttonEl = containerEl.createEl("button"); }
+	setButtonText(text: string) { this.buttonEl.setText(text); return this; }
 	setCta() { return this; }
 	setDisabled(disabled: boolean) { return this; }
 	setTooltip(tooltip: string) { return this; }
-	onClick(cb: () => void) { return this; }
+	onClick(cb: () => void) { this.buttonEl.addEventListener("click", cb); return this; }
 }
 
 export class TextComponent {
@@ -60,10 +74,15 @@ export class TextAreaComponent {
 }
 
 export class ToggleComponent {
-	setValue(value: boolean) { return this; }
-	getValue() { return false; }
+	toggleEl: HTMLInputElement;
+	constructor(containerEl: HTMLElement) {
+		this.toggleEl = containerEl.createEl("input");
+		this.toggleEl.type = "checkbox";
+	}
+	setValue(value: boolean) { this.toggleEl.checked = value; return this; }
+	getValue() { return this.toggleEl.checked; }
 	setTooltip(tooltip: string) { return this; }
-	onChange(cb: (value: boolean) => void) { return this; }
+	onChange(cb: (value: boolean) => void) { this.toggleEl.addEventListener("change", () => cb(this.toggleEl.checked)); return this; }
 }
 
 export class ItemView {}
