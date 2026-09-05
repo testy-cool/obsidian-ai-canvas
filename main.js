@@ -35,740 +35,6 @@ var __publicField = (obj, key, value) => {
   return value;
 };
 
-// src/obsidian/fileUtil.ts
-async function readFileContent(app, file2, subpath) {
-  var _a20;
-  const body = await app.vault.read(file2);
-  if (subpath) {
-    const cache = app.metadataCache.getFileCache(file2);
-    if (cache) {
-      const resolved = (0, import_obsidian.resolveSubpath)(cache, subpath);
-      if (!resolved) {
-        console.warn("Failed to get subpath", { file: file2, subpath });
-        return body;
-      }
-      if (resolved.start || resolved.end) {
-        const subText = body.slice(resolved.start.offset, (_a20 = resolved.end) == null ? void 0 : _a20.offset);
-        if (subText) {
-          return subText;
-        } else {
-          console.warn("Failed to get subpath", { file: file2, subpath });
-          return body;
-        }
-      }
-    }
-  }
-  return body;
-}
-async function readNodeContent(node) {
-  const app = node.app;
-  const nodeData = node.getData();
-  switch (nodeData.type) {
-    case "text":
-      return nodeData.text;
-    case "file":
-      const file2 = app.vault.getAbstractFileByPath(nodeData.file);
-      if (file2 instanceof import_obsidian.TFile) {
-        if (node.subpath) {
-          return await readFileContent(app, file2, nodeData.subpath);
-        } else {
-          return readDifferentExtensionFileContent(app, file2);
-        }
-      } else {
-        console.debug("Cannot read from file type", file2);
-      }
-  }
-}
-async function readNodeMediaData(node) {
-  var _a20, _b19;
-  const nodeData = node.getData();
-  if ((nodeData == null ? void 0 : nodeData.type) !== "file" && (nodeData == null ? void 0 : nodeData.type) !== "image")
-    return null;
-  if (!nodeData.file)
-    return null;
-  const file2 = node.app.vault.getAbstractFileByPath(nodeData.file);
-  if (!(file2 instanceof import_obsidian.TFile))
-    return null;
-  const mimeType = getMediaMimeType(file2.extension);
-  if (!mimeType)
-    return null;
-  if (mimeType.startsWith("image/")) {
-    const buffer2 = await node.app.vault.readBinary(file2);
-    return {
-      kind: "image",
-      data: new Uint8Array(buffer2),
-      mimeType,
-      filename: file2.basename
-    };
-  }
-  if (((_a20 = file2.stat) == null ? void 0 : _a20.size) && file2.stat.size > MAX_INLINE_MEDIA_BYTES) {
-    return {
-      kind: "too-large",
-      filename: file2.basename,
-      size: file2.stat.size,
-      limit: MAX_INLINE_MEDIA_BYTES
-    };
-  }
-  const buffer = await node.app.vault.readBinary(file2);
-  return {
-    kind: "file",
-    data: arrayBufferToBase64(buffer),
-    mimeType,
-    filename: file2.basename,
-    size: ((_b19 = file2.stat) == null ? void 0 : _b19.size) || buffer.byteLength
-  };
-}
-function getImageBuffer(base64String) {
-  const sanitized = base64String.replace(/\s/g, "");
-  const byteCharacters = atob(sanitized);
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-  return new Uint8Array(byteNumbers).buffer;
-}
-async function saveImageToFile(app, buffer, folderPath, mimeType, fileNameOverride) {
-  const normalizedFolderPath = folderPath.replace(/\/+$/, "");
-  if (normalizedFolderPath) {
-    const folderExists = app.vault.getAbstractFileByPath(normalizedFolderPath) instanceof import_obsidian.TFolder;
-    if (!folderExists) {
-      await app.vault.createFolder(normalizedFolderPath);
-    }
-  }
-  const fileName = fileNameOverride || buildImageFileName("image", mimeType);
-  const filePath = normalizedFolderPath ? `${normalizedFolderPath}/${fileName}` : fileName;
-  const file2 = await app.vault.createBinary(filePath, buffer);
-  return file2;
-}
-async function saveImageToAttachment(app, buffer, mimeType, sourcePath, fileNameOverride, filePathOverride) {
-  const fileName = fileNameOverride || buildImageFileName("image", mimeType);
-  const filePath = filePathOverride || await app.fileManager.getAvailablePathForAttachment(fileName, sourcePath);
-  return await app.vault.createBinary(filePath, buffer);
-}
-async function saveTextToFile(app, text2, folderPath, fileNameOverride) {
-  const normalizedFolderPath = folderPath.replace(/\/+$/, "");
-  if (normalizedFolderPath) {
-    const folderExists = app.vault.getAbstractFileByPath(normalizedFolderPath) instanceof import_obsidian.TFolder;
-    if (!folderExists) {
-      await app.vault.createFolder(normalizedFolderPath);
-    }
-  }
-  const fileName = fileNameOverride || buildResponseFileName("response");
-  const filePath = normalizedFolderPath ? `${normalizedFolderPath}/${fileName}` : fileName;
-  return await app.vault.create(filePath, text2);
-}
-async function saveTextToAttachment(app, text2, sourcePath, fileNameOverride, filePathOverride) {
-  const fileName = fileNameOverride || buildResponseFileName("response");
-  const filePath = filePathOverride || await app.fileManager.getAvailablePathForAttachment(fileName, sourcePath);
-  return await app.vault.create(filePath, text2);
-}
-var import_obsidian, IMAGE_MIME_TYPES, IMAGE_EXTENSIONS_BY_MIME, MEDIA_MIME_TYPES, MAX_INLINE_MEDIA_BYTES, getMediaMimeType, getImageExtensionForMime, normalizeFileToken, buildImageFileName, buildResponseFileName, arrayBufferToBase64, pdfToMarkdown, epubToMarkdown, readDifferentExtensionFileContent, getFilesContent, cachedReadFile, readFolderMarkdownContent;
-var init_fileUtil = __esm({
-  "src/obsidian/fileUtil.ts"() {
-    import_obsidian = require("obsidian");
-    IMAGE_MIME_TYPES = {
-      png: "image/png",
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      webp: "image/webp",
-      gif: "image/gif",
-      bmp: "image/bmp",
-      tif: "image/tiff",
-      tiff: "image/tiff",
-      svg: "image/svg+xml"
-    };
-    IMAGE_EXTENSIONS_BY_MIME = {
-      "image/png": "png",
-      "image/jpeg": "jpg",
-      "image/jpg": "jpg",
-      "image/webp": "webp",
-      "image/gif": "gif",
-      "image/bmp": "bmp",
-      "image/tiff": "tiff",
-      "image/svg+xml": "svg"
-    };
-    MEDIA_MIME_TYPES = {
-      ...IMAGE_MIME_TYPES,
-      pdf: "application/pdf",
-      mp4: "video/mp4",
-      m4v: "video/x-m4v",
-      mov: "video/quicktime",
-      mkv: "video/x-matroska",
-      webm: "video/webm",
-      ogv: "video/ogg",
-      mpeg: "video/mpeg",
-      mpg: "video/mpeg",
-      avi: "video/x-msvideo",
-      flv: "video/x-flv",
-      wmv: "video/x-ms-wmv",
-      "3gp": "video/3gpp",
-      mp3: "audio/mpeg",
-      wav: "audio/wav",
-      m4a: "audio/mp4",
-      aac: "audio/aac",
-      flac: "audio/flac",
-      oga: "audio/ogg",
-      ogg: "audio/ogg",
-      opus: "audio/opus"
-    };
-    MAX_INLINE_MEDIA_BYTES = 20 * 1024 * 1024;
-    getMediaMimeType = (extension) => MEDIA_MIME_TYPES[extension.toLowerCase()] || null;
-    getImageExtensionForMime = (mimeType) => IMAGE_EXTENSIONS_BY_MIME[(mimeType == null ? void 0 : mimeType.toLowerCase()) || ""] || "png";
-    normalizeFileToken = (value) => value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/-+/g, "-").replace(/^[-_]+|[-_]+$/g, "");
-    buildImageFileName = (prefix, mimeType) => {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const extension = getImageExtensionForMime(mimeType);
-      const safePrefix = normalizeFileToken(prefix) || "image";
-      return `${safePrefix}-generated-${timestamp}.${extension}`;
-    };
-    buildResponseFileName = (prefix) => {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const safePrefix = normalizeFileToken(prefix) || "response";
-      return `${safePrefix}-generated-${timestamp}.json`;
-    };
-    arrayBufferToBase64 = (buffer) => {
-      const bytes = new Uint8Array(buffer);
-      const chunkSize = 32768;
-      let binary = "";
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-      }
-      return btoa(binary);
-    };
-    pdfToMarkdown = async (app, file2) => {
-      const pdfjsLib = await (0, import_obsidian.loadPdfJs)();
-      const pdfBuffer = await app.vault.readBinary(file2);
-      const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
-      const pdf = await loadingTask.promise;
-      const ebookTitle = file2.path.split("/").pop().replace(/\.pdf$/i, "");
-      let markdownContent = `# ${ebookTitle}
-
-`;
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const page = await pdf.getPage(pageNum);
-        const textContent = await page.getTextContent();
-        let pageText = textContent.items.map((item) => item.str).join(" ");
-        markdownContent += pageText + "\n\n---\n\n";
-      }
-      return markdownContent;
-    };
-    epubToMarkdown = async (app, file2) => {
-      return "";
-    };
-    readDifferentExtensionFileContent = async (app, file2) => {
-      switch (file2.extension) {
-        case "md":
-          const body = await app.vault.cachedRead(file2);
-          return `## ${file2.basename}
-${body}`;
-        case "pdf":
-          return pdfToMarkdown(app, file2);
-        case "epub":
-          return epubToMarkdown(app, file2);
-        default:
-          break;
-      }
-    };
-    getFilesContent = async (app, files) => {
-      let content = "";
-      for (const file2 of files) {
-        const fileContent = await readFileContent(app, file2);
-        content += `# ${file2.basename}
-
-${fileContent}
-
-`;
-      }
-      return content;
-    };
-    cachedReadFile = async (app, file2) => {
-      if (file2.path.endsWith(".canvas")) {
-        const canvasJson = JSON.parse(await app.vault.cachedRead(file2));
-        console.log({ canvasJson });
-        const nodesContent = [];
-        if (canvasJson.nodes) {
-          for await (const node of canvasJson.nodes) {
-            if (node.type === "text") {
-              nodesContent.push(node.text);
-            } else if (node.type === "file") {
-              nodesContent.push(await cachedReadFile(app, app.vault.getAbstractFileByPath(node.file)));
-            }
-          }
-        }
-        return nodesContent.join("\n\n");
-      } else {
-        return await app.vault.cachedRead(file2);
-      }
-    };
-    readFolderMarkdownContent = async (app, folder) => {
-      const filesContent = [];
-      for await (const fileOrFolder of folder.children) {
-        if (fileOrFolder instanceof import_obsidian.TFile) {
-          filesContent.push(`
-# ${fileOrFolder.path}
-
-${await cachedReadFile(app, fileOrFolder)}
-`.trim());
-        } else {
-          filesContent.push(`${await readFolderMarkdownContent(app, fileOrFolder)}`);
-        }
-      }
-      return filesContent.join("\n\n");
-    };
-  }
-});
-
-// src/utils/imageGenerationPrompt.ts
-var IMAGE_GENERATION_PROMPT_KEY, withImageGenerationPrompt, getImageGenerationPrompt, setImageGenerationPrompt;
-var init_imageGenerationPrompt = __esm({
-  "src/utils/imageGenerationPrompt.ts"() {
-    IMAGE_GENERATION_PROMPT_KEY = "ai_image_prompt";
-    withImageGenerationPrompt = (data, prompt) => ({
-      ...data,
-      [IMAGE_GENERATION_PROMPT_KEY]: prompt
-    });
-    getImageGenerationPrompt = (data) => {
-      const prompt = data[IMAGE_GENERATION_PROMPT_KEY];
-      return typeof prompt === "string" && prompt.trim() ? prompt : null;
-    };
-    setImageGenerationPrompt = (node, prompt) => {
-      node.setData(withImageGenerationPrompt(node.getData(), prompt));
-    };
-  }
-});
-
-// src/utils.ts
-var utils_exports = {};
-__export(utils_exports, {
-  addImageNode: () => addImageNode,
-  addModelIndicator: () => addModelIndicator,
-  canvasNodeIsNote: () => canvasNodeIsNote,
-  createCanvasGroup: () => createCanvasGroup,
-  getActiveCanvas: () => getActiveCanvas,
-  getActiveCanvasNodes: () => getActiveCanvasNodes,
-  getCanvasActiveNoteText: () => getCanvasActiveNoteText,
-  getImageSaveFolderPath: () => getImageSaveFolderPath,
-  getYouTubeVideoId: () => getYouTubeVideoId,
-  randomHexString: () => randomHexString,
-  restoreModelIndicators: () => restoreModelIndicators,
-  setupCanvasIndicatorPersistence: () => setupCanvasIndicatorPersistence
-});
-function addImageNode(app, canvas, buffer, filePathOrFile, parentNode, mimeType, edgeLabel, options = {}) {
-  var _a20, _b19;
-  const { placementNode, imagePrompt } = options;
-  const referenceNode = placementNode || parentNode;
-  const IMAGE_WIDTH = (referenceNode == null ? void 0 : referenceNode.width) || parentNode.width || 300;
-  const IMAGE_HEIGHT = (referenceNode == null ? void 0 : referenceNode.height) || IMAGE_WIDTH * (1024 / 1792) + 20;
-  const placementX = placementNode ? placementNode.x : parentNode.x;
-  const placementY = placementNode ? placementNode.y : parentNode.y + parentNode.height + 30;
-  const directionBias = getIncomingEdgeDirection(parentNode);
-  const edgeFromSide = directionBias === "left" ? "left" : directionBias === "right" ? "right" : directionBias === "up" ? "top" : "bottom";
-  const edgeToSide = directionBias === "left" ? "right" : directionBias === "right" ? "left" : directionBias === "up" ? "bottom" : "top";
-  if (filePathOrFile) {
-    const file2 = typeof filePathOrFile === "string" ? app.vault.getAbstractFileByPath(filePathOrFile) : filePathOrFile;
-    if (!(file2 instanceof import_obsidian2.TFile)) {
-      return null;
-    }
-    const node = canvas.createFileNode({
-      file: file2,
-      pos: {
-        x: placementX,
-        y: placementY
-      },
-      size: {
-        width: IMAGE_WIDTH,
-        height: IMAGE_HEIGHT
-      }
-    });
-    if (imagePrompt == null ? void 0 : imagePrompt.trim()) {
-      setImageGenerationPrompt(node, imagePrompt);
-    }
-    canvas.addNode(node);
-    addEdge(canvas, randomHexString(16), {
-      fromOrTo: "from",
-      side: edgeFromSide,
-      node: parentNode
-    }, {
-      fromOrTo: "to",
-      side: edgeToSide,
-      node
-    }, edgeLabel, {
-      isGenerated: true
-    });
-    void ((_a20 = canvas.requestSave) == null ? void 0 : _a20.call(canvas));
-    return node;
-  } else if (buffer) {
-    const blob = new Blob([buffer], { type: mimeType || "image/png" });
-    const url2 = URL.createObjectURL(blob);
-    const markdown = `![Generated Image](${url2})`;
-    const node = canvas.createTextNode({
-      text: markdown,
-      pos: {
-        x: placementX,
-        y: placementY
-      },
-      size: {
-        width: IMAGE_WIDTH,
-        height: IMAGE_HEIGHT
-      }
-    });
-    if (imagePrompt == null ? void 0 : imagePrompt.trim()) {
-      setImageGenerationPrompt(node, imagePrompt);
-    }
-    canvas.addNode(node);
-    addEdge(canvas, randomHexString(16), {
-      fromOrTo: "from",
-      side: edgeFromSide,
-      node: parentNode
-    }, {
-      fromOrTo: "to",
-      side: edgeToSide,
-      node
-    }, edgeLabel, {
-      isGenerated: true
-    });
-    void ((_b19 = canvas.requestSave) == null ? void 0 : _b19.call(canvas));
-    return node;
-  }
-  return null;
-}
-function getYouTubeVideoId(url2) {
-  const pattern = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
-  const match = url2.match(pattern);
-  return match ? match[1] : null;
-}
-var import_obsidian2, randomHexString, getActiveCanvas, createCanvasGroup, canvasNodeIsNote, getActiveCanvasNodes, getCanvasActiveNoteText, getImageSaveFolderPath, generatingNodes, addModelIndicator, restoreModelIndicators, setupCanvasIndicatorPersistence;
-var init_utils = __esm({
-  "src/utils.ts"() {
-    import_obsidian2 = require("obsidian");
-    init_canvas_patches();
-    init_fileUtil();
-    init_imageGenerationPrompt();
-    randomHexString = (len) => {
-      const t = [];
-      for (let n = 0; n < len; n++) {
-        t.push((16 * Math.random() | 0).toString(16));
-      }
-      return t.join("");
-    };
-    getActiveCanvas = (app) => {
-      const maybeCanvasView = app.workspace.getActiveViewOfType(import_obsidian2.ItemView);
-      return maybeCanvasView ? maybeCanvasView["canvas"] : null;
-    };
-    createCanvasGroup = (app, groupName, notesContents) => {
-      const canvas = getActiveCanvas(app);
-      if (!canvas)
-        return;
-      const NOTE_WIDTH = 500;
-      const NOTE_HEIGHT = 150;
-      const NOTE_GAP = 20;
-      const NOTES_BY_ROW = 3;
-      let startPos = {
-        x: canvas.x - (NOTE_WIDTH + NOTE_GAP) * NOTES_BY_ROW / 2,
-        y: canvas.y - (NOTE_HEIGHT + NOTE_GAP) * 2 / 2
-      };
-      const newGroup = canvas.createGroupNode({
-        label: groupName,
-        pos: {
-          x: startPos.x - NOTE_GAP,
-          y: startPos.y - NOTE_GAP
-        },
-        size: {
-          width: NOTES_BY_ROW * (NOTE_WIDTH + NOTE_GAP) + NOTE_GAP,
-          height: (NOTE_HEIGHT + NOTE_GAP) * 2 + NOTE_GAP
-        }
-      });
-      newGroup.label = groupName;
-      newGroup.labelEl.setText(groupName);
-      let countRow = 0;
-      let countColumn = 0;
-      for (const noteContent of notesContents) {
-        const newNode = canvas.createTextNode({
-          text: noteContent,
-          pos: {
-            x: startPos.x + countRow * (NOTE_WIDTH + NOTE_GAP),
-            y: startPos.y + countColumn * (NOTE_HEIGHT + NOTE_GAP)
-          },
-          size: {
-            width: NOTE_WIDTH,
-            height: NOTE_HEIGHT
-          }
-        });
-        canvas.addNode(newNode);
-        countColumn = countRow + 1 > NOTES_BY_ROW - 1 ? countColumn + 1 : countColumn;
-        countRow = countRow + 1 > NOTES_BY_ROW - 1 ? 0 : countRow + 1;
-      }
-      canvas.addGroup(newGroup);
-    };
-    canvasNodeIsNote = (canvasNode) => {
-      return !canvasNode.from;
-    };
-    getActiveCanvasNodes = (app) => {
-      const canvas = getActiveCanvas(app);
-      if (!canvas)
-        return;
-      return Array.from(canvas.selection);
-    };
-    getCanvasActiveNoteText = (app) => {
-      const canvasNodes = getActiveCanvasNodes(app);
-      if (!canvasNodes || canvasNodes.length !== 1)
-        return;
-      const canvasNode = canvasNodes.first();
-      if (!canvasNodeIsNote(canvasNode))
-        return;
-      return readNodeContent(canvasNode);
-    };
-    getImageSaveFolderPath = async (app, settings2) => {
-      const attachments = (await app.vault.getAvailablePathForAttachments()).split("/").slice(0, -1).join("/");
-      console.log({ attachments });
-      return attachments;
-    };
-    generatingNodes = /* @__PURE__ */ new WeakSet();
-    addModelIndicator = (node, provider, model, generating = false) => {
-      var _a20;
-      if (generating)
-        generatingNodes.add(node);
-      else
-        generatingNodes.delete(node);
-      const contextCount = node.getData().ai_context_count;
-      const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} \u2022 ` : "";
-      const indicator = (_a20 = node.contentEl.querySelector(".ai-model-indicator")) != null ? _a20 : node.contentEl.createEl("div", { cls: "ai-model-indicator" });
-      indicator.className = "ai-model-indicator";
-      indicator.textContent = `${contextLabel}${generating ? "generating" : `${provider} \u2022 ${model}`}`;
-      indicator.style.cssText = `
-		position: absolute;
-		bottom: 4px;
-		right: 8px;
-		font-size: 12px;
-		color: var(--text-faint);
-		opacity: 0.6;
-		pointer-events: none;
-		background: var(--background-primary);
-		padding: 2px 6px;
-		border-radius: 4px;
-		font-family: var(--font-monospace);
-		z-index: 1;
-		backdrop-filter: blur(2px);
-	`;
-    };
-    restoreModelIndicators = (canvas) => {
-      if (!canvas || !canvas.nodes)
-        return;
-      canvas.nodes.forEach((node) => {
-        if (!(node == null ? void 0 : node.contentEl) || node.isContentMounted === false || node.initialized === false)
-          return;
-        const nodeData = node.getData();
-        if (nodeData.ai_model && nodeData.ai_provider) {
-          if (!node.contentEl.querySelector(".ai-model-indicator")) {
-            addModelIndicator(node, nodeData.ai_provider, nodeData.ai_model, generatingNodes.has(node));
-          }
-        }
-      });
-    };
-    setupCanvasIndicatorPersistence = (app) => {
-      const restoreIndicatorsForActiveCanvas = () => {
-        const canvas = getActiveCanvas(app);
-        if (canvas) {
-          setTimeout(() => {
-            restoreModelIndicators(canvas);
-          }, 100);
-        }
-      };
-      app.workspace.on("active-leaf-change", restoreIndicatorsForActiveCanvas);
-      app.workspace.on("layout-change", restoreIndicatorsForActiveCanvas);
-      return () => {
-        app.workspace.off("active-leaf-change", restoreIndicatorsForActiveCanvas);
-        app.workspace.off("layout-change", restoreIndicatorsForActiveCanvas);
-      };
-    };
-  }
-});
-
-// src/obsidian/canvas-patches.ts
-var findCanvasMenuHost, minWidth, pxPerChar, pxPerLine, textPaddingHeight, newNoteMargin, newNoteMarginWithLabel, minHeight, getIncomingEdgeDirection, calcHeight, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT, createNode, addEdge;
-var init_canvas_patches = __esm({
-  "src/obsidian/canvas-patches.ts"() {
-    init_utils();
-    findCanvasMenuHost = (leaves) => {
-      var _a20;
-      for (const leaf of leaves) {
-        const view = leaf == null ? void 0 : leaf.view;
-        const menu = (_a20 = view == null ? void 0 : view.canvas) == null ? void 0 : _a20.menu;
-        if (menu == null ? void 0 : menu.selection)
-          return view;
-      }
-      return null;
-    };
-    minWidth = 360;
-    pxPerChar = 5;
-    pxPerLine = 28;
-    textPaddingHeight = 12;
-    newNoteMargin = 60;
-    newNoteMarginWithLabel = 110;
-    minHeight = 60;
-    getIncomingEdgeDirection = (node) => {
-      const canvas = node.canvas;
-      if (!canvas)
-        return "none";
-      const incomingEdges = canvas.getEdgesForNode(node).filter((edge) => edge.to.node.id === node.id);
-      if (incomingEdges.length === 0)
-        return "none";
-      const canvasData = canvas.getData();
-      if (!canvasData)
-        return "none";
-      const directionCounts = {
-        up: 0,
-        down: 0,
-        left: 0,
-        right: 0
-      };
-      for (const edge of incomingEdges) {
-        const edgeData = canvasData.edges.find((e) => e.fromNode === edge.from.node.id && e.toNode === edge.to.node.id);
-        if (edgeData) {
-          const toSide = edgeData.toSide;
-          if (toSide === "top") {
-            directionCounts.down++;
-          } else if (toSide === "bottom") {
-            directionCounts.up++;
-          } else if (toSide === "left") {
-            directionCounts.right++;
-          } else if (toSide === "right") {
-            directionCounts.left++;
-          }
-        }
-      }
-      const maxCount = Math.max(...Object.values(directionCounts));
-      if (maxCount === 0)
-        return "none";
-      if (directionCounts.up === maxCount)
-        return "up";
-      if (directionCounts.down === maxCount)
-        return "down";
-      if (directionCounts.left === maxCount)
-        return "left";
-      if (directionCounts.right === maxCount)
-        return "right";
-      return "none";
-    };
-    calcHeight = (options) => {
-      const calcTextHeight = Math.round(textPaddingHeight + pxPerLine * options.text.length / (minWidth / pxPerChar));
-      return calcTextHeight;
-    };
-    DEFAULT_NODE_WIDTH = 400;
-    DEFAULT_NODE_HEIGHT = DEFAULT_NODE_WIDTH * (1024 / 1792) + 20;
-    createNode = (canvas, nodeOptions, parentNode, nodeData, edgeLabel, directionBias) => {
-      var _a20, _b19;
-      if (!canvas) {
-        throw new Error("Invalid arguments");
-      }
-      const { text: text2 } = nodeOptions;
-      const width = parentNode ? ((_a20 = nodeOptions == null ? void 0 : nodeOptions.size) == null ? void 0 : _a20.width) || Math.max(minWidth, parentNode == null ? void 0 : parentNode.width) : DEFAULT_NODE_WIDTH;
-      const height = text2 ? parentNode ? ((_b19 = nodeOptions == null ? void 0 : nodeOptions.size) == null ? void 0 : _b19.height) || Math.max(minHeight, parentNode && calcHeight({
-        text: text2
-      })) : DEFAULT_NODE_HEIGHT : void 0;
-      let x = canvas.x - width / 2;
-      let y = canvas.y - height / 2;
-      if (parentNode) {
-        const siblings = parent && canvas.getEdgesForNode(parentNode).filter((n) => n.from.node.id == parentNode.id).map((e) => e.to.node);
-        const actualDirectionBias = directionBias || getIncomingEdgeDirection(parentNode);
-        if (actualDirectionBias === "right") {
-          const siblingsRight = (siblings == null ? void 0 : siblings.length) ? siblings.reduce((right, sib) => Math.max(right, sib.x + sib.width), parentNode.x + parentNode.width) : parentNode.x + parentNode.width;
-          x = siblingsRight + newNoteMargin;
-          y = parentNode.y + parentNode.height / 2 - height / 2;
-        } else if (actualDirectionBias === "left") {
-          const siblingsLeft = (siblings == null ? void 0 : siblings.length) ? siblings.reduce((left, sib) => Math.min(left, sib.x), parentNode.x) : parentNode.x;
-          x = siblingsLeft - width - newNoteMargin;
-          y = parentNode.y + parentNode.height / 2 - height / 2;
-        } else if (actualDirectionBias === "down") {
-          const siblingsBottom = (siblings == null ? void 0 : siblings.length) ? siblings.reduce((bottom, sib) => Math.max(bottom, sib.y + sib.height), parentNode.y + parentNode.height) : parentNode.y + parentNode.height;
-          y = siblingsBottom + (edgeLabel ? newNoteMarginWithLabel : newNoteMargin);
-          x = parentNode.x + parentNode.width / 2 - width / 2;
-        } else if (actualDirectionBias === "up") {
-          const siblingsTop = (siblings == null ? void 0 : siblings.length) ? siblings.reduce((top, sib) => Math.min(top, sib.y), parentNode.y) : parentNode.y;
-          y = siblingsTop - height - (edgeLabel ? newNoteMarginWithLabel : newNoteMargin);
-          x = parentNode.x + parentNode.width / 2 - width / 2;
-        } else {
-          const farLeft = parentNode.y - parentNode.width * 5;
-          const siblingsRight = (siblings == null ? void 0 : siblings.length) ? siblings.reduce((right, sib) => Math.max(right, sib.x + sib.width), farLeft) : void 0;
-          const priorSibling = siblings[siblings.length - 1];
-          x = siblingsRight != null ? siblingsRight + newNoteMargin : parentNode.x;
-          y = (priorSibling ? priorSibling.y : parentNode.y + parentNode.height + (edgeLabel ? newNoteMarginWithLabel : newNoteMargin)) + height * 0.5;
-        }
-      }
-      const newNode = nodeOptions.type === "file" ? canvas.createFileNode({
-        file: nodeOptions.file,
-        pos: { x, y }
-      }) : canvas.createTextNode({
-        pos: { x, y },
-        position: "left",
-        size: { height, width },
-        text: text2,
-        focus: false
-      });
-      if (nodeData) {
-        newNode.setData(nodeData);
-      }
-      canvas.deselectAll();
-      canvas.addNode(newNode);
-      if (parentNode) {
-        const actualDirectionBias = directionBias || getIncomingEdgeDirection(parentNode);
-        let fromSide, toSide;
-        if (actualDirectionBias === "right") {
-          fromSide = "right";
-          toSide = "left";
-        } else if (actualDirectionBias === "left") {
-          fromSide = "left";
-          toSide = "right";
-        } else if (actualDirectionBias === "down") {
-          fromSide = "bottom";
-          toSide = "top";
-        } else if (actualDirectionBias === "up") {
-          fromSide = "top";
-          toSide = "bottom";
-        } else {
-          fromSide = "bottom";
-          toSide = "top";
-        }
-        addEdge(canvas, randomHexString(16), {
-          fromOrTo: "from",
-          side: fromSide,
-          node: parentNode
-        }, {
-          fromOrTo: "to",
-          side: toSide,
-          node: newNode
-        }, edgeLabel, {
-          isGenerated: true
-        });
-      }
-      return newNode;
-    };
-    addEdge = (canvas, edgeID, fromEdge, toEdge, label, edgeData) => {
-      if (!canvas)
-        return;
-      const data = canvas.getData();
-      if (!data)
-        return;
-      canvas.importData({
-        edges: [
-          ...data.edges,
-          {
-            ...edgeData,
-            id: edgeID,
-            fromNode: fromEdge.node.id,
-            fromSide: fromEdge.side,
-            toNode: toEdge.node.id,
-            toSide: toEdge.side,
-            label
-          }
-        ],
-        nodes: data.nodes
-      });
-      canvas.requestFrame();
-    };
-  }
-});
-
 // node_modules/.pnpm/@vercel+oidc@3.1.0/node_modules/@vercel/oidc/dist/get-context.js
 var require_get_context = __commonJS({
   "node_modules/.pnpm/@vercel+oidc@3.1.0/node_modules/@vercel/oidc/dist/get-context.js"(exports, module2) {
@@ -4090,7 +3356,686 @@ var import_obsidian14 = require("obsidian");
 
 // src/actions/canvasNodeMenuActions/noteGenerator.ts
 var import_obsidian11 = require("obsidian");
-init_canvas_patches();
+
+// src/utils.ts
+var import_obsidian2 = require("obsidian");
+
+// src/obsidian/fileUtil.ts
+var import_obsidian = require("obsidian");
+var IMAGE_MIME_TYPES = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+  bmp: "image/bmp",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  svg: "image/svg+xml"
+};
+var IMAGE_EXTENSIONS_BY_MIME = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/bmp": "bmp",
+  "image/tiff": "tiff",
+  "image/svg+xml": "svg"
+};
+var MEDIA_MIME_TYPES = {
+  ...IMAGE_MIME_TYPES,
+  pdf: "application/pdf",
+  mp4: "video/mp4",
+  m4v: "video/x-m4v",
+  mov: "video/quicktime",
+  mkv: "video/x-matroska",
+  webm: "video/webm",
+  ogv: "video/ogg",
+  mpeg: "video/mpeg",
+  mpg: "video/mpeg",
+  avi: "video/x-msvideo",
+  flv: "video/x-flv",
+  wmv: "video/x-ms-wmv",
+  "3gp": "video/3gpp",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  flac: "audio/flac",
+  oga: "audio/ogg",
+  ogg: "audio/ogg",
+  opus: "audio/opus"
+};
+var MAX_INLINE_MEDIA_BYTES = 20 * 1024 * 1024;
+var getMediaMimeType = (extension) => MEDIA_MIME_TYPES[extension.toLowerCase()] || null;
+var getImageExtensionForMime = (mimeType) => IMAGE_EXTENSIONS_BY_MIME[(mimeType == null ? void 0 : mimeType.toLowerCase()) || ""] || "png";
+var normalizeFileToken = (value) => value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/-+/g, "-").replace(/^[-_]+|[-_]+$/g, "");
+var buildImageFileName = (prefix, mimeType) => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const extension = getImageExtensionForMime(mimeType);
+  const safePrefix = normalizeFileToken(prefix) || "image";
+  return `${safePrefix}-generated-${timestamp}.${extension}`;
+};
+var buildResponseFileName = (prefix) => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const safePrefix = normalizeFileToken(prefix) || "response";
+  return `${safePrefix}-generated-${timestamp}.json`;
+};
+var arrayBufferToBase64 = (buffer) => {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 32768;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+};
+async function readFileContent(app, file2, subpath) {
+  var _a20;
+  const body = await app.vault.read(file2);
+  if (subpath) {
+    const cache = app.metadataCache.getFileCache(file2);
+    if (cache) {
+      const resolved = (0, import_obsidian.resolveSubpath)(cache, subpath);
+      if (!resolved) {
+        console.warn("Failed to get subpath", { file: file2, subpath });
+        return body;
+      }
+      if (resolved.start || resolved.end) {
+        const subText = body.slice(resolved.start.offset, (_a20 = resolved.end) == null ? void 0 : _a20.offset);
+        if (subText) {
+          return subText;
+        } else {
+          console.warn("Failed to get subpath", { file: file2, subpath });
+          return body;
+        }
+      }
+    }
+  }
+  return body;
+}
+var pdfToMarkdown = async (app, file2) => {
+  const pdfjsLib = await (0, import_obsidian.loadPdfJs)();
+  const pdfBuffer = await app.vault.readBinary(file2);
+  const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
+  const pdf = await loadingTask.promise;
+  const ebookTitle = file2.path.split("/").pop().replace(/\.pdf$/i, "");
+  let markdownContent = `# ${ebookTitle}
+
+`;
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    let pageText = textContent.items.map((item) => item.str).join(" ");
+    markdownContent += pageText + "\n\n---\n\n";
+  }
+  return markdownContent;
+};
+var epubToMarkdown = async (app, file2) => {
+  return "";
+};
+var readDifferentExtensionFileContent = async (app, file2) => {
+  switch (file2.extension) {
+    case "md":
+      const body = await app.vault.cachedRead(file2);
+      return `## ${file2.basename}
+${body}`;
+    case "pdf":
+      return pdfToMarkdown(app, file2);
+    case "epub":
+      return epubToMarkdown(app, file2);
+    default:
+      break;
+  }
+};
+async function readNodeContent(node) {
+  const app = node.app;
+  const nodeData = node.getData();
+  switch (nodeData.type) {
+    case "text":
+      return nodeData.text;
+    case "file":
+      const file2 = app.vault.getAbstractFileByPath(nodeData.file);
+      if (file2 instanceof import_obsidian.TFile) {
+        if (node.subpath) {
+          return await readFileContent(app, file2, nodeData.subpath);
+        } else {
+          return readDifferentExtensionFileContent(app, file2);
+        }
+      } else {
+        console.debug("Cannot read from file type", file2);
+      }
+  }
+}
+async function readNodeMediaData(node) {
+  var _a20, _b19;
+  const nodeData = node.getData();
+  if ((nodeData == null ? void 0 : nodeData.type) !== "file" && (nodeData == null ? void 0 : nodeData.type) !== "image")
+    return null;
+  if (!nodeData.file)
+    return null;
+  const file2 = node.app.vault.getAbstractFileByPath(nodeData.file);
+  if (!(file2 instanceof import_obsidian.TFile))
+    return null;
+  const mimeType = getMediaMimeType(file2.extension);
+  if (!mimeType)
+    return null;
+  if (mimeType.startsWith("image/")) {
+    const buffer2 = await node.app.vault.readBinary(file2);
+    return {
+      kind: "image",
+      data: new Uint8Array(buffer2),
+      mimeType,
+      filename: file2.basename
+    };
+  }
+  if (((_a20 = file2.stat) == null ? void 0 : _a20.size) && file2.stat.size > MAX_INLINE_MEDIA_BYTES) {
+    return {
+      kind: "too-large",
+      filename: file2.basename,
+      size: file2.stat.size,
+      limit: MAX_INLINE_MEDIA_BYTES
+    };
+  }
+  const buffer = await node.app.vault.readBinary(file2);
+  return {
+    kind: "file",
+    data: arrayBufferToBase64(buffer),
+    mimeType,
+    filename: file2.basename,
+    size: ((_b19 = file2.stat) == null ? void 0 : _b19.size) || buffer.byteLength
+  };
+}
+var getFilesContent = async (app, files) => {
+  let content = "";
+  for (const file2 of files) {
+    const fileContent = await readFileContent(app, file2);
+    content += `# ${file2.basename}
+
+${fileContent}
+
+`;
+  }
+  return content;
+};
+var cachedReadFile = async (app, file2) => {
+  if (file2.path.endsWith(".canvas")) {
+    const canvasJson = JSON.parse(await app.vault.cachedRead(file2));
+    console.log({ canvasJson });
+    const nodesContent = [];
+    if (canvasJson.nodes) {
+      for await (const node of canvasJson.nodes) {
+        if (node.type === "text") {
+          nodesContent.push(node.text);
+        } else if (node.type === "file") {
+          nodesContent.push(await cachedReadFile(app, app.vault.getAbstractFileByPath(node.file)));
+        }
+      }
+    }
+    return nodesContent.join("\n\n");
+  } else {
+    return await app.vault.cachedRead(file2);
+  }
+};
+var readFolderMarkdownContent = async (app, folder) => {
+  const filesContent = [];
+  for await (const fileOrFolder of folder.children) {
+    if (fileOrFolder instanceof import_obsidian.TFile) {
+      filesContent.push(`
+# ${fileOrFolder.path}
+
+${await cachedReadFile(app, fileOrFolder)}
+`.trim());
+    } else {
+      filesContent.push(`${await readFolderMarkdownContent(app, fileOrFolder)}`);
+    }
+  }
+  return filesContent.join("\n\n");
+};
+function getImageBuffer(base64String) {
+  const sanitized = base64String.replace(/\s/g, "");
+  const byteCharacters = atob(sanitized);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  return new Uint8Array(byteNumbers).buffer;
+}
+async function saveImageToFile(app, buffer, folderPath, mimeType, fileNameOverride) {
+  const normalizedFolderPath = folderPath.replace(/\/+$/, "");
+  if (normalizedFolderPath) {
+    const folderExists = app.vault.getAbstractFileByPath(normalizedFolderPath) instanceof import_obsidian.TFolder;
+    if (!folderExists) {
+      await app.vault.createFolder(normalizedFolderPath);
+    }
+  }
+  const fileName = fileNameOverride || buildImageFileName("image", mimeType);
+  const filePath = normalizedFolderPath ? `${normalizedFolderPath}/${fileName}` : fileName;
+  const file2 = await app.vault.createBinary(filePath, buffer);
+  return file2;
+}
+async function saveImageToAttachment(app, buffer, mimeType, sourcePath, fileNameOverride, filePathOverride) {
+  const fileName = fileNameOverride || buildImageFileName("image", mimeType);
+  const filePath = filePathOverride || await app.fileManager.getAvailablePathForAttachment(fileName, sourcePath);
+  return await app.vault.createBinary(filePath, buffer);
+}
+async function saveTextToFile(app, text2, folderPath, fileNameOverride) {
+  const normalizedFolderPath = folderPath.replace(/\/+$/, "");
+  if (normalizedFolderPath) {
+    const folderExists = app.vault.getAbstractFileByPath(normalizedFolderPath) instanceof import_obsidian.TFolder;
+    if (!folderExists) {
+      await app.vault.createFolder(normalizedFolderPath);
+    }
+  }
+  const fileName = fileNameOverride || buildResponseFileName("response");
+  const filePath = normalizedFolderPath ? `${normalizedFolderPath}/${fileName}` : fileName;
+  return await app.vault.create(filePath, text2);
+}
+async function saveTextToAttachment(app, text2, sourcePath, fileNameOverride, filePathOverride) {
+  const fileName = fileNameOverride || buildResponseFileName("response");
+  const filePath = filePathOverride || await app.fileManager.getAvailablePathForAttachment(fileName, sourcePath);
+  return await app.vault.create(filePath, text2);
+}
+
+// src/utils/imageGenerationPrompt.ts
+var IMAGE_GENERATION_PROMPT_KEY = "ai_image_prompt";
+var withImageGenerationPrompt = (data, prompt) => ({
+  ...data,
+  [IMAGE_GENERATION_PROMPT_KEY]: prompt
+});
+var getImageGenerationPrompt = (data) => {
+  const prompt = data[IMAGE_GENERATION_PROMPT_KEY];
+  return typeof prompt === "string" && prompt.trim() ? prompt : null;
+};
+var setImageGenerationPrompt = (node, prompt) => {
+  node.setData(withImageGenerationPrompt(node.getData(), prompt));
+};
+
+// src/utils.ts
+var randomHexString = (len) => {
+  const t = [];
+  for (let n = 0; n < len; n++) {
+    t.push((16 * Math.random() | 0).toString(16));
+  }
+  return t.join("");
+};
+var getActiveCanvas = (app) => {
+  const maybeCanvasView = app.workspace.getActiveViewOfType(import_obsidian2.ItemView);
+  return maybeCanvasView ? maybeCanvasView["canvas"] : null;
+};
+var createCanvasGroup = (app, groupName, notesContents) => {
+  const canvas = getActiveCanvas(app);
+  if (!canvas)
+    return;
+  const NOTE_WIDTH = 500;
+  const NOTE_HEIGHT = 150;
+  const NOTE_GAP = 20;
+  const NOTES_BY_ROW = 3;
+  let startPos = {
+    x: canvas.x - (NOTE_WIDTH + NOTE_GAP) * NOTES_BY_ROW / 2,
+    y: canvas.y - (NOTE_HEIGHT + NOTE_GAP) * 2 / 2
+  };
+  const newGroup = canvas.createGroupNode({
+    label: groupName,
+    pos: {
+      x: startPos.x - NOTE_GAP,
+      y: startPos.y - NOTE_GAP
+    },
+    size: {
+      width: NOTES_BY_ROW * (NOTE_WIDTH + NOTE_GAP) + NOTE_GAP,
+      height: (NOTE_HEIGHT + NOTE_GAP) * 2 + NOTE_GAP
+    }
+  });
+  newGroup.label = groupName;
+  newGroup.labelEl.setText(groupName);
+  let countRow = 0;
+  let countColumn = 0;
+  for (const noteContent of notesContents) {
+    const newNode = canvas.createTextNode({
+      text: noteContent,
+      pos: {
+        x: startPos.x + countRow * (NOTE_WIDTH + NOTE_GAP),
+        y: startPos.y + countColumn * (NOTE_HEIGHT + NOTE_GAP)
+      },
+      size: {
+        width: NOTE_WIDTH,
+        height: NOTE_HEIGHT
+      }
+    });
+    canvas.addNode(newNode);
+    countColumn = countRow + 1 > NOTES_BY_ROW - 1 ? countColumn + 1 : countColumn;
+    countRow = countRow + 1 > NOTES_BY_ROW - 1 ? 0 : countRow + 1;
+  }
+  canvas.addGroup(newGroup);
+};
+var getActiveCanvasNodes = (app) => {
+  const canvas = getActiveCanvas(app);
+  if (!canvas)
+    return;
+  return Array.from(canvas.selection);
+};
+function addImageNode(app, canvas, buffer, filePathOrFile, parentNode, mimeType, edgeLabel, options = {}) {
+  var _a20, _b19;
+  const { placementNode, imagePrompt } = options;
+  const referenceNode = placementNode || parentNode;
+  const IMAGE_WIDTH = (referenceNode == null ? void 0 : referenceNode.width) || parentNode.width || 300;
+  const IMAGE_HEIGHT = (referenceNode == null ? void 0 : referenceNode.height) || IMAGE_WIDTH * (1024 / 1792) + 20;
+  const placementX = placementNode ? placementNode.x : parentNode.x;
+  const placementY = placementNode ? placementNode.y : parentNode.y + parentNode.height + 30;
+  const directionBias = getIncomingEdgeDirection(parentNode);
+  const edgeFromSide = directionBias === "left" ? "left" : directionBias === "right" ? "right" : directionBias === "up" ? "top" : "bottom";
+  const edgeToSide = directionBias === "left" ? "right" : directionBias === "right" ? "left" : directionBias === "up" ? "bottom" : "top";
+  if (filePathOrFile) {
+    const file2 = typeof filePathOrFile === "string" ? app.vault.getAbstractFileByPath(filePathOrFile) : filePathOrFile;
+    if (!(file2 instanceof import_obsidian2.TFile)) {
+      return null;
+    }
+    const node = canvas.createFileNode({
+      file: file2,
+      pos: {
+        x: placementX,
+        y: placementY
+      },
+      size: {
+        width: IMAGE_WIDTH,
+        height: IMAGE_HEIGHT
+      }
+    });
+    if (imagePrompt == null ? void 0 : imagePrompt.trim()) {
+      setImageGenerationPrompt(node, imagePrompt);
+    }
+    canvas.addNode(node);
+    addEdge(canvas, randomHexString(16), {
+      fromOrTo: "from",
+      side: edgeFromSide,
+      node: parentNode
+    }, {
+      fromOrTo: "to",
+      side: edgeToSide,
+      node
+    }, edgeLabel, {
+      isGenerated: true
+    });
+    void ((_a20 = canvas.requestSave) == null ? void 0 : _a20.call(canvas));
+    return node;
+  } else if (buffer) {
+    const blob = new Blob([buffer], { type: mimeType || "image/png" });
+    const url2 = URL.createObjectURL(blob);
+    const markdown = `![Generated Image](${url2})`;
+    const node = canvas.createTextNode({
+      text: markdown,
+      pos: {
+        x: placementX,
+        y: placementY
+      },
+      size: {
+        width: IMAGE_WIDTH,
+        height: IMAGE_HEIGHT
+      }
+    });
+    if (imagePrompt == null ? void 0 : imagePrompt.trim()) {
+      setImageGenerationPrompt(node, imagePrompt);
+    }
+    canvas.addNode(node);
+    addEdge(canvas, randomHexString(16), {
+      fromOrTo: "from",
+      side: edgeFromSide,
+      node: parentNode
+    }, {
+      fromOrTo: "to",
+      side: edgeToSide,
+      node
+    }, edgeLabel, {
+      isGenerated: true
+    });
+    void ((_b19 = canvas.requestSave) == null ? void 0 : _b19.call(canvas));
+    return node;
+  }
+  return null;
+}
+function getYouTubeVideoId(url2) {
+  const pattern = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+  const match = url2.match(pattern);
+  return match ? match[1] : null;
+}
+var generatingNodes = /* @__PURE__ */ new WeakSet();
+var addModelIndicator = (node, provider, model, generating = false) => {
+  var _a20;
+  if (generating)
+    generatingNodes.add(node);
+  else
+    generatingNodes.delete(node);
+  const contextCount = node.getData().ai_context_count;
+  const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} \u2022 ` : "";
+  const indicator = (_a20 = node.contentEl.querySelector(".ai-model-indicator")) != null ? _a20 : node.contentEl.createEl("div", { cls: "ai-model-indicator" });
+  indicator.className = "ai-model-indicator";
+  indicator.textContent = `${contextLabel}${generating ? "generating" : `${provider} \u2022 ${model}`}`;
+  indicator.style.cssText = `
+		position: absolute;
+		bottom: 4px;
+		right: 8px;
+		font-size: 12px;
+		color: var(--text-faint);
+		opacity: 0.6;
+		pointer-events: none;
+		background: var(--background-primary);
+		padding: 2px 6px;
+		border-radius: 4px;
+		font-family: var(--font-monospace);
+		z-index: 1;
+		backdrop-filter: blur(2px);
+	`;
+};
+var restoreModelIndicators = (canvas) => {
+  if (!canvas || !canvas.nodes)
+    return;
+  canvas.nodes.forEach((node) => {
+    if (!(node == null ? void 0 : node.contentEl) || node.isContentMounted === false || node.initialized === false)
+      return;
+    const nodeData = node.getData();
+    if (nodeData.ai_model && nodeData.ai_provider) {
+      if (!node.contentEl.querySelector(".ai-model-indicator")) {
+        addModelIndicator(node, nodeData.ai_provider, nodeData.ai_model, generatingNodes.has(node));
+      }
+    }
+  });
+};
+var setupCanvasIndicatorPersistence = (app) => {
+  const restoreIndicatorsForActiveCanvas = () => {
+    const canvas = getActiveCanvas(app);
+    if (canvas) {
+      setTimeout(() => {
+        restoreModelIndicators(canvas);
+      }, 100);
+    }
+  };
+  app.workspace.on("active-leaf-change", restoreIndicatorsForActiveCanvas);
+  app.workspace.on("layout-change", restoreIndicatorsForActiveCanvas);
+  return () => {
+    app.workspace.off("active-leaf-change", restoreIndicatorsForActiveCanvas);
+    app.workspace.off("layout-change", restoreIndicatorsForActiveCanvas);
+  };
+};
+
+// src/obsidian/canvas-patches.ts
+var findCanvasMenuHost = (leaves) => {
+  var _a20;
+  for (const leaf of leaves) {
+    const view = leaf == null ? void 0 : leaf.view;
+    const menu = (_a20 = view == null ? void 0 : view.canvas) == null ? void 0 : _a20.menu;
+    if (menu == null ? void 0 : menu.selection)
+      return view;
+  }
+  return null;
+};
+var minWidth = 360;
+var pxPerChar = 5;
+var pxPerLine = 28;
+var textPaddingHeight = 12;
+var newNoteMargin = 60;
+var newNoteMarginWithLabel = 110;
+var minHeight = 60;
+var getIncomingEdgeDirection = (node) => {
+  const canvas = node.canvas;
+  if (!canvas)
+    return "none";
+  const incomingEdges = canvas.getEdgesForNode(node).filter((edge) => edge.to.node.id === node.id);
+  if (incomingEdges.length === 0)
+    return "none";
+  const canvasData = canvas.getData();
+  if (!canvasData)
+    return "none";
+  const directionCounts = {
+    up: 0,
+    down: 0,
+    left: 0,
+    right: 0
+  };
+  for (const edge of incomingEdges) {
+    const edgeData = canvasData.edges.find((e) => e.fromNode === edge.from.node.id && e.toNode === edge.to.node.id);
+    if (edgeData) {
+      const toSide = edgeData.toSide;
+      if (toSide === "top") {
+        directionCounts.down++;
+      } else if (toSide === "bottom") {
+        directionCounts.up++;
+      } else if (toSide === "left") {
+        directionCounts.right++;
+      } else if (toSide === "right") {
+        directionCounts.left++;
+      }
+    }
+  }
+  const maxCount = Math.max(...Object.values(directionCounts));
+  if (maxCount === 0)
+    return "none";
+  if (directionCounts.up === maxCount)
+    return "up";
+  if (directionCounts.down === maxCount)
+    return "down";
+  if (directionCounts.left === maxCount)
+    return "left";
+  if (directionCounts.right === maxCount)
+    return "right";
+  return "none";
+};
+var calcHeight = (options) => {
+  const calcTextHeight = Math.round(textPaddingHeight + pxPerLine * options.text.length / (minWidth / pxPerChar));
+  return calcTextHeight;
+};
+var DEFAULT_NODE_WIDTH = 400;
+var DEFAULT_NODE_HEIGHT = DEFAULT_NODE_WIDTH * (1024 / 1792) + 20;
+var createNode = (canvas, nodeOptions, parentNode, nodeData, edgeLabel, directionBias) => {
+  var _a20, _b19;
+  if (!canvas) {
+    throw new Error("Invalid arguments");
+  }
+  const { text: text2 } = nodeOptions;
+  const width = parentNode ? ((_a20 = nodeOptions == null ? void 0 : nodeOptions.size) == null ? void 0 : _a20.width) || Math.max(minWidth, parentNode == null ? void 0 : parentNode.width) : DEFAULT_NODE_WIDTH;
+  const height = text2 ? parentNode ? ((_b19 = nodeOptions == null ? void 0 : nodeOptions.size) == null ? void 0 : _b19.height) || Math.max(minHeight, parentNode && calcHeight({
+    text: text2
+  })) : DEFAULT_NODE_HEIGHT : void 0;
+  let x = canvas.x - width / 2;
+  let y = canvas.y - height / 2;
+  if (parentNode) {
+    const siblings = parent && canvas.getEdgesForNode(parentNode).filter((n) => n.from.node.id == parentNode.id).map((e) => e.to.node);
+    const actualDirectionBias = directionBias || getIncomingEdgeDirection(parentNode);
+    if (actualDirectionBias === "right") {
+      const siblingsRight = (siblings == null ? void 0 : siblings.length) ? siblings.reduce((right, sib) => Math.max(right, sib.x + sib.width), parentNode.x + parentNode.width) : parentNode.x + parentNode.width;
+      x = siblingsRight + newNoteMargin;
+      y = parentNode.y + parentNode.height / 2 - height / 2;
+    } else if (actualDirectionBias === "left") {
+      const siblingsLeft = (siblings == null ? void 0 : siblings.length) ? siblings.reduce((left, sib) => Math.min(left, sib.x), parentNode.x) : parentNode.x;
+      x = siblingsLeft - width - newNoteMargin;
+      y = parentNode.y + parentNode.height / 2 - height / 2;
+    } else if (actualDirectionBias === "down") {
+      const siblingsBottom = (siblings == null ? void 0 : siblings.length) ? siblings.reduce((bottom, sib) => Math.max(bottom, sib.y + sib.height), parentNode.y + parentNode.height) : parentNode.y + parentNode.height;
+      y = siblingsBottom + (edgeLabel ? newNoteMarginWithLabel : newNoteMargin);
+      x = parentNode.x + parentNode.width / 2 - width / 2;
+    } else if (actualDirectionBias === "up") {
+      const siblingsTop = (siblings == null ? void 0 : siblings.length) ? siblings.reduce((top, sib) => Math.min(top, sib.y), parentNode.y) : parentNode.y;
+      y = siblingsTop - height - (edgeLabel ? newNoteMarginWithLabel : newNoteMargin);
+      x = parentNode.x + parentNode.width / 2 - width / 2;
+    } else {
+      const farLeft = parentNode.y - parentNode.width * 5;
+      const siblingsRight = (siblings == null ? void 0 : siblings.length) ? siblings.reduce((right, sib) => Math.max(right, sib.x + sib.width), farLeft) : void 0;
+      const priorSibling = siblings[siblings.length - 1];
+      x = siblingsRight != null ? siblingsRight + newNoteMargin : parentNode.x;
+      y = (priorSibling ? priorSibling.y : parentNode.y + parentNode.height + (edgeLabel ? newNoteMarginWithLabel : newNoteMargin)) + height * 0.5;
+    }
+  }
+  const newNode = nodeOptions.type === "file" ? canvas.createFileNode({
+    file: nodeOptions.file,
+    pos: { x, y }
+  }) : canvas.createTextNode({
+    pos: { x, y },
+    position: "left",
+    size: { height, width },
+    text: text2,
+    focus: false
+  });
+  if (nodeData) {
+    newNode.setData(nodeData);
+  }
+  canvas.deselectAll();
+  canvas.addNode(newNode);
+  if (parentNode) {
+    const actualDirectionBias = directionBias || getIncomingEdgeDirection(parentNode);
+    let fromSide, toSide;
+    if (actualDirectionBias === "right") {
+      fromSide = "right";
+      toSide = "left";
+    } else if (actualDirectionBias === "left") {
+      fromSide = "left";
+      toSide = "right";
+    } else if (actualDirectionBias === "down") {
+      fromSide = "bottom";
+      toSide = "top";
+    } else if (actualDirectionBias === "up") {
+      fromSide = "top";
+      toSide = "bottom";
+    } else {
+      fromSide = "bottom";
+      toSide = "top";
+    }
+    addEdge(canvas, randomHexString(16), {
+      fromOrTo: "from",
+      side: fromSide,
+      node: parentNode
+    }, {
+      fromOrTo: "to",
+      side: toSide,
+      node: newNode
+    }, edgeLabel, {
+      isGenerated: true
+    });
+  }
+  return newNode;
+};
+var addEdge = (canvas, edgeID, fromEdge, toEdge, label, edgeData) => {
+  if (!canvas)
+    return;
+  const data = canvas.getData();
+  if (!data)
+    return;
+  canvas.importData({
+    edges: [
+      ...data.edges,
+      {
+        ...edgeData,
+        id: edgeID,
+        fromNode: fromEdge.node.id,
+        fromSide: fromEdge.side,
+        toNode: toEdge.node.id,
+        toSide: toEdge.side,
+        label
+      }
+    ],
+    nodes: data.nodes
+  });
+  canvas.requestFrame();
+};
 
 // src/obsidian/canvasUtil.ts
 function nodeParents(node) {
@@ -4140,9 +4085,6 @@ async function collectNodeAndAncestors(start, getNodeParents = nodeParents) {
 function isPromptContextNodeIncluded(nodeId, selectedNodeIds) {
   return selectedNodeIds ? selectedNodeIds.has(nodeId) : true;
 }
-
-// src/actions/canvasNodeMenuActions/noteGenerator.ts
-init_fileUtil();
 
 // src/actions/canvasNodeContextMenuActions/generateImage.ts
 var import_obsidian7 = require("obsidian");
@@ -46508,7 +46450,6 @@ var getResponse = async (provider, messages, {
 };
 
 // src/utils/llm.ts
-init_utils();
 var streamResponse2 = async (provider, messages, options = {}, cb) => {
   return streamResponse(provider, messages, options, cb);
 };
@@ -46803,9 +46744,6 @@ var createImage = async (apiKey, prompt, {
 };
 
 // src/actions/canvasNodeContextMenuActions/generateImage.ts
-init_canvas_patches();
-init_utils();
-init_fileUtil();
 var normalizeBaseUrl = (value) => value ? value.replace(/\/+$/, "") : value;
 var isGeminiProvider = (provider) => {
   if (!provider)
@@ -47063,13 +47001,8 @@ async function handleGenerateImage(app, settings2, node, options) {
   }
 }
 
-// src/actions/canvasNodeMenuActions/noteGenerator.ts
-init_utils();
-
 // src/actions/canvasNodeMenuActions/titleGenerator.ts
 var import_obsidian8 = require("obsidian");
-init_fileUtil();
-init_utils();
 var CARD_TITLE_SYSTEM_PROMPT_FALLBACK = `
 You are naming a canvas card.
 Return a short, descriptive title in the same language as the content.
@@ -47562,28 +47495,32 @@ function closeHtmlPreviewWindows() {
   });
   htmlPreviewWindows.clear();
 }
+var canvasNodesByElement = /* @__PURE__ */ new WeakMap();
+function restoreHtmlPreviewForNode(node, defaultRender = false) {
+  var _a20, _b19, _c;
+  if (node.nodeEl)
+    canvasNodesByElement.set(node.nodeEl, node);
+  if (node.isContentMounted === false || node.initialized === false)
+    return;
+  const nodeData = (_a20 = node.getData) == null ? void 0 : _a20.call(node);
+  if ((nodeData == null ? void 0 : nodeData.type) === "text") {
+    const text2 = node.text || "";
+    if (lastScannedText.get(node) !== text2) {
+      lastScannedText.set(node, text2);
+      scannedHtmlBlocks.set(node, extractHtmlCodeBlocks(text2));
+    }
+    const htmlBlocks = (_b19 = scannedHtmlBlocks.get(node)) != null ? _b19 : [];
+    if (htmlBlocks.length === 0) {
+      removeHtmlPreviewFromNode(node);
+    } else if (!((_c = node.contentEl) == null ? void 0 : _c.querySelector(".html-preview-card-ui"))) {
+      addHtmlPreviewToNode(node, htmlBlocks, defaultRender);
+    }
+  }
+}
 function restoreHtmlPreviews(canvas, defaultRender = false) {
   if (!(canvas == null ? void 0 : canvas.nodes))
     return;
-  canvas.nodes.forEach((node) => {
-    var _a20, _b19, _c;
-    if (node.isContentMounted === false || node.initialized === false)
-      return;
-    const nodeData = (_a20 = node.getData) == null ? void 0 : _a20.call(node);
-    if ((nodeData == null ? void 0 : nodeData.type) === "text") {
-      const text2 = node.text || "";
-      if (lastScannedText.get(node) !== text2) {
-        lastScannedText.set(node, text2);
-        scannedHtmlBlocks.set(node, extractHtmlCodeBlocks(text2));
-      }
-      const htmlBlocks = (_b19 = scannedHtmlBlocks.get(node)) != null ? _b19 : [];
-      if (htmlBlocks.length === 0) {
-        removeHtmlPreviewFromNode(node);
-      } else if (!((_c = node.contentEl) == null ? void 0 : _c.querySelector(".html-preview-card-ui"))) {
-        addHtmlPreviewToNode(node, htmlBlocks, defaultRender);
-      }
-    }
-  });
+  canvas.nodes.forEach((node) => restoreHtmlPreviewForNode(node, defaultRender));
 }
 function setupHtmlPreviewPersistence(app, getDefaultRender) {
   let restoreTimer;
@@ -47601,7 +47538,25 @@ function setupHtmlPreviewPersistence(app, getDefaultRender) {
       return;
     if (canvas.wrapperEl && canvas.wrapperEl !== observedRoot) {
       observer == null ? void 0 : observer.disconnect();
-      observer = new MutationObserver(() => scheduleRestore());
+      observer = new MutationObserver((records) => {
+        var _a20, _b19, _c, _d;
+        const addedCards = /* @__PURE__ */ new Set();
+        for (const record2 of records) {
+          for (const added of Array.from(record2.addedNodes)) {
+            if (added.nodeType !== 1)
+              continue;
+            const element = added;
+            if (element.matches(".canvas-node"))
+              addedCards.add(element);
+            element.querySelectorAll(".canvas-node").forEach((card) => addedCards.add(card));
+          }
+        }
+        for (const element of addedCards) {
+          const node = (_d = (_c = canvasNodesByElement.get(element)) != null ? _c : (_b19 = (_a20 = canvas.nodes).get) == null ? void 0 : _b19.call(_a20, element.getAttribute("data-node-id"))) != null ? _d : Array.from(canvas.nodes.values()).find((candidate) => candidate.nodeEl === element);
+          if (node)
+            restoreHtmlPreviewForNode(node, getDefaultRender());
+        }
+      });
       observer.observe(canvas.wrapperEl, { childList: true, subtree: true });
       observedRoot = canvas.wrapperEl;
     }
@@ -48374,9 +48329,6 @@ function getTokenLimit(settings2) {
   const tokenLimit = settings2.maxInputTokens ? Math.min(settings2.maxInputTokens, 4096) : 4096;
   return tokenLimit;
 }
-
-// src/actions/canvasNodeMenuActions/advancedCanvas.ts
-init_utils();
 
 // src/Modals/ModelSelectionModal.ts
 var import_obsidian12 = require("obsidian");
@@ -50373,9 +50325,6 @@ var MCPImportModal = class extends import_obsidian18.Modal {
   }
 };
 
-// src/AugmentedCanvasPlugin.ts
-init_utils();
-
 // src/Modals/SystemPromptsModal.ts
 var import_obsidian19 = require("obsidian");
 init_fuse();
@@ -50420,8 +50369,6 @@ function parseCsv(csvString) {
 
 // src/actions/commands/relevantQuestions.ts
 var import_obsidian20 = require("obsidian");
-init_fileUtil();
-init_utils();
 var RELEVANT_QUESTION_SYSTEM_PROMPT2 = `
 There must be 6 questions.
 
@@ -50490,13 +50437,8 @@ var FolderSuggestModal = class extends import_obsidian21.FuzzySuggestModal {
   }
 };
 
-// src/AugmentedCanvasPlugin.ts
-init_canvas_patches();
-
 // src/actions/commands/insertSystemPrompt.ts
 var import_obsidian22 = require("obsidian");
-init_canvas_patches();
-init_utils();
 var insertSystemPrompt = (app, systemPrompt) => {
   new import_obsidian22.Notice(`Selected ${systemPrompt.act}`);
   const canvas = getActiveCanvas(app);
@@ -50527,9 +50469,6 @@ ${systemPrompt.prompt.trim()}
 
 // src/actions/commands/runPromptFolder.ts
 var import_obsidian23 = require("obsidian");
-init_canvas_patches();
-init_utils();
-init_fileUtil();
 var runPromptFolder = async (app, settings2, systemPrompt, folder) => {
   const canvas = getActiveCanvas(app);
   if (!canvas)
@@ -50754,9 +50693,6 @@ var ObservabilityClient = class {
     await this.flush();
   }
 };
-
-// src/AugmentedCanvasPlugin.ts
-init_imageGenerationPrompt();
 
 // src/data/prompts.csv.txt
 var prompts_csv_default = `"act","prompt"
@@ -51084,14 +51020,6 @@ var AugmentedCanvasPlugin = class extends import_obsidian26.Plugin {
         render: (next) => function(...args) {
           var _a20, _b19, _c, _d, _e, _f;
           const result = next.call(this, ...args);
-          const canvas = getActiveCanvas(app);
-          if (canvas) {
-            setTimeout(() => {
-              Promise.resolve().then(() => (init_utils(), utils_exports)).then(({ restoreModelIndicators: restoreModelIndicators2 }) => {
-                restoreModelIndicators2(canvas);
-              });
-            }, 50);
-          }
           const maybeCanvasView = app.workspace.getActiveViewOfType(import_obsidian26.ItemView);
           if (!maybeCanvasView || ((_b19 = (_a20 = maybeCanvasView.canvas) == null ? void 0 : _a20.selection) == null ? void 0 : _b19.size) !== 1)
             return result;

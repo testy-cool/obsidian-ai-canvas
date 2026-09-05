@@ -196,26 +196,30 @@ function closeHtmlPreviewWindows(): void {
 /**
  * Restore HTML previews for all nodes in a canvas
  */
-export function restoreHtmlPreviews(canvas: any, defaultRender: boolean = false): void {
-	if (!canvas?.nodes) return;
+const canvasNodesByElement = new WeakMap<Element, CanvasNode>();
 
-	canvas.nodes.forEach((node: CanvasNode) => {
-		if (node.isContentMounted === false || node.initialized === false) return;
-		const nodeData = node.getData?.();
-		if (nodeData?.type === "text") {
-			const text = node.text || "";
-			if (lastScannedText.get(node) !== text) {
-				lastScannedText.set(node, text);
-				scannedHtmlBlocks.set(node, extractHtmlCodeBlocks(text));
-			}
-			const htmlBlocks = scannedHtmlBlocks.get(node) ?? [];
-			if (htmlBlocks.length === 0) {
-				removeHtmlPreviewFromNode(node);
-			} else if (!node.contentEl?.querySelector(".html-preview-card-ui")) {
-				addHtmlPreviewToNode(node, htmlBlocks, defaultRender);
-			}
+export function restoreHtmlPreviewForNode(node: CanvasNode, defaultRender = false): void {
+	if (node.nodeEl) canvasNodesByElement.set(node.nodeEl, node);
+	if (node.isContentMounted === false || node.initialized === false) return;
+	const nodeData = node.getData?.();
+	if (nodeData?.type === "text") {
+		const text = node.text || "";
+		if (lastScannedText.get(node) !== text) {
+			lastScannedText.set(node, text);
+			scannedHtmlBlocks.set(node, extractHtmlCodeBlocks(text));
 		}
-	});
+		const htmlBlocks = scannedHtmlBlocks.get(node) ?? [];
+		if (htmlBlocks.length === 0) {
+			removeHtmlPreviewFromNode(node);
+		} else if (!node.contentEl?.querySelector(".html-preview-card-ui")) {
+			addHtmlPreviewToNode(node, htmlBlocks, defaultRender);
+		}
+	}
+}
+
+export function restoreHtmlPreviews(canvas: any, defaultRender = false): void {
+	if (!canvas?.nodes) return;
+	canvas.nodes.forEach((node: CanvasNode) => restoreHtmlPreviewForNode(node, defaultRender));
 }
 
 /**
@@ -238,7 +242,25 @@ export function setupHtmlPreviewPersistence(app: any, getDefaultRender: () => bo
 
 		if (canvas.wrapperEl && canvas.wrapperEl !== observedRoot) {
 			observer?.disconnect();
-			observer = new MutationObserver(() => scheduleRestore());
+			observer = new MutationObserver(records => {
+				const addedCards = new Set<Element>();
+				for (const record of records) {
+					for (const added of Array.from(record.addedNodes)) {
+						if (added.nodeType !== 1) continue;
+						const element = added as Element;
+						if (element.matches(".canvas-node")) addedCards.add(element);
+						element.querySelectorAll(".canvas-node").forEach(card => addedCards.add(card));
+					}
+				}
+				for (const element of addedCards) {
+					// Known cards are indexed during restoration; newly created cards
+					// may not expose an ID attribute, so resolve those by element identity.
+					const node = canvasNodesByElement.get(element) ??
+						canvas.nodes.get?.(element.getAttribute("data-node-id")) ??
+						Array.from(canvas.nodes.values()).find((candidate: any) => candidate.nodeEl === element);
+					if (node) restoreHtmlPreviewForNode(node, getDefaultRender());
+				}
+			});
 			observer.observe(canvas.wrapperEl, { childList: true, subtree: true });
 			observedRoot = canvas.wrapperEl;
 		}

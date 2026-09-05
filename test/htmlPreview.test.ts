@@ -7,6 +7,7 @@ import {
 } from "../src/utils/htmlPreview";
 
 class FakeElement {
+	nodeType = 1;
 	attributes = new Map<string, string>();
 	className = "";
 	children: FakeElement[] = [];
@@ -18,6 +19,7 @@ class FakeElement {
 	textContent = "";
 
 	constructor(public tagName = "div") {}
+	matches(selector: string) { return selector.startsWith(".") ? this.className.split(" ").includes(selector.slice(1)) : this.tagName === selector; }
 
 	createEl(tagName: string, options?: { cls?: string; text?: string }) {
 		const child = new FakeElement(tagName);
@@ -75,9 +77,13 @@ const createTextNode = (id: string, text: string) => {
 	const markdownEl = new FakeElement();
 	markdownEl.addClass("markdown-embed-content");
 	contentEl.appendChild(markdownEl);
+	const nodeEl = new FakeElement();
+	nodeEl.addClass("canvas-node");
+	nodeEl.appendChild(contentEl);
 	return {
 		node: {
 			id,
+			nodeEl,
 			text,
 			contentEl,
 			getData: () => ({ type: "text" }),
@@ -99,6 +105,40 @@ const installFakeDocument = () => {
 afterEach(() => {
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
+	vi.useRealTimers();
+});
+
+describe("preview mutation scope", () => {
+	it("ignores non-card additions and restores only the added canvas card", async () => {
+		vi.useFakeTimers();
+		installFakeDocument();
+		let onMutation!: MutationCallback;
+		vi.stubGlobal("MutationObserver", class {
+			constructor(callback: MutationCallback) { onMutation = callback; }
+			observe() {}
+			disconnect() {}
+		});
+		const first = createTextNode("existing", "```html<p>Existing</p>```");
+		const second = createTextNode("added", "```html<p>Added</p>```");
+		const firstRead = vi.spyOn(first.node, "getData");
+		const secondRead = vi.spyOn(second.node, "getData");
+		const canvas = { nodes: new Map([[first.node.id, first.node]]), wrapperEl: new FakeElement() };
+		const workspace = { activeLeaf: { view: { getViewType: () => "canvas", canvas } }, on: vi.fn(), off: vi.fn() };
+		const cleanup = setupHtmlPreviewPersistence({ workspace }, () => true);
+		await vi.advanceTimersByTimeAsync(100);
+		firstRead.mockClear();
+		onMutation([{ addedNodes: [new FakeElement()] }] as any, {} as any);
+		expect(firstRead).not.toHaveBeenCalled();
+		expect(secondRead).not.toHaveBeenCalled();
+		canvas.nodes.set(second.node.id, second.node);
+		const wrapper = new FakeElement();
+		wrapper.appendChild(second.node.nodeEl);
+		onMutation([{ addedNodes: [wrapper, second.node.nodeEl] }] as any, {} as any);
+		expect(firstRead).not.toHaveBeenCalled();
+		expect(secondRead).toHaveBeenCalledOnce();
+		expect(second.contentEl.querySelector("iframe")?.srcdoc).toBe("<p>Added</p>");
+		cleanup();
+	});
 });
 
 describe("extractHtmlCodeBlocks", () => {

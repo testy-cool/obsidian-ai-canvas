@@ -317,16 +317,6 @@ export default class AugmentedCanvasPlugin extends Plugin {
 					function (...args: any) {
 						const result = next.call(this, ...args);
 
-						// Restore model indicators whenever menu is rendered
-						const canvas = getActiveCanvas(app);
-						if (canvas) {
-							setTimeout(() => {
-								import("./utils").then(({ restoreModelIndicators }) => {
-									restoreModelIndicators(canvas);
-								});
-							}, 50);
-						}
-
 						// * If multi selection
 						const maybeCanvasView =
 							app.workspace.getActiveViewOfType(
