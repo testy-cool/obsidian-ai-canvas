@@ -284,19 +284,30 @@ export function getYouTubeVideoId(url: string): string | null {
 }
 
 const generatingNodes = new WeakSet<object>();
+const modelIndicators = new WeakMap<object, HTMLElement>();
 
 /**
  * Add a persistent context and model indicator to a canvas node
  */
-export const addModelIndicator = (node: any, provider: string, model: string, generating = false) => {
+export const setModelIndicatorText = (node: any, provider: string, model: string, generating = false) => {
 	if (generating) generatingNodes.add(node);
 	else generatingNodes.delete(node);
+	const existing = node.contentEl.querySelector(".ai-model-indicator");
+	const indicator = existing ?? modelIndicators.get(node);
+	if (!indicator) return;
+	if (!existing) node.contentEl.appendChild(indicator);
 	const contextCount = node.getData().ai_context_count;
 	const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} • ` : "";
-	const indicator = node.contentEl.querySelector(".ai-model-indicator") ??
+	const text = `${contextLabel}${generating ? "generating" : `${provider} • ${model}`}`;
+	if (indicator.textContent !== text) indicator.textContent = text;
+};
+
+export const addModelIndicator = (node: any, provider: string, model: string, generating = false) => {
+	const indicator = node.contentEl.querySelector(".ai-model-indicator") ?? modelIndicators.get(node) ??
 		node.contentEl.createEl("div", { cls: "ai-model-indicator" });
+	modelIndicators.set(node, indicator);
 	indicator.className = "ai-model-indicator";
-	indicator.textContent = `${contextLabel}${generating ? "generating" : `${provider} • ${model}`}`;
+	setModelIndicatorText(node, provider, model, generating);
 
 	// Style the indicator to be subtle
 	indicator.style.cssText = `

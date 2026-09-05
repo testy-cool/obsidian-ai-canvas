@@ -26,7 +26,7 @@ import {
 import { getMediaMimeType, readNodeContent, readNodeMediaData } from "../../obsidian/fileUtil";
 import { handleGenerateImage } from "../canvasNodeContextMenuActions/generateImage";
 import { getResponse, streamResponse, ToolEvent } from "../../utils/llm";
-import { addModelIndicator, getYouTubeVideoId } from "../../utils";
+import { addModelIndicator, setModelIndicatorText, getYouTubeVideoId } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { getAllMCPTools } from "../../utils/mcpClient";
 import { getProviderCapabilities, supportsGoogleTools } from "../../utils/providerCapabilities";
@@ -734,6 +734,7 @@ export function noteGenerator(
 				let toolsContainer: HTMLElement;
 				let featuresEl: HTMLElement;
 				let firstDelta = true;
+				let lastResizeAt = Date.now();
 				const toolRefs = new Map<string, HTMLElement>();
 
 				// Determine what features are active
@@ -825,23 +826,21 @@ export function noteGenerator(
 						if (delta) {
 							created.setText(created.text + delta);
 
-							// Calculate optimal dimensions maintaining 3:5 aspect ratio
-							const dimensions = calculateNoteDimensions(created.text);
-
-							// Only resize if dimensions have changed significantly (avoid constant tiny adjustments)
-							const currentWidth = created.width;
-							const currentHeight = created.height;
-							const widthDiff = Math.abs(dimensions.width - currentWidth);
-							const heightDiff = Math.abs(dimensions.height - currentHeight);
-
-							if (widthDiff > 20 || heightDiff > 15) {
-								created.moveAndResize({
-									height: dimensions.height,
-									width: dimensions.width,
-									x: created.x,
-									y: created.y
-								});
-								void created.canvas?.requestFrame?.();
+							const now = Date.now();
+							if (now - lastResizeAt >= 500) {
+								const dimensions = calculateNoteDimensions(created.text);
+								const widthDiff = Math.abs(dimensions.width - created.width);
+								const heightDiff = dimensions.height - created.height;
+								if (heightDiff > 0 && (widthDiff > 20 || heightDiff > 15)) {
+									lastResizeAt = now;
+									created.moveAndResize({
+										height: dimensions.height,
+										width: Math.max(created.width, dimensions.width),
+										x: created.x,
+										y: created.y,
+									});
+									void created.canvas?.requestFrame?.();
+								}
 							}
 						}
 
@@ -865,7 +864,7 @@ export function noteGenerator(
 								console.log("[HTML Preview] Preview element created:", !!previewEl);
 							}
 						}
-						addModelIndicator(created, provider.type, model.model, !final);
+						setModelIndicatorText(created, provider.type, model.model, !final);
 					}
 				);
 

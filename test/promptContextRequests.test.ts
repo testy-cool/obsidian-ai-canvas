@@ -14,6 +14,7 @@ import {
 import { DEFAULT_SETTINGS } from "../src/settings/AugmentedCanvasSettings";
 import { addModelIndicator, restoreModelIndicators, setupCanvasIndicatorPersistence } from "../src/utils";
 import { streamResponse } from "../src/utils/llm";
+import * as indicators from "../src/utils";
 
 vi.mock("../src/data/prompts.csv.txt", () => ({ default: "act,prompt" }));
 vi.mock("../src/utils/llm", () => ({ streamResponse: vi.fn(), getResponse: vi.fn() }));
@@ -132,6 +133,58 @@ afterEach(() => {
 });
 
 describe("context picker request paths", () => {
+	it("bounds streamed resizes and keeps one badge across 100 deltas", async () => {
+		const { app, canvas, settings } = fixture(false);
+		const add = vi.spyOn(indicators, "addModelIndicator");
+		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
+			const response = canvas.nodes.get("response");
+			const indicator = badge(response);
+			const sizes: { at: number; width: number; height: number }[] = [];
+			const started = Date.now();
+			response.moveAndResize.mockImplementation((size: any) => {
+				sizes.push({ at: Date.now(), ...size });
+				Object.assign(response, size);
+			});
+			for (let index = 0; index < 100; index++) {
+				await vi.advanceTimersByTimeAsync(10);
+				callback("word ", null, null, null);
+				expect(badge(response)).toBe(indicator);
+			}
+			const elapsed = Date.now() - started;
+			expect(elapsed).toBe(1000);
+			for (let index = 1; index < sizes.length; index++) {
+				expect(sizes[index].at - sizes[index - 1].at).toBeGreaterThanOrEqual(500);
+				expect(sizes[index].height).toBeGreaterThan(sizes[index - 1].height);
+				expect(sizes[index].width).toBeGreaterThanOrEqual(sizes[index - 1].width);
+			}
+			expect(add).toHaveBeenCalledOnce();
+			callback(null, { text: response.text }, null, null);
+			expect(response.moveAndResize.mock.calls.length).toBeLessThanOrEqual(Math.ceil(elapsed / 500) + 1);
+			expect(sizes).toHaveLength(3);
+			expect(badge(response)).toBe(indicator);
+		});
+		const pending = noteGenerator(app, settings).generateNote();
+		await vi.advanceTimersByTimeAsync(200);
+		await pending;
+		expect(add).toHaveBeenCalledTimes(2);
+	});
+
+	it("does not shrink during streaming and applies the exact size on completion", async () => {
+		const { app, canvas, settings } = fixture(false);
+		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
+			const response = canvas.nodes.get("response");
+			response.height = 900;
+			response.width = 700;
+			await vi.advanceTimersByTimeAsync(600);
+			callback("short", null, null, null);
+			expect(response.moveAndResize).not.toHaveBeenCalled();
+			callback(null, { text: "short" }, null, null);
+			expect(response.moveAndResize).toHaveBeenCalledExactlyOnceWith({ x: 0, y: 0, width: 300, height: 500 });
+		});
+		const pending = noteGenerator(app, settings).generateNote();
+		await vi.advanceTimersByTimeAsync(200);
+		await pending;
+	});
 	it("reuses the badge element when its text changes", () => {
 		const { prompt } = fixture(false);
 		addModelIndicator(prompt, "Custom", "first", true);

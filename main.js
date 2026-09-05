@@ -3800,17 +3800,30 @@ function getYouTubeVideoId(url2) {
   return match ? match[1] : null;
 }
 var generatingNodes = /* @__PURE__ */ new WeakSet();
-var addModelIndicator = (node, provider, model, generating = false) => {
-  var _a20;
+var modelIndicators = /* @__PURE__ */ new WeakMap();
+var setModelIndicatorText = (node, provider, model, generating = false) => {
   if (generating)
     generatingNodes.add(node);
   else
     generatingNodes.delete(node);
+  const existing = node.contentEl.querySelector(".ai-model-indicator");
+  const indicator = existing != null ? existing : modelIndicators.get(node);
+  if (!indicator)
+    return;
+  if (!existing)
+    node.contentEl.appendChild(indicator);
   const contextCount = node.getData().ai_context_count;
   const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} \u2022 ` : "";
-  const indicator = (_a20 = node.contentEl.querySelector(".ai-model-indicator")) != null ? _a20 : node.contentEl.createEl("div", { cls: "ai-model-indicator" });
+  const text2 = `${contextLabel}${generating ? "generating" : `${provider} \u2022 ${model}`}`;
+  if (indicator.textContent !== text2)
+    indicator.textContent = text2;
+};
+var addModelIndicator = (node, provider, model, generating = false) => {
+  var _a20, _b19;
+  const indicator = (_b19 = (_a20 = node.contentEl.querySelector(".ai-model-indicator")) != null ? _a20 : modelIndicators.get(node)) != null ? _b19 : node.contentEl.createEl("div", { cls: "ai-model-indicator" });
+  modelIndicators.set(node, indicator);
   indicator.className = "ai-model-indicator";
-  indicator.textContent = `${contextLabel}${generating ? "generating" : `${provider} \u2022 ${model}`}`;
+  setModelIndicatorText(node, provider, model, generating);
   indicator.style.cssText = `
 		position: absolute;
 		bottom: 4px;
@@ -48304,6 +48317,7 @@ ${nodeText}`);
         let toolsContainer;
         let featuresEl;
         let firstDelta = true;
+        let lastResizeAt = Date.now();
         const toolRefs = /* @__PURE__ */ new Map();
         const hasMcpTools = mcpTools && Object.keys(mcpTools).length > 0;
         const mcpToolCount = hasMcpTools ? Object.keys(mcpTools).length : 0;
@@ -48379,19 +48393,21 @@ ${nodeText}`);
           }
           if (delta) {
             created.setText(created.text + delta);
-            const dimensions = calculateNoteDimensions(created.text);
-            const currentWidth = created.width;
-            const currentHeight = created.height;
-            const widthDiff = Math.abs(dimensions.width - currentWidth);
-            const heightDiff = Math.abs(dimensions.height - currentHeight);
-            if (widthDiff > 20 || heightDiff > 15) {
-              created.moveAndResize({
-                height: dimensions.height,
-                width: dimensions.width,
-                x: created.x,
-                y: created.y
-              });
-              void ((_b20 = (_a21 = created.canvas) == null ? void 0 : _a21.requestFrame) == null ? void 0 : _b20.call(_a21));
+            const now2 = Date.now();
+            if (now2 - lastResizeAt >= 500) {
+              const dimensions = calculateNoteDimensions(created.text);
+              const widthDiff = Math.abs(dimensions.width - created.width);
+              const heightDiff = dimensions.height - created.height;
+              if (heightDiff > 0 && (widthDiff > 20 || heightDiff > 15)) {
+                lastResizeAt = now2;
+                created.moveAndResize({
+                  height: dimensions.height,
+                  width: Math.max(created.width, dimensions.width),
+                  x: created.x,
+                  y: created.y
+                });
+                void ((_b20 = (_a21 = created.canvas) == null ? void 0 : _a21.requestFrame) == null ? void 0 : _b20.call(_a21));
+              }
             }
           }
           if (final) {
@@ -48411,7 +48427,7 @@ ${nodeText}`);
               console.log("[HTML Preview] Preview element created:", !!previewEl);
             }
           }
-          addModelIndicator(created, provider.type, model.model, !final);
+          setModelIndicatorText(created, provider.type, model.model, !final);
         });
         if (isNewNode) {
           await maybeAutoGenerateCardTitle(app, settings2, created);
