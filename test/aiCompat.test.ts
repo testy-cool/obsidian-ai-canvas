@@ -368,7 +368,7 @@ describe("capability probe production routing", () => {
 			expect(request.url).toBe("https://example.test/genai_passthrough/v1/projects/_/locations/_/publishers/google/models/gemini-3.1-pro-preview:generateContent");
 			const body = await request.json();
 			requests.push(body);
-			const text = ["red", "7431", "A man at the zoo with elephants.", `${new Date().getFullYear()} news`, "Example Domain"][requests.length - 1];
+			const text = ["red", "7431", "A man at the zoo with elephants.", "Red, green, blue", `${new Date().getFullYear()} news`, "Example Domain"][requests.length - 1];
 			return new Response(JSON.stringify({ usageMetadata: {promptTokensDetails:[{modality:"VIDEO",tokenCount:200}]}, candidates: [{
 				content: { role: "model", parts: [{ text }] }, finishReason: "STOP",
 				urlContextMetadata:{urlMetadata:[{retrievedUrl:"https://example.com/",urlRetrievalStatus:"URL_RETRIEVAL_STATUS_SUCCESS"}]},
@@ -382,14 +382,15 @@ describe("capability probe production routing", () => {
 			image: "no", pdf: "no", video: "untested", youtube: "no", search: "no", urlContext: "no",
 		} });
 		const report = await probeProviderCapabilities(provider, "vertex/gemini-3.1-pro-preview", { ...DEFAULT_SETTINGS, models: [] });
-		expect(report).toMatchObject({ image: "yes", pdf: "yes", video: "untested", youtube: "yes", search: "yes", urlContext: "yes" });
-		expect(requests).toHaveLength(5);
-		expect(requests.slice(0, 3).every(body => body.tools === undefined)).toBe(true);
+		expect(report).toMatchObject({ image: "yes", pdf: "yes", video: "yes", youtube: "yes", search: "yes", urlContext: "yes" });
+		expect(requests).toHaveLength(6);
+		expect(requests.slice(0, 4).every(body => body.tools === undefined)).toBe(true);
 		expect(requests[0].contents[0].parts).toContainEqual(expect.objectContaining({ inlineData: expect.objectContaining({ mimeType: "image/png" }) }));
 		expect(requests[1].contents[0].parts).toContainEqual(expect.objectContaining({ inlineData: expect.objectContaining({ mimeType: "application/pdf" }) }));
 		expect(requests[2].contents[0].parts).toContainEqual({ fileData: { fileUri: "https://www.youtube.com/watch?v=jNQXAC9IVRw", mimeType: "video/mp4" } });
-		expect(requests[3].tools).toEqual([{ googleSearch: {} }]);
-		expect(requests[4].tools).toEqual([{ urlContext: {} }]);
+		expect(requests[3].contents[0].parts).toContainEqual(expect.objectContaining({ inlineData: expect.objectContaining({ mimeType: "video/mp4" }) }));
+		expect(requests[4].tools).toEqual([{ googleSearch: {} }]);
+		expect(requests[5].tools).toEqual([{ urlContext: {} }]);
 	});
 
 	it.each([false, true])("ignores legacy gateway-wide failures when configuring Google tools (streaming: %s)", async (streaming) => {

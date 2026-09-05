@@ -16,6 +16,7 @@ const answers = () => [
 	{ text: "RED" },
 	{ text: "7431" },
 	{ text: "A man stands in front of elephants at a zoo.", inputModalities: ["VIDEO"] },
+	{ text: "Red, green, blue", inputModalities: ["VIDEO"] },
 	{ text: "2026: A headline from today.", sources: [{ type: "source", url: "https://example.test/news" }] },
 	{ text: "Example Domain", providerMetadata: {google:{urlContextMetadata:{urlMetadata:[{retrievedUrl:"https://example.com/",urlRetrievalStatus:"URL_RETRIEVAL_STATUS_SUCCESS"}]}}} },
 ];
@@ -35,17 +36,17 @@ describe("provider capability probes", () => {
 		installAnswers();
 		const result = await probeProviderCapabilities(provider, model.model, settings);
 		expect(result).toMatchObject({
-			image: "yes", pdf: "yes", video: "untested", youtube: "yes", search: "yes", urlContext: "yes",
+			image: "yes", pdf: "yes", video: "yes", youtube: "yes", search: "yes", urlContext: "yes",
 			testedAt: "2026-09-05T12:00:00.000Z", model: model.model,
 		});
 		expect(Object.keys(result.notes!)).toHaveLength(6);
 		const calls = vi.mocked(getResponse).mock.calls;
-		expect(calls).toHaveLength(5);
+		expect(calls).toHaveLength(6);
 		for (const [index, call] of calls.entries()) {
 			expect(call[2]).toMatchObject({
 				model: model.model, timeoutMs: 60_000, includeMetadata: true,
 				temperature: 0.2, max_tokens: 2048, providerParams: model.providerParams,
-				useSearchGrounding: index === 3, useUrlContext: index === 4,
+				useSearchGrounding: index === 4, useUrlContext: index === 5,
 			});
 		}
 		const content = (index: number) => calls[index][1][0].content as any[];
@@ -58,13 +59,18 @@ describe("provider capability probes", () => {
 		expect(pdf).toContain("(CANVAS PROBE 7431)");
 		expect(pdf.slice(Number(pdf.match(/startxref\n(\d+)/)![1]))).toMatch(/^xref/);
 		expect(content(2)[1]).toEqual({ type: "file", data: "https://www.youtube.com/watch?v=jNQXAC9IVRw", mediaType: "video/mp4" });
+		const video = Buffer.from(content(3)[1].data, "base64");
+		expect(content(3)[1]).toMatchObject({ type: "file", mediaType: "video/mp4" });
+		expect(video.subarray(4, 8).toString()).toBe("ftyp");
+		expect(video.includes(Buffer.from("mdat"))).toBe(true);
+		expect(video.byteLength).toBeLessThan(3000);
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
 	it("records failed answer checks as inconclusive", async () => {
-		installAnswers(Array(5).fill({ text: "No information." }));
+		installAnswers(Array(6).fill({ text: "No information." }));
 		const result = await probeProviderCapabilities(provider, model.model, settings);
-		for (const key of providerCapabilityKeys.filter(key => key !== "video")) {
+		for (const key of providerCapabilityKeys) {
 			expect(result[key]).toBe("inconclusive");
 			expect(result.notes![key]).toBeTruthy();
 		}
@@ -89,7 +95,7 @@ describe("provider capability probes", () => {
 		{ text: "2025 news", sources: [{ url: "https://example.test" }], expected: "inconclusive" },
 	])("requires the current year and grounding evidence: $expected", async ({ expected, ...response }) => {
 		const responses: any[] = answers();
-		responses[3] = response;
+		responses[4] = response;
 		installAnswers(responses);
 		expect((await probeProviderCapabilities(provider, model.model, settings)).search).toBe(expected);
 	});
@@ -97,8 +103,8 @@ describe("provider capability probes", () => {
 	it.each([new Error("Gateway rejected the input"), "Request failed"])("catches every failed check and continues: %s", async (error) => {
 		vi.mocked(getResponse).mockRejectedValue(error);
 		const result = await probeProviderCapabilities(provider, model.model, settings);
-		expect(getResponse).toHaveBeenCalledTimes(5);
-		for (const key of providerCapabilityKeys.filter(key => key !== "video")) {
+		expect(getResponse).toHaveBeenCalledTimes(6);
+		for (const key of providerCapabilityKeys) {
 			expect(result[key]).toBe("error");
 			expect(result.notes![key]).toBe(error instanceof Error ? error.message : error);
 		}
@@ -115,7 +121,8 @@ describe("provider capability probes", () => {
 			.mockResolvedValueOnce(responses[1])
 			.mockRejectedValueOnce(Object.assign(new Error(`HTTP 400: ${message}`), { statusCode: 400 }))
 			.mockResolvedValueOnce(responses[3])
-			.mockResolvedValueOnce(responses[4]);
+			.mockResolvedValueOnce(responses[4])
+			.mockResolvedValueOnce(responses[5]);
 		const report = await probeProviderCapabilities(provider, model.model, settings);
 		expect(report.youtube).toBe("error");
 		expect(report.notes?.youtube).toBe(`HTTP 400: ${message}`);
@@ -126,12 +133,12 @@ describe("provider capability probes", () => {
 	it("times out each check after 60 seconds and starts the next only after it settles", async () => {
 		vi.mocked(getResponse).mockImplementation(() => new Promise(() => {}));
 		const pending = probeProviderCapabilities(provider, model.model, settings);
-		for (let index = 1; index <= 5; index++) {
+		for (let index = 1; index <= 6; index++) {
 			expect(getResponse).toHaveBeenCalledTimes(index);
 			await vi.advanceTimersByTimeAsync(60_000);
 		}
 		const result = await pending;
-		for (const key of providerCapabilityKeys.filter(key => key !== "video")) {
+		for (const key of providerCapabilityKeys) {
 			expect(result[key]).toBe("error");
 			expect(result.notes![key]).toBe("Timed out after 60 seconds. Retry to check this capability.");
 		}
@@ -142,13 +149,13 @@ describe("provider capability probes", () => {
 		{ type: "Bifrost", geminiNative: false, expected: "no" },
 		{ type: "OpenAI", geminiNative: false, expected: "no" },
 		{ type: "Azure", geminiNative: false, expected: "no" },
-		{ type: "Gemini", geminiNative: false, expected: "untested" },
-		{ type: "Vertex", geminiNative: false, expected: "untested" },
-		{ type: "Bifrost", geminiNative: true, expected: "untested" },
-	])("skips video upload for $type (native: $geminiNative)", async ({ expected, ...config }) => {
+		{ type: "Gemini", geminiNative: false, expected: "yes" },
+		{ type: "Vertex", geminiNative: false, expected: "yes" },
+		{ type: "Bifrost", geminiNative: true, expected: "yes" },
+	])("tests video upload only on native routes for $type (native: $geminiNative)", async ({ expected, ...config }) => {
 		installAnswers();
 		expect((await probeProviderCapabilities({ ...provider, ...config }, model.model, settings)).video).toBe(expected);
-		expect(getResponse).toHaveBeenCalledTimes(expected === "no" ? 2 : 5);
+		expect(getResponse).toHaveBeenCalledTimes(expected === "no" ? 2 : 6);
 	});
 
 	it("re-tests previously failed capabilities without mutating the saved report", async () => {
@@ -173,7 +180,7 @@ it("reports independent progress snapshots as each capability finishes", async (
 	expect(snapshots[1]).toMatchObject({ image: "yes", pdf: "untested" });
 	expect(snapshots[2]).toMatchObject({ pdf: "yes", youtube: "untested" });
 	expect(snapshots[3]).toMatchObject({ youtube: "yes", search: "untested" });
-	expect(snapshots[4].notes.video).toBe("Video file upload was not tested.");
+	expect(snapshots[4].video).toBe("yes");
 	expect(snapshots[5]).toMatchObject({ search: "yes", urlContext: "untested" });
 	expect(snapshots[6].urlContext).toBe("yes");
 	expect(snapshots.every(snapshot => !snapshot.testedAt)).toBe(true);
@@ -192,9 +199,21 @@ it.each([401, 402, 403])("stops on an access or budget failure (HTTP %s) without
 
 it("does not verify YouTube or URL context from a memorized answer alone", async () => {
 	const responses: any[] = answers();
-	responses[2] = {text:responses[2].text}; responses[4] = {text:responses[4].text};
+	responses[2] = {text:responses[2].text}; responses[5] = {text:responses[5].text};
 	installAnswers(responses);
 	const report = await probeProviderCapabilities(provider, model.model, settings);
 	expect(report.youtube).toBe("inconclusive");
 	expect(report.urlContext).toBe("inconclusive");
+});
+
+
+it.each([
+	{ text: "Blue, green, red", inputModalities: ["VIDEO"] },
+	{ text: "Red, green, blue" },
+])("requires both chronological video content and video input evidence", async response => {
+	const responses: any[] = answers();
+	responses[3] = response;
+	installAnswers(responses);
+	const report = await probeProviderCapabilities(provider, model.model, settings);
+	expect(report.video).toBe("inconclusive");
 });

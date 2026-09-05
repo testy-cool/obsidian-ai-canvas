@@ -1,6 +1,8 @@
 import type { AugmentedCanvasSettings, LLMProvider } from "../settings/AugmentedCanvasSettings";
 import { getResponse, type Message } from "./llm";
-import { getCapabilityRoute, getProviderCapabilities, supportsGoogleTools, isGoogleProvider, type ProviderCapability, type ProviderCapabilityReport } from "./providerCapabilities";
+import { getCapabilityRoute, getProviderCapabilities, supportsGoogleTools, type ProviderCapability, type ProviderCapabilityReport } from "./providerCapabilities";
+
+import { CAPABILITY_PROBE_VIDEO } from "../data/capabilityVideo";
 
 const RED_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 const PROBE_PDF = "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA0MDAgMjAwXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggNDkgPj4Kc3RyZWFtCkJUIC9GMSAyNCBUZiA0MCAxMDAgVGQgKENBTlZBUyBQUk9CRSA3NDMxKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwMzExIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDA5CiUlRU9GCg==";
@@ -93,14 +95,11 @@ export const probeProviderCapabilities = async (
 		!/(?:cannot|can['’]t|unable to|do not|don['’]t).{0,60}(?:see|access|watch|view)/i.test(result.text),
 	"Video processing was not verified. A description alone is insufficient; the response must also report video input usage.");
 
-	if (!isGoogleProvider(provider)) {
-		report.video = "no";
-		notes.video = "The OpenAI-compatible SDK rejects video file parts; no request was sent.";
-	} else {
-		notes.video = "Video file upload was not tested.";
-	}
-
-	reportProgress();
+	await check("video", [
+		{ type: "text", text: "What are the three solid screen colours in this clip, in chronological order? Reply with only the colours." },
+		{ type: "file", data: CAPABILITY_PROBE_VIDEO, mediaType: "video/mp4", filename: "canvas-probe.mp4" },
+	], result => result.inputModalities?.includes("VIDEO") === true && /red[\s\S]*green[\s\S]*blue/i.test(result.text),
+	"Video upload was not verified. The reply must identify all three colours in order and report video input usage.");
 
 	await check("search", "What is today's date and one news headline from today? Include the four-digit year.", result => {
 		const grounding = result.providerMetadata?.google?.groundingMetadata;
