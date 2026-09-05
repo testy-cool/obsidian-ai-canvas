@@ -23,6 +23,13 @@ describe("model-scoped capability reports", () => {
 	it("ignores legacy gateway-wide failures", () => {
 		expect(getProviderCapabilities({...provider, capabilityReport: {...report, schemaVersion: undefined}}, model).youtube).toBe(true);
 	});
+	it("does not reuse normalized-route results after switching to native forwarding", () => {
+		const route = JSON.stringify([provider.type, provider.baseUrl, true]);
+		const saved = { ...provider, capabilityReports: {
+			[JSON.stringify([route, model])]: { ...report, route },
+		} };
+		expect(getProviderCapabilities(saved, model).youtube).toBe(true);
+	});
 	it("applies only the tested model and route, leaving errors and inconclusive results enabled", () => {
 		const saved = {...provider, capabilityReports: {[getCapabilityReportKey(provider, model)]: report}};
 		expect(getProviderCapabilities(saved, model)).toMatchObject({youtube:false,search:true,urlContext:true});

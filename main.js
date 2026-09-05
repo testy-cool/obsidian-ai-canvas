@@ -48833,7 +48833,10 @@ var supportsGoogleTools = (modelId) => {
 };
 var getCapabilityRoute = (provider) => {
   var _a20;
-  return JSON.stringify([provider == null ? void 0 : provider.type, (_a20 = provider == null ? void 0 : provider.baseUrl) == null ? void 0 : _a20.replace(/\/+$/, ""), isGoogleProvider(provider)]);
+  const route = [provider == null ? void 0 : provider.type, (_a20 = provider == null ? void 0 : provider.baseUrl) == null ? void 0 : _a20.replace(/\/+$/, ""), isGoogleProvider(provider)];
+  if (isBifrostProvider(provider) && (provider == null ? void 0 : provider.geminiNative))
+    route.push("vertex-passthrough-v1");
+  return JSON.stringify(route);
 };
 var getCapabilityReportKey = (provider, model) => JSON.stringify([getCapabilityRoute(provider), model]);
 var getModelCapabilityReport = (provider, model) => {
@@ -48856,10 +48859,18 @@ var getProviderCapabilities = (provider, model) => {
 var tokenCache = /* @__PURE__ */ new Map();
 var createScopedGeminiFetch = (providerParams, nativeBaseURL, originalFetch = globalThis.fetch) => {
   return async (input, init2) => {
+    var _a20;
     let url2 = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const isNativeRequest = nativeBaseURL && url2.startsWith(`${nativeBaseURL}/`);
     if (isNativeRequest && !url2.startsWith(`${nativeBaseURL}/models/`) && /:(?:streamGenerateContent|generateContent)(?:\?|$)/.test(url2)) {
       url2 = `${nativeBaseURL}/models/${url2.slice(nativeBaseURL.length + 1)}`;
+    }
+    const vertexModel = isNativeRequest && url2.slice(nativeBaseURL.length).match(/^\/models\/vertex\/(gemini-[^/]+:(?:streamGenerateContent|generateContent)(?:\?.*)?)$/);
+    if (vertexModel) {
+      url2 = `${nativeBaseURL.replace(/\/genai\/v1beta$/, "")}/genai_passthrough/v1/projects/_/locations/_/publishers/google/models/${vertexModel[1]}`;
+      init2 = { ...init2, redirect: "manual" };
+    }
+    if (isNativeRequest) {
       input = typeof input === "string" ? url2 : input instanceof URL ? new URL(url2) : new Request(url2, input);
     }
     if (!isNativeRequest && !url2.includes("generativelanguage.googleapis.com") && !url2.includes("aiplatform.googleapis.com")) {
@@ -48869,20 +48880,6 @@ var createScopedGeminiFetch = (providerParams, nativeBaseURL, originalFetch = gl
       try {
         const body = JSON.parse(init2.body);
         let modified = false;
-        let strippedYouTubeMime = false;
-        for (const content of Array.isArray(body.contents) ? body.contents : []) {
-          for (const part of Array.isArray(content == null ? void 0 : content.parts) ? content.parts : []) {
-            const fileData = part == null ? void 0 : part.fileData;
-            if (typeof (fileData == null ? void 0 : fileData.fileUri) === "string" && "mimeType" in fileData && /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts)(?:[/?#]|$)|youtu\.be\/)/i.test(fileData.fileUri)) {
-              delete fileData.mimeType;
-              strippedYouTubeMime = true;
-            }
-          }
-        }
-        if (strippedYouTubeMime) {
-          logDebug("[AI] Removed MIME hints from YouTube fileData parts");
-          modified = true;
-        }
         if (body.tools) {
           for (const toolGroup of body.tools) {
             if (toolGroup.functionDeclarations) {
@@ -48898,7 +48895,12 @@ var createScopedGeminiFetch = (providerParams, nativeBaseURL, originalFetch = gl
           }
         }
         const serviceTier = providerParams == null ? void 0 : providerParams.serviceTier;
-        if (serviceTier && serviceTier !== "standard") {
+        if (serviceTier && serviceTier !== "standard" && vertexModel) {
+          const headers = new Headers(init2.headers);
+          headers.set("X-Vertex-AI-LLM-Request-Type", "shared");
+          headers.set("X-Vertex-AI-LLM-Shared-Request-Type", serviceTier);
+          init2 = { ...init2, headers };
+        } else if (serviceTier && serviceTier !== "standard") {
           body.generationConfig = body.generationConfig || {};
           body.generationConfig.service_tier = serviceTier;
           logDebug(`[AI] Injected service_tier: ${serviceTier}`);
@@ -48910,7 +48912,12 @@ var createScopedGeminiFetch = (providerParams, nativeBaseURL, originalFetch = gl
       } catch (e) {
       }
     }
-    return originalFetch(input, init2);
+    const response = await originalFetch(input, init2);
+    if (vertexModel && response.status >= 300 && response.status < 400) {
+      await ((_a20 = response.body) == null ? void 0 : _a20.cancel());
+      throw new Error(`Bifrost's native Gemini endpoint redirected to a login (HTTP ${response.status}). Its /genai_passthrough API route must be accessible with the configured Bifrost key.`);
+    }
+    return response;
   };
 };
 var asChatProvider = (provider) => (modelId) => provider.chat(modelId);

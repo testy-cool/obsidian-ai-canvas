@@ -31,6 +31,16 @@ export const createScopedGeminiFetch = (
 		// requires /models/ before its untouched provider-prefixed model ID.
 		if (isNativeRequest && !url.startsWith(`${nativeBaseURL}/models/`) && /:(?:streamGenerateContent|generateContent)(?:\?|$)/.test(url)) {
 			url = `${nativeBaseURL}/models/${url.slice(nativeBaseURL.length + 1)}`;
+		}
+		const vertexModel = isNativeRequest && url.slice(nativeBaseURL.length).match(/^\/models\/vertex\/(gemini-[^/]+:(?:streamGenerateContent|generateContent)(?:\?.*)?)$/);
+		if (vertexModel) {
+			// Bifrost's normalized Vertex route downloads HTTP file URLs as bytes,
+			// turning YouTube into HTML. Passthrough preserves Google's native body
+			// and retrieval metadata. Bifrost replaces these placeholders from its key.
+			url = `${nativeBaseURL.replace(/\/genai\/v1beta$/, "")}/genai_passthrough/v1/projects/_/locations/_/publishers/google/models/${vertexModel[1]}`;
+			init = { ...init, redirect: "manual" };
+		}
+		if (isNativeRequest) {
 			input = typeof input === "string" ? url : input instanceof URL ? new URL(url) : new Request(url, input);
 		}
 
@@ -43,22 +53,6 @@ export const createScopedGeminiFetch = (
 			try {
 				const body = JSON.parse(init.body);
 				let modified = false;
-				let strippedYouTubeMime = false;
-				// Vertex treats YouTube links as undecodable uploads when given a MIME hint.
-				for (const content of Array.isArray(body.contents) ? body.contents : []) {
-					for (const part of Array.isArray(content?.parts) ? content.parts : []) {
-						const fileData = part?.fileData;
-						if (typeof fileData?.fileUri === "string" && "mimeType" in fileData &&
-							/^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts)(?:[/?#]|$)|youtu\.be\/)/i.test(fileData.fileUri)) {
-							delete fileData.mimeType;
-							strippedYouTubeMime = true;
-						}
-					}
-				}
-				if (strippedYouTubeMime) {
-					logDebug("[AI] Removed MIME hints from YouTube fileData parts");
-					modified = true;
-				}
 
 				// Fix tool schemas
 				if (body.tools) {
@@ -78,7 +72,12 @@ export const createScopedGeminiFetch = (
 
 				// Inject service_tier when set and not "standard"
 				const serviceTier = providerParams?.serviceTier as string | undefined;
-				if (serviceTier && serviceTier !== "standard") {
+				if (serviceTier && serviceTier !== "standard" && vertexModel) {
+					const headers = new Headers(init.headers);
+					headers.set("X-Vertex-AI-LLM-Request-Type", "shared");
+					headers.set("X-Vertex-AI-LLM-Shared-Request-Type", serviceTier);
+					init = { ...init, headers };
+				} else if (serviceTier && serviceTier !== "standard") {
 					body.generationConfig = body.generationConfig || {};
 					body.generationConfig.service_tier = serviceTier;
 					logDebug(`[AI] Injected service_tier: ${serviceTier}`);
@@ -93,7 +92,12 @@ export const createScopedGeminiFetch = (
 			}
 		}
 
-		return originalFetch(input, init);
+		const response = await originalFetch(input, init);
+		if (vertexModel && response.status >= 300 && response.status < 400) {
+			await response.body?.cancel();
+			throw new Error(`Bifrost's native Gemini endpoint redirected to a login (HTTP ${response.status}). Its /genai_passthrough API route must be accessible with the configured Bifrost key.`);
+		}
+		return response;
 	};
 };
 

@@ -60,8 +60,11 @@ export const isGoogleProvider = (provider?: ProviderKind): boolean =>
 export const supportsGoogleTools = (modelId: string): boolean =>
 	/^gemini-(?:2\.5|3(?:\.\d+)?)-/.test(modelId.split("/").pop() ?? "");
 
-export const getCapabilityRoute = (provider?: ProviderKind): string =>
-	JSON.stringify([provider?.type, provider?.baseUrl?.replace(/\/+$/, ""), isGoogleProvider(provider)]);
+export const getCapabilityRoute = (provider?: ProviderKind): string => {
+	const route: unknown[] = [provider?.type, provider?.baseUrl?.replace(/\/+$/, ""), isGoogleProvider(provider)];
+	if (isBifrostProvider(provider) && provider?.geminiNative) route.push("vertex-passthrough-v1");
+	return JSON.stringify(route);
+};
 
 export const getCapabilityReportKey = (provider: ProviderKind, model: string): string =>
 	JSON.stringify([getCapabilityRoute(provider), model]);

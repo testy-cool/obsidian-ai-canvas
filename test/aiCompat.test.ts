@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, type LLMProvider } from "../src/settings/AugmentedCanvasSettings";
 import { buildTools, createScopedGeminiFetch, getBifrostGeminiBaseUrl, getResponse, streamResponse } from "../src/utils/ai";
 import { probeProviderCapabilities } from "../src/utils/capabilityProbe";
-import * as debug from "../src/logDebug";
 
 // HTTP shape tests use the same capture stub for either transport. Real desktop
 // streaming, cancellation and blocked-browser cases live in desktopFetch.test.ts.
@@ -336,15 +335,28 @@ describe("Bifrost Gemini-native requests", () => {
 			expect(await getResponse(provider, messages, options)).toBe("ok");
 		}
 		expect(requests).toHaveLength(1);
-		expect(requests[0].url).toBe(`${getBifrostGeminiBaseUrl(identity.baseUrl)}/models/vertex/gemini-3.1-pro-preview:${streaming ? "streamGenerateContent?alt=sse" : "generateContent"}`);
+		expect(requests[0].url).toBe(`${identity.baseUrl.replace(/\/v1$/, "")}/genai_passthrough/v1/projects/_/locations/_/publishers/google/models/gemini-3.1-pro-preview:${streaming ? "streamGenerateContent?alt=sse" : "generateContent"}`);
 		expect(requests[0].headers.get("authorization")).toBe("Bearer test-api-key");
 		expect(requests[0].headers.get("x-goog-api-key")).toBe("test-api-key");
+		expect(requests[0].redirect).toBe("manual");
 		const body = await requests[0].json();
 		expect(body.tools).toEqual([{ googleSearch: {} }, { urlContext: {} }]);
 		expect(body.contents[0].parts).toContainEqual({ fileData: {
-			fileUri: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+			fileUri: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", mimeType: "video/mp4",
 		} });
-		expect(body.generationConfig.service_tier).toBe("priority");
+		expect(body.generationConfig.service_tier).toBeUndefined();
+		expect(requests[0].headers.get("x-vertex-ai-llm-request-type")).toBe("shared");
+		expect(requests[0].headers.get("x-vertex-ai-llm-shared-request-type")).toBe("priority");
+	});
+
+	it("reports a native endpoint login redirect without following it", async () => {
+		const transport = vi.fn(async () => new Response("", { status: 302, headers: { Location: "https://login.example.test" } }));
+		const fetch = createScopedGeminiFetch(undefined, "https://example.test/genai/v1beta", transport);
+		await expect(fetch("https://example.test/genai/v1beta/vertex/gemini-3.1-pro-preview:generateContent", {
+			method: "POST", headers: { Authorization: "Bearer test-key" }, body: "{}",
+		})).rejects.toThrow("native Gemini endpoint redirected to a login (HTTP 302)");
+		expect(transport).toHaveBeenCalledOnce();
+		expect(transport).toHaveBeenCalledWith(expect.stringContaining("/genai_passthrough/"), expect.objectContaining({ redirect: "manual" }));
 	});
 });
 
@@ -353,7 +365,7 @@ describe("capability probe production routing", () => {
 		const requests: any[] = [];
 		globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 			const request = new Request(input, init);
-			expect(request.url).toBe("https://example.test/genai/v1beta/models/vertex/gemini-3.1-pro-preview:generateContent");
+			expect(request.url).toBe("https://example.test/genai_passthrough/v1/projects/_/locations/_/publishers/google/models/gemini-3.1-pro-preview:generateContent");
 			const body = await request.json();
 			requests.push(body);
 			const text = ["red", "7431", "A man at the zoo with elephants.", `${new Date().getFullYear()} news`, "Example Domain"][requests.length - 1];
@@ -375,7 +387,7 @@ describe("capability probe production routing", () => {
 		expect(requests.slice(0, 3).every(body => body.tools === undefined)).toBe(true);
 		expect(requests[0].contents[0].parts).toContainEqual(expect.objectContaining({ inlineData: expect.objectContaining({ mimeType: "image/png" }) }));
 		expect(requests[1].contents[0].parts).toContainEqual(expect.objectContaining({ inlineData: expect.objectContaining({ mimeType: "application/pdf" }) }));
-		expect(requests[2].contents[0].parts).toContainEqual({ fileData: { fileUri: "https://www.youtube.com/watch?v=jNQXAC9IVRw" } });
+		expect(requests[2].contents[0].parts).toContainEqual({ fileData: { fileUri: "https://www.youtube.com/watch?v=jNQXAC9IVRw", mimeType: "video/mp4" } });
 		expect(requests[3].tools).toEqual([{ googleSearch: {} }]);
 		expect(requests[4].tools).toEqual([{ urlContext: {} }]);
 	});
@@ -406,9 +418,8 @@ describe("YouTube MIME hints on Google routes", () => {
 		{ route: "Gemini", baseURL: "https://generativelanguage.googleapis.com/v1beta" },
 		{ route: "Vertex", baseURL: "https://us-central1-aiplatform.googleapis.com/v1/projects/test/locations/us-central1/publishers/google" },
 		{ route: "native Bifrost", baseURL: "https://example.test/genai/v1beta" },
-	])("strips only YouTube fileData MIME hints on $route and logs once per request", async ({ route, baseURL }) => {
+	])("preserves YouTube MIME types and media contents on $route", async ({ route, baseURL }) => {
 		const requests = installFetchStub();
-		const log = vi.spyOn(debug, "logDebug");
 		const youtubeUrls = [
 			"https://www.youtube.com/watch?v=jNQXAC9IVRw",
 			"https://youtube.com/shorts/jNQXAC9IVRw",
@@ -434,20 +445,9 @@ describe("YouTube MIME hints on Google routes", () => {
 			method: "POST", body: JSON.stringify(body),
 		});
 		expect(requests).toHaveLength(1);
-		expect(requests[0].url).toBe(`${baseURL}/models/${native ? "vertex/" : ""}gemini-3.1-pro-preview:streamGenerateContent?alt=sse`);
-		expect(await requests[0].json()).toEqual({
-			contents: [
-				{ role: "user", parts: youtubeUrls.slice(0, 2).map(fileUri => ({ fileData: { fileUri } })) },
-				{ role: "user", parts: [...youtubeUrls.slice(2).map(fileUri => ({ fileData: { fileUri } })), ...unchangedParts] },
-			],
-			generationConfig: body.generationConfig,
-		});
-		expect(log).toHaveBeenCalledExactlyOnceWith("[AI] Removed MIME hints from YouTube fileData parts");
-
-		log.mockClear();
-		const unchangedBody = JSON.stringify({ contents: [{ role: "user", parts: unchangedParts }] });
-		await scopedFetch(requests[0].url, { method: "POST", body: unchangedBody });
-		expect(await requests[1].text()).toBe(unchangedBody);
-		expect(log).not.toHaveBeenCalled();
+		expect(requests[0].url).toBe(native
+			? "https://example.test/genai_passthrough/v1/projects/_/locations/_/publishers/google/models/gemini-3.1-pro-preview:streamGenerateContent?alt=sse"
+			: `${baseURL}/models/gemini-3.1-pro-preview:streamGenerateContent?alt=sse`);
+		expect(await requests[0].json()).toEqual(body);
 	});
 });
