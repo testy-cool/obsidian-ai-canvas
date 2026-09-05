@@ -563,3 +563,42 @@ it("updates Bifrost detection when the user edits the name or endpoint", async (
 		expect(nativeSetting.style.display).toBe(visible ? "" : "none");
 	}
 });
+
+
+describe("settings rendering has no persistence side effects", () => {
+	it.each([false, true])("displays image and naming fallbacks without modifying settings (models available: %s)", async available => {
+		const models = available ? [{ id: "enabled-model", model: "test-model", providerId: "provider", enabled: true }] : [];
+		const plugin: any = {
+			settings: {
+				...DEFAULT_SETTINGS,
+				providers: [{ id: "provider", type: "Custom", baseUrl: "https://example.test", enabled: true }], models,
+				activeProvider: "provider", imageProviderId: "provider", cardTitleProviderId: "provider", groupTitleProviderId: "provider",
+				imageModelId: "stale-image", cardTitleModelId: "stale-card", groupTitleModelId: "stale-group",
+			},
+			saveSettings: vi.fn().mockResolvedValue(undefined),
+		};
+		const original = structuredClone(plugin.settings);
+		const tab: any = new SettingsTab({} as any, plugin);
+		const root = new Element();
+		for (let render = 0; render < 2; render++) {
+			root.empty();
+			tab.renderImageSettings(root);
+			tab.renderNamingSettings(root);
+			expect(plugin.settings).toEqual(original);
+			expect(plugin.saveSettings).not.toHaveBeenCalled();
+			expect(settingNamed(root, "Image model").querySelector("select")!.value).toBe("");
+			for (const name of ["Card title model", "Group name model"]) {
+				expect(settingNamed(root, name).querySelector("select")!.value).toBe(available ? "enabled-model" : "");
+			}
+		}
+		if (available) {
+			for (const [name, key] of [["Image model", "imageModelId"], ["Card title model", "cardTitleModelId"], ["Group name model", "groupTitleModelId"]]) {
+				const dropdown = settingNamed(root, name).querySelector("select")!;
+				dropdown.value = "enabled-model";
+				await dropdown.listeners.get("change")!();
+				expect(plugin.settings[key]).toBe("enabled-model");
+			}
+			expect(plugin.saveSettings).toHaveBeenCalledTimes(3);
+		}
+	});
+});

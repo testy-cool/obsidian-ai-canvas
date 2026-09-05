@@ -938,10 +938,6 @@ export default class SettingsTab extends PluginSettingTab {
 		const imageModelValue =
 			imageModels.find(model => model.id === this.plugin.settings.imageModelId)
 				?.id || "";
-		if (imageModelValue !== this.plugin.settings.imageModelId) {
-			this.plugin.settings.imageModelId = imageModelValue;
-			void this.plugin.saveSettings();
-		}
 
 		new Setting(containerEl)
 			.setName("Image model")
@@ -1023,10 +1019,6 @@ export default class SettingsTab extends PluginSettingTab {
 		const cardModelValue =
 			cardModels.find(model => model.id === this.plugin.settings.cardTitleModelId)
 				?.id || cardModels[0]?.id || "";
-		if (cardModelValue && cardModelValue !== this.plugin.settings.cardTitleModelId) {
-			this.plugin.settings.cardTitleModelId = cardModelValue;
-			void this.plugin.saveSettings();
-		}
 
 		new Setting(containerEl)
 			.setName("Card title model")
@@ -1101,10 +1093,6 @@ export default class SettingsTab extends PluginSettingTab {
 		const groupModelValue =
 			groupModels.find(model => model.id === this.plugin.settings.groupTitleModelId)
 				?.id || groupModels[0]?.id || "";
-		if (groupModelValue && groupModelValue !== this.plugin.settings.groupTitleModelId) {
-			this.plugin.settings.groupTitleModelId = groupModelValue;
-			void this.plugin.saveSettings();
-		}
 
 		new Setting(containerEl)
 			.setName("Group name model")

@@ -50264,10 +50264,6 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
     const imageProviderId = this.plugin.settings.imageProviderId || this.plugin.settings.activeProvider;
     const imageModels = this.plugin.settings.models.filter((model) => model.providerId === imageProviderId && model.enabled);
     const imageModelValue = ((_a20 = imageModels.find((model) => model.id === this.plugin.settings.imageModelId)) == null ? void 0 : _a20.id) || "";
-    if (imageModelValue !== this.plugin.settings.imageModelId) {
-      this.plugin.settings.imageModelId = imageModelValue;
-      void this.plugin.saveSettings();
-    }
     new import_obsidian18.Setting(containerEl).setName("Image model").setDesc("Model used for image generation (e.g., Gemini NanoBanana).").addDropdown((dropdown) => {
       dropdown.addOption("", "Default (dall-e-3)");
       imageModels.forEach((model) => {
@@ -50315,10 +50311,6 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
     });
     const cardModels = this.plugin.settings.models.filter((model) => model.providerId === this.plugin.settings.cardTitleProviderId && model.enabled);
     const cardModelValue = ((_a20 = cardModels.find((model) => model.id === this.plugin.settings.cardTitleModelId)) == null ? void 0 : _a20.id) || ((_b19 = cardModels[0]) == null ? void 0 : _b19.id) || "";
-    if (cardModelValue && cardModelValue !== this.plugin.settings.cardTitleModelId) {
-      this.plugin.settings.cardTitleModelId = cardModelValue;
-      void this.plugin.saveSettings();
-    }
     new import_obsidian18.Setting(containerEl).setName("Card title model").setDesc("Model used for AI card titles.").addDropdown((dropdown) => {
       if (!cardModels.length) {
         dropdown.addOption("", "No enabled models");
@@ -50363,10 +50355,6 @@ var SettingsTab = class extends import_obsidian18.PluginSettingTab {
     });
     const groupModels = this.plugin.settings.models.filter((model) => model.providerId === this.plugin.settings.groupTitleProviderId && model.enabled);
     const groupModelValue = ((_c = groupModels.find((model) => model.id === this.plugin.settings.groupTitleModelId)) == null ? void 0 : _c.id) || ((_d = groupModels[0]) == null ? void 0 : _d.id) || "";
-    if (groupModelValue && groupModelValue !== this.plugin.settings.groupTitleModelId) {
-      this.plugin.settings.groupTitleModelId = groupModelValue;
-      void this.plugin.saveSettings();
-    }
     new import_obsidian18.Setting(containerEl).setName("Group name model").setDesc("Model used for AI group naming.").addDropdown((dropdown) => {
       if (!groupModels.length) {
         dropdown.addOption("", "No enabled models");
