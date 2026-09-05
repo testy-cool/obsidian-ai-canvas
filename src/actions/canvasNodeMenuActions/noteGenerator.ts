@@ -655,8 +655,8 @@ export function noteGenerator(
 			let created: CanvasNode;
 			const isNewNode = !toNode;
 			if (!toNode) {
-				// Calculate initial dimensions for placeholder text
-				const initialText = `Calling AI (${model.model})...`;
+				// Keep the body empty while the badge reports generation.
+				const initialText = "";
 				const initialDimensions = calculateNoteDimensions(initialText, 300, 500);
 				
 				// Determine directional bias from the source node's incoming edges
@@ -686,7 +686,7 @@ export function noteGenerator(
 				);
 			} else {
 				created = toNode;
-				const initialText = `Calling AI (${model.model})...`;
+				const initialText = "";
 				created.setText(initialText);
 				
 				// Update the node data with model info

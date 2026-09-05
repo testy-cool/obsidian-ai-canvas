@@ -145,6 +145,22 @@ afterEach(() => {
 });
 
 describe("context picker request paths", () => {
+	it.each([false, true])("starts with an empty body and a generating badge (regeneration: %s)", async (regenerate) => {
+		const { app, canvas, prompt, settings } = fixture(false);
+		const existing = regenerate ? canvas.makeNode("existing", "old answer") : undefined;
+		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
+			const response = existing ?? canvas.nodes.get("response");
+			expect(response.text).toBe("");
+			expect(response.getData().text).not.toContain("Calling AI");
+			expect(badge(response).attributes.get("data-state")).toBe("generating");
+			expect(response.nodeEl.className).toContain("ai-generating");
+			callback("answer", null, null, null);
+			expect(response.text).toBe("answer");
+			callback(null, { text: "answer" }, null, null);
+		});
+		await run(() => noteGenerator(app, settings, prompt, existing).generateNote());
+	});
+
 	it.each([false, true])("scopes generating styles to the request and clears them (error: %s)", async (fail) => {
 		const { app, canvas, settings } = fixture(false);
 		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {

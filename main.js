@@ -48284,7 +48284,7 @@ ${nodeText}`);
       let created;
       const isNewNode = !toNode;
       if (!toNode) {
-        const initialText = `Calling AI (${model.model})...`;
+        const initialText = "";
         const initialDimensions = calculateNoteDimensions(initialText, 300, 500);
         const directionBias = getIncomingEdgeDirection(node);
         created = createNode(canvas, {
@@ -48303,7 +48303,7 @@ ${nodeText}`);
         }, question, directionBias);
       } else {
         created = toNode;
-        const initialText = `Calling AI (${model.model})...`;
+        const initialText = "";
         created.setText(initialText);
         const nodeData = created.getData();
         created.setData({
