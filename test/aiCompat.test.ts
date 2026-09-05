@@ -4,6 +4,12 @@ import { buildTools, createScopedGeminiFetch, getBifrostGeminiBaseUrl, getRespon
 import { probeProviderCapabilities } from "../src/utils/capabilityProbe";
 import * as debug from "../src/logDebug";
 
+// HTTP shape tests use the same capture stub for either transport. Real desktop
+// streaming, cancellation and blocked-browser cases live in desktopFetch.test.ts.
+vi.mock("../src/utils/desktopFetch", () => ({
+	desktopFetch: (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init),
+}));
+
 const originalFetch = globalThis.fetch;
 
 const chatCompletionBody = {

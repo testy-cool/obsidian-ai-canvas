@@ -4,7 +4,8 @@ import { streamText, generateText, stepCountIs } from "ai";
 import { ModelMessage } from "@ai-sdk/provider-utils";
 import { logDebug } from "src/logDebug";
 import { LLMProvider } from "src/settings/AugmentedCanvasSettings";
-import { requestUrl } from "obsidian";
+import { Platform, requestUrl } from "obsidian";
+import { desktopFetch } from "./desktopFetch";
 import { getToolSchema, convertToGeminiSchema } from "./mcpClient";
 import { applyOpenAICompatParams } from "./providerParams";
 import { streamCodexResponse } from "./codexCli";
@@ -17,8 +18,11 @@ const tokenCache = new Map<string, { token: string; expiresAt: number }>();
  * Create a scoped fetch function that intercepts only Gemini/Vertex API requests.
  * Fixes broken tool schemas from @ai-sdk/google and injects provider params.
  */
-export const createScopedGeminiFetch = (providerParams?: Record<string, unknown>, nativeBaseURL?: string): typeof fetch => {
-	const originalFetch = globalThis.fetch;
+export const createScopedGeminiFetch = (
+	providerParams?: Record<string, unknown>,
+	nativeBaseURL?: string,
+	originalFetch: typeof fetch = globalThis.fetch
+): typeof fetch => {
 
 	return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
 		let url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
@@ -96,8 +100,7 @@ export const createScopedGeminiFetch = (providerParams?: Record<string, unknown>
 /**
  * Fetch wrapper for OpenAI-compatible providers: injects provider params
  * (service_tier, reasoning_effort, thinking) into JSON request bodies.
- * Returns undefined when there is nothing to inject so the SDK default
- * fetch is used.
+ * Keeps the selected transport when no parameter injection is needed.
  */
 /**
  * OpenAI-compatible gateways only reliably implement /v1/chat/completions,
@@ -108,12 +111,12 @@ const asChatProvider = (provider: ReturnType<typeof createOpenAI>) =>
 	((modelId: string) => provider.chat(modelId)) as unknown as typeof provider;
 
 const createOpenAICompatFetch = (
-	providerParams?: Record<string, unknown>
-): typeof fetch | undefined => {
+	providerParams?: Record<string, unknown>,
+	originalFetch: typeof fetch = globalThis.fetch
+): typeof fetch => {
 	const probe: Record<string, any> = {};
-	if (!applyOpenAICompatParams(probe, providerParams)) return undefined;
+	if (!applyOpenAICompatParams(probe, providerParams)) return originalFetch;
 
-	const originalFetch = globalThis.fetch;
 	return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
 		if (init?.body && typeof init.body === "string") {
 			try {
@@ -249,13 +252,14 @@ export const getBifrostGeminiBaseUrl = (baseUrl: string): string =>
 	`${baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/genai/v1beta`;
 
 const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>) => {
+	const providerFetch = Platform.isDesktopApp && isBifrostProvider(provider) ? desktopFetch : globalThis.fetch;
 	if (isBifrostProvider(provider) && provider.geminiNative) {
 		const baseURL = getBifrostGeminiBaseUrl(provider.baseUrl);
 		return createGoogleGenerativeAI({
 			baseURL,
 			apiKey: provider.apiKey,
 			headers: { Authorization: `Bearer ${provider.apiKey}` },
-			fetch: createScopedGeminiFetch(providerParams, baseURL),
+			fetch: createScopedGeminiFetch(providerParams, baseURL, providerFetch),
 		});
 	}
 	switch (provider.type) {
@@ -280,7 +284,7 @@ const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>)
 				apiKey: provider.apiKey,
 				baseURL: `${azureBase}/openai/v1`,
 				headers: { "api-key": provider.apiKey },
-				fetch: createOpenAICompatFetch(providerParams),
+				fetch: createOpenAICompatFetch(providerParams, providerFetch),
 			}));
 		}
 		case "OpenAI":
@@ -308,7 +312,7 @@ const getLlm = (provider: LLMProvider, providerParams?: Record<string, unknown>)
 			return asChatProvider(createOpenAI({
 				apiKey: provider.apiKey,
 				baseURL: provider.baseUrl,
-				fetch: createOpenAICompatFetch(providerParams),
+				fetch: createOpenAICompatFetch(providerParams, providerFetch),
 			}));
 	}
 };

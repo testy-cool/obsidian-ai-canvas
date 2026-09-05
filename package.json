@@ -28,6 +28,7 @@
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^16.11.6",
+		"@types/node-fetch": "2.6.13",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
 		"builtin-modules": "3.3.0",
@@ -50,6 +51,7 @@
 		"googleapis": "^148.0.0",
 		"js-tiktoken": "^1.0.8",
 		"monkey-around": "^2.3.0",
+		"node-fetch": "2.7.0",
 		"openai": "^4.91.1",
 		"zod": "^3.25.76"
 	},

@@ -38,6 +38,9 @@ importers:
       monkey-around:
         specifier: ^2.3.0
         version: 2.3.0
+      node-fetch:
+        specifier: 2.7.0
+        version: 2.7.0
       openai:
         specifier: ^4.91.1
         version: 4.104.0(zod@3.25.76)
@@ -48,6 +51,9 @@ importers:
       '@types/node':
         specifier: ^16.11.6
         version: 16.18.126
+      '@types/node-fetch':
+        specifier: 2.6.13
+        version: 2.6.13
       '@typescript-eslint/eslint-plugin':
         specifier: 5.29.0
         version: 5.29.0(@typescript-eslint/parser@5.29.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
