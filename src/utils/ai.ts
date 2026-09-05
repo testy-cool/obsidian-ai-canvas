@@ -17,7 +17,7 @@ const tokenCache = new Map<string, { token: string; expiresAt: number }>();
  * Create a scoped fetch function that intercepts only Gemini/Vertex API requests.
  * Fixes broken tool schemas from @ai-sdk/google and injects provider params.
  */
-const createScopedGeminiFetch = (providerParams?: Record<string, unknown>, nativeBaseURL?: string): typeof fetch => {
+export const createScopedGeminiFetch = (providerParams?: Record<string, unknown>, nativeBaseURL?: string): typeof fetch => {
 	const originalFetch = globalThis.fetch;
 
 	return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -39,6 +39,22 @@ const createScopedGeminiFetch = (providerParams?: Record<string, unknown>, nativ
 			try {
 				const body = JSON.parse(init.body);
 				let modified = false;
+				let strippedYouTubeMime = false;
+				// Vertex treats YouTube links as undecodable uploads when given a MIME hint.
+				for (const content of Array.isArray(body.contents) ? body.contents : []) {
+					for (const part of Array.isArray(content?.parts) ? content.parts : []) {
+						const fileData = part?.fileData;
+						if (typeof fileData?.fileUri === "string" && "mimeType" in fileData &&
+							/^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts)(?:[/?#]|$)|youtu\.be\/)/i.test(fileData.fileUri)) {
+							delete fileData.mimeType;
+							strippedYouTubeMime = true;
+						}
+					}
+				}
+				if (strippedYouTubeMime) {
+					logDebug("[AI] Removed MIME hints from YouTube fileData parts");
+					modified = true;
+				}
 
 				// Fix tool schemas
 				if (body.tools) {

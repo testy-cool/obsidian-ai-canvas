@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, type LLMProvider } from "../src/settings/AugmentedCanvasSettings";
-import { buildTools, getBifrostGeminiBaseUrl, getResponse, streamResponse } from "../src/utils/ai";
+import { buildTools, createScopedGeminiFetch, getBifrostGeminiBaseUrl, getResponse, streamResponse } from "../src/utils/ai";
 import { probeProviderCapabilities } from "../src/utils/capabilityProbe";
+import * as debug from "../src/logDebug";
 
 const originalFetch = globalThis.fetch;
 
@@ -330,7 +331,7 @@ describe("Bifrost Gemini-native requests", () => {
 		const body = await requests[0].json();
 		expect(body.tools).toEqual([{ googleSearch: {} }, { urlContext: {} }]);
 		expect(body.contents[0].parts).toContainEqual({ fileData: {
-			fileUri: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", mimeType: "video/mp4",
+			fileUri: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
 		} });
 		expect(body.generationConfig.service_tier).toBe("priority");
 	});
@@ -362,7 +363,7 @@ describe("capability probe production routing", () => {
 		expect(requests.slice(0, 3).every(body => body.tools === undefined)).toBe(true);
 		expect(requests[0].contents[0].parts).toContainEqual(expect.objectContaining({ inlineData: expect.objectContaining({ mimeType: "image/png" }) }));
 		expect(requests[1].contents[0].parts).toContainEqual(expect.objectContaining({ inlineData: expect.objectContaining({ mimeType: "application/pdf" }) }));
-		expect(requests[2].contents[0].parts).toContainEqual({ fileData: { fileUri: "https://www.youtube.com/watch?v=jNQXAC9IVRw", mimeType: "video/mp4" } });
+		expect(requests[2].contents[0].parts).toContainEqual({ fileData: { fileUri: "https://www.youtube.com/watch?v=jNQXAC9IVRw" } });
 		expect(requests[3].tools).toEqual([{ googleSearch: {} }]);
 		expect(requests[4].tools).toEqual([{ urlContext: {} }]);
 	});
@@ -385,5 +386,56 @@ describe("capability probe production routing", () => {
 		else expect(await getResponse(provider, messages, options)).toBe("ok");
 		expect(requests).toHaveLength(1);
 		expect(requests[0].tools).toBeUndefined();
+	});
+});
+
+describe("YouTube MIME hints on Google routes", () => {
+	it.each([
+		{ route: "Gemini", baseURL: "https://generativelanguage.googleapis.com/v1beta" },
+		{ route: "Vertex", baseURL: "https://us-central1-aiplatform.googleapis.com/v1/projects/test/locations/us-central1/publishers/google" },
+		{ route: "native Bifrost", baseURL: "https://example.test/genai/v1beta" },
+	])("strips only YouTube fileData MIME hints on $route and logs once per request", async ({ route, baseURL }) => {
+		const requests = installFetchStub();
+		const log = vi.spyOn(debug, "logDebug");
+		const youtubeUrls = [
+			"https://www.youtube.com/watch?v=jNQXAC9IVRw",
+			"https://youtube.com/shorts/jNQXAC9IVRw",
+			"https://youtu.be/jNQXAC9IVRw",
+			"https://m.youtube.com/watch?v=jNQXAC9IVRw",
+		];
+		const unchangedParts = [
+			{ inlineData: { data: "AQIDBA==", mimeType: "image/png" } },
+			{ fileData: { fileUri: "https://example.test/video.mp4", mimeType: "video/mp4" } },
+			{ fileData: { fileUri: "https://www.youtube.com.evil.test/watch?v=test", mimeType: "video/mp4" } },
+			{ fileData: { fileUri: "https://youtube.com/watchlist", mimeType: "video/mp4" } },
+			{ fileData: { fileUri: youtubeUrls[0] } },
+			{ text: "Describe this media." },
+		];
+		const contents = [
+			{ role: "user", parts: youtubeUrls.slice(0, 2).map(fileUri => ({ fileData: { fileUri, mimeType: "video/mp4" } })) },
+			{ role: "user", parts: [...youtubeUrls.slice(2).map(fileUri => ({ fileData: { fileUri, mimeType: "video/mp4" } })), ...unchangedParts] },
+		];
+		const body = { contents, generationConfig: { temperature: 0.2 } };
+		const native = route === "native Bifrost";
+		const scopedFetch = createScopedGeminiFetch(undefined, native ? baseURL : undefined);
+		await scopedFetch(`${baseURL}/${native ? "vertex" : "models"}/gemini-3.1-pro-preview:streamGenerateContent?alt=sse`, {
+			method: "POST", body: JSON.stringify(body),
+		});
+		expect(requests).toHaveLength(1);
+		expect(requests[0].url).toBe(`${baseURL}/models/${native ? "vertex/" : ""}gemini-3.1-pro-preview:streamGenerateContent?alt=sse`);
+		expect(await requests[0].json()).toEqual({
+			contents: [
+				{ role: "user", parts: youtubeUrls.slice(0, 2).map(fileUri => ({ fileData: { fileUri } })) },
+				{ role: "user", parts: [...youtubeUrls.slice(2).map(fileUri => ({ fileData: { fileUri } })), ...unchangedParts] },
+			],
+			generationConfig: body.generationConfig,
+		});
+		expect(log).toHaveBeenCalledExactlyOnceWith("[AI] Removed MIME hints from YouTube fileData parts");
+
+		log.mockClear();
+		const unchangedBody = JSON.stringify({ contents: [{ role: "user", parts: unchangedParts }] });
+		await scopedFetch(requests[0].url, { method: "POST", body: unchangedBody });
+		expect(await requests[1].text()).toBe(unchangedBody);
+		expect(log).not.toHaveBeenCalled();
 	});
 });

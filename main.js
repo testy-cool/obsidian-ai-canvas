@@ -45936,6 +45936,20 @@ var createScopedGeminiFetch = (providerParams, nativeBaseURL) => {
       try {
         const body = JSON.parse(init2.body);
         let modified = false;
+        let strippedYouTubeMime = false;
+        for (const content of Array.isArray(body.contents) ? body.contents : []) {
+          for (const part of Array.isArray(content == null ? void 0 : content.parts) ? content.parts : []) {
+            const fileData = part == null ? void 0 : part.fileData;
+            if (typeof (fileData == null ? void 0 : fileData.fileUri) === "string" && "mimeType" in fileData && /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts)(?:[/?#]|$)|youtu\.be\/)/i.test(fileData.fileUri)) {
+              delete fileData.mimeType;
+              strippedYouTubeMime = true;
+            }
+          }
+        }
+        if (strippedYouTubeMime) {
+          logDebug("[AI] Removed MIME hints from YouTube fileData parts");
+          modified = true;
+        }
         if (body.tools) {
           for (const toolGroup of body.tools) {
             if (toolGroup.functionDeclarations) {

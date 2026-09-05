@@ -105,6 +105,24 @@ describe("provider capability probes", () => {
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
+	it.each([
+		"Failed to decode audio or visual data",
+		"Request contains an invalid argument",
+	])("records a YouTube HTTP 400 as no and retains its message: %s", async (message) => {
+		const responses = answers();
+		vi.mocked(getResponse)
+			.mockResolvedValueOnce(responses[0])
+			.mockResolvedValueOnce(responses[1])
+			.mockRejectedValueOnce(Object.assign(new Error(`HTTP 400: ${message}`), { statusCode: 400 }))
+			.mockResolvedValueOnce(responses[3])
+			.mockResolvedValueOnce(responses[4]);
+		const report = await probeProviderCapabilities(provider, model.model, settings);
+		expect(report.youtube).toBe("no");
+		expect(report.notes?.youtube).toBe(`HTTP 400: ${message}`);
+		expect(report.search).toBe("yes");
+		expect(report.urlContext).toBe("yes");
+	});
+
 	it("times out each check after 30 seconds and starts the next only after it settles", async () => {
 		vi.mocked(getResponse).mockImplementation(() => new Promise(() => {}));
 		const pending = probeProviderCapabilities(provider, model.model, settings);
