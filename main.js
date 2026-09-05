@@ -49097,6 +49097,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
     this.existingModels = existingModels;
     this.selectedModelIds = /* @__PURE__ */ new Set();
     this.fetchedModelIds = [];
+    this.modelFetchVersion = 0;
     this.customModelInput = "";
     this.filterText = "";
     this.renderLimit = _UnifiedProviderModal.MODEL_PAGE_SIZE;
@@ -49114,7 +49115,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
     }
   }
   onOpen() {
-    var _a20, _b19, _c, _d, _e, _f, _g, _h;
+    var _a20;
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("unified-provider-modal");
@@ -49123,7 +49124,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
     });
     if (!this.editing) {
       new import_obsidian17.Setting(contentEl).setName("Preset").addDropdown((dd) => {
-        var _a21, _b20;
+        var _a21, _b19;
         dd.addOption("", "Choose a preset...");
         for (const p of PRESETS) {
           dd.addOption(p.id, p.type === "Custom" ? "OpenAI-Compatible" : p.type);
@@ -49134,11 +49135,24 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
             this.provider.id = preset.id;
             this.provider.type = preset.type;
             this.provider.baseUrl = preset.baseUrl;
-            this.onOpen();
+            const scrollTop = contentEl.scrollTop;
+            this.modelFetchVersion++;
+            this.fetchedModelIds = [];
+            this.selectedModelIds.clear();
+            this.modelParams.clear();
+            this.expandedParams.clear();
+            this.pricingData = void 0;
+            this.renderLimit = _UnifiedProviderModal.MODEL_PAGE_SIZE;
+            updateProviderFields();
+            this.setFieldError(this.nameField, "");
+            this.setFieldError(this.baseUrlField, "");
+            connStatus.setText("");
+            this.renderModelList();
+            contentEl.scrollTop = scrollTop;
           }
         });
         if (this.provider.id) {
-          dd.setValue((_b20 = (_a21 = PRESETS.find((p) => p.type === this.provider.type)) == null ? void 0 : _a21.id) != null ? _b20 : "");
+          dd.setValue((_b19 = (_a21 = PRESETS.find((p) => p.type === this.provider.type)) == null ? void 0 : _a21.id) != null ? _b19 : "");
         }
       });
     }
@@ -49166,61 +49180,88 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
       });
     });
     geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
-    if (!isGeminiType((_a20 = this.provider.type) != null ? _a20 : "") && !isVertexType((_b19 = this.provider.type) != null ? _b19 : "") && !isCodexType((_c = this.provider.type) != null ? _c : "")) {
-      const isAzure = this.provider.type === "Azure";
-      const baseUrlSetting = new import_obsidian17.Setting(contentEl).setName("Base URL");
-      baseUrlSetting.controlEl.addClass("ac-settings-field");
-      baseUrlSetting.setDesc(isAzure ? "Azure OpenAI resource endpoint \u2014 no path, no api-version" : "OpenAI-compatible endpoint.").addText((text2) => {
-        var _a21;
-        this.baseUrlField = { input: text2.inputEl, error: baseUrlSetting.controlEl.createDiv("ac-setting-error") };
-        this.baseUrlField.error.setAttribute("aria-live", "polite");
-        text2.setPlaceholder(isAzure ? "https://<resource>.services.ai.azure.com" : "https://api.example.com/v1").setValue((_a21 = this.provider.baseUrl) != null ? _a21 : "").onChange((val) => {
-          this.provider.baseUrl = val;
-          if (geminiNativeSetting)
-            geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
-          if (val.trim())
-            this.setFieldError(this.baseUrlField, "");
-        });
+    const baseUrlSetting = new import_obsidian17.Setting(contentEl).setName("Base URL");
+    baseUrlSetting.controlEl.addClass("ac-settings-field");
+    baseUrlSetting.addText((text2) => {
+      var _a21;
+      this.baseUrlField = { input: text2.inputEl, error: baseUrlSetting.controlEl.createDiv("ac-setting-error") };
+      this.baseUrlField.error.setAttribute("aria-live", "polite");
+      text2.setValue((_a21 = this.provider.baseUrl) != null ? _a21 : "").onChange((val) => {
+        this.provider.baseUrl = val;
+        geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
+        if (val.trim())
+          this.setFieldError(this.baseUrlField, "");
       });
-    }
-    if (!isVertexType((_d = this.provider.type) != null ? _d : "") && !isCodexType((_e = this.provider.type) != null ? _e : "")) {
-      new import_obsidian17.Setting(contentEl).setName("API key").addText((text2) => {
-        var _a21;
-        text2.inputEl.type = "password";
-        text2.setPlaceholder("sk-...").setValue((_a21 = this.provider.apiKey) != null ? _a21 : "").onChange((val) => this.provider.apiKey = val);
+    });
+    let apiKeyInput;
+    const apiKeySetting = new import_obsidian17.Setting(contentEl).setName("API key").addText((text2) => {
+      var _a21;
+      apiKeyInput = text2.inputEl;
+      apiKeyInput.type = "password";
+      text2.setValue((_a21 = this.provider.apiKey) != null ? _a21 : "").onChange((val) => {
+        this.provider.apiKey = val;
       });
-    }
-    if (isVertexType((_f = this.provider.type) != null ? _f : "")) {
-      new import_obsidian17.Setting(contentEl).setName("Project ID").addText((text2) => {
-        var _a21;
-        text2.setValue((_a21 = this.provider.projectId) != null ? _a21 : "").onChange((val) => this.provider.projectId = val);
+    });
+    const projectSetting = new import_obsidian17.Setting(contentEl).setName("Project ID").addText((text2) => {
+      var _a21;
+      text2.setValue((_a21 = this.provider.projectId) != null ? _a21 : "").onChange((val) => {
+        this.provider.projectId = val;
       });
-      new import_obsidian17.Setting(contentEl).setName("Location").addText((text2) => {
-        var _a21;
-        text2.setValue((_a21 = this.provider.location) != null ? _a21 : "us-central1").onChange((val) => this.provider.location = val);
+    });
+    const locationSetting = new import_obsidian17.Setting(contentEl).setName("Location").addText((text2) => {
+      var _a21;
+      text2.setValue((_a21 = this.provider.location) != null ? _a21 : "us-central1").onChange((val) => {
+        this.provider.location = val;
       });
-      new import_obsidian17.Setting(contentEl).setName("Service Account JSON").addTextArea((ta) => {
-        var _a21;
-        ta.setValue((_a21 = this.provider.serviceAccountJson) != null ? _a21 : "").onChange((val) => this.provider.serviceAccountJson = val);
-        ta.inputEl.rows = 4;
-        ta.inputEl.style.width = "100%";
-        ta.inputEl.style.fontFamily = "monospace";
-        ta.inputEl.style.fontSize = "12px";
+    });
+    const serviceAccountSetting = new import_obsidian17.Setting(contentEl).setName("Service Account JSON").addTextArea((ta) => {
+      var _a21;
+      ta.setValue((_a21 = this.provider.serviceAccountJson) != null ? _a21 : "").onChange((val) => {
+        this.provider.serviceAccountJson = val;
       });
-    }
-    if (isCodexType((_g = this.provider.type) != null ? _g : "")) {
-      const detected = findCodexBinary(this.provider.binaryPath);
-      new import_obsidian17.Setting(contentEl).setName("Codex binary").setDesc(detected ? `Detected: ${detected}` : "Not found \u2014 install with `npm i -g @openai/codex` or set the path below.").addText((text2) => {
-        var _a21;
-        text2.setPlaceholder("/path/to/codex (optional override)").setValue((_a21 = this.provider.binaryPath) != null ? _a21 : "").onChange((val) => this.provider.binaryPath = val || void 0);
+      ta.inputEl.rows = 4;
+      ta.inputEl.style.width = "100%";
+      ta.inputEl.style.fontFamily = "monospace";
+      ta.inputEl.style.fontSize = "12px";
+    });
+    const codexSetting = new import_obsidian17.Setting(contentEl).setName("Codex binary").addText((text2) => {
+      var _a21;
+      text2.setPlaceholder("/path/to/codex (optional override)").setValue((_a21 = this.provider.binaryPath) != null ? _a21 : "").onChange((val) => {
+        this.provider.binaryPath = val || void 0;
       });
-    }
+    });
+    const updateProviderFields = () => {
+      var _a21, _b19;
+      const type = (_a21 = this.provider.type) != null ? _a21 : "";
+      const gemini = isGeminiType(type);
+      const vertex = isVertexType(type);
+      const codex = isCodexType(type);
+      const azure = type === "Azure";
+      this.nameField.input.value = type;
+      this.baseUrlField.input.value = (_b19 = this.provider.baseUrl) != null ? _b19 : "";
+      this.baseUrlField.input.placeholder = azure ? "https://<resource>.services.ai.azure.com" : "https://api.example.com/v1";
+      baseUrlSetting.setDesc(azure ? "Azure OpenAI resource endpoint \u2014 no path, no api-version" : "OpenAI-compatible endpoint.");
+      baseUrlSetting.settingEl.style.display = gemini || vertex || codex ? "none" : "";
+      apiKeyInput.placeholder = gemini ? "Google API key" : "sk-...";
+      apiKeySetting.settingEl.style.display = vertex || codex ? "none" : "";
+      for (const setting of [projectSetting, locationSetting, serviceAccountSetting]) {
+        setting.settingEl.style.display = vertex ? "" : "none";
+      }
+      codexSetting.settingEl.style.display = codex ? "" : "none";
+      if (codex) {
+        const detected = findCodexBinary(this.provider.binaryPath);
+        codexSetting.setDesc(detected ? `Detected: ${detected}` : "Not found \u2014 install with `npm i -g @openai/codex` or set the path below.");
+      }
+      geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
+    };
+    updateProviderFields();
     const connSetting = new import_obsidian17.Setting(contentEl);
     let connStatus;
     connSetting.addButton((btn) => {
       btn.buttonEl.addClass("provider-fetch-button");
       btn.setButtonText("Test & fetch models").onClick(async () => {
         var _a21;
+        const fetchVersion = this.modelFetchVersion;
         btn.setDisabled(true);
         btn.setButtonText("Fetching\u2026");
         connStatus == null ? void 0 : connStatus.setText("");
@@ -49234,18 +49275,27 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
             this.renderModelList();
             return;
           }
-          const models = await fetchProviderModels(this.provider);
+          const models = await fetchProviderModels({ ...this.provider });
+          if (fetchVersion !== this.modelFetchVersion)
+            return;
           this.fetchedModelIds = models;
           this.renderLimit = _UnifiedProviderModal.MODEL_PAGE_SIZE;
           connStatus == null ? void 0 : connStatus.setText(`Found ${models.length} models`);
           connStatus == null ? void 0 : connStatus.addClass("mod-success");
           connStatus == null ? void 0 : connStatus.removeClass("mod-warning");
           try {
-            this.pricingData = await fetchPricingForModels(models);
+            const pricing = await fetchPricingForModels(models);
+            if (fetchVersion !== this.modelFetchVersion)
+              return;
+            this.pricingData = pricing;
           } catch (e) {
           }
+          if (fetchVersion !== this.modelFetchVersion)
+            return;
           this.renderModelList();
         } catch (e) {
+          if (fetchVersion !== this.modelFetchVersion)
+            return;
           connStatus == null ? void 0 : connStatus.setText(`Failed: ${e}`);
           connStatus == null ? void 0 : connStatus.addClass("mod-warning");
           connStatus == null ? void 0 : connStatus.removeClass("mod-success");
@@ -49306,7 +49356,7 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
       cls: "mod-cta"
     });
     saveBtn.addEventListener("click", () => this.save());
-    (_h = contentEl.querySelector("input")) == null ? void 0 : _h.focus();
+    (_a20 = contentEl.querySelector("input")) == null ? void 0 : _a20.focus();
   }
   getFilteredModelIds() {
     return this.fetchedModelIds.filter((id) => this.filterText ? id.toLowerCase().includes(this.filterText) : true);
@@ -49347,38 +49397,44 @@ var _UnifiedProviderModal = class extends import_obsidian17.Modal {
   }
   renderModelRow(itemWrap, modelId) {
     var _a20;
-    itemWrap.empty();
     const row = itemWrap.createDiv({ cls: "model-check-item" });
     const cb = row.createEl("input", { type: "checkbox" });
     cb.checked = this.selectedModelIds.has(modelId);
     cb.addEventListener("change", () => {
-      if (cb.checked) {
+      if (cb.checked)
         this.selectedModelIds.add(modelId);
-      } else {
+      else
         this.selectedModelIds.delete(modelId);
-      }
-      this.renderModelRow(itemWrap, modelId);
+      updateParams();
     });
     row.createEl("span", { text: modelId, cls: "model-check-label" });
     const defs = getParamsForModel(modelId, (_a20 = this.provider.type) != null ? _a20 : "");
-    if (this.selectedModelIds.has(modelId) && defs.length) {
-      const gearBtn = row.createEl("button", {
-        text: "\u2699",
-        cls: "clickable-icon"
-      });
-      gearBtn.addEventListener("click", () => {
-        if (this.expandedParams.has(modelId)) {
-          this.expandedParams.delete(modelId);
-        } else {
-          this.expandedParams.add(modelId);
-        }
-        this.renderModelRow(itemWrap, modelId);
-      });
-      if (this.expandedParams.has(modelId)) {
-        const paramsContainer = itemWrap.createDiv({ cls: "model-params-editor" });
+    const gearBtn = defs.length ? row.createEl("button", { text: "\u2699", cls: "clickable-icon" }) : null;
+    const paramsContainer = defs.length ? itemWrap.createDiv({ cls: "model-params-editor" }) : null;
+    const updateParams = () => {
+      if (!gearBtn || !paramsContainer)
+        return;
+      gearBtn.style.visibility = cb.checked ? "" : "hidden";
+      gearBtn.disabled = !cb.checked;
+      const expanded = cb.checked && this.expandedParams.has(modelId);
+      gearBtn.setAttribute("aria-expanded", String(expanded));
+      paramsContainer.style.display = expanded ? "" : "none";
+      paramsContainer.empty();
+      if (expanded)
         this.renderParamsEditor(paramsContainer, modelId);
-      }
+    };
+    if (gearBtn) {
+      gearBtn.setAttribute("aria-label", `Parameters for ${modelId}`);
+      gearBtn.style.fontSize = "max(12px, var(--font-ui-small))";
+      gearBtn.addEventListener("click", () => {
+        if (this.expandedParams.has(modelId))
+          this.expandedParams.delete(modelId);
+        else
+          this.expandedParams.add(modelId);
+        updateParams();
+      });
     }
+    updateParams();
   }
   renderParamsEditor(container, modelId) {
     var _a20, _b19;

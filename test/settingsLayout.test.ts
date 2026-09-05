@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS } from "../src/settings/AugmentedCanvasSettings";
 import * as obsidian from "obsidian";
 import { probeProviderCapabilities } from "../src/utils/capabilityProbe";
 import { testMCPServer } from "../src/utils/mcpClient";
+import { fetchPricingForModels } from "../src/utils/pricingFetch";
 import { fetchProviderModels } from "../src/utils/modelFetch";
 import type { ProviderCapabilityReport } from "../src/utils/providerCapabilities";
 
@@ -13,6 +14,11 @@ vi.mock("../src/utils/capabilityProbe", () => ({ probeProviderCapabilities: vi.f
 
 vi.mock("../src/utils/mcpClient", () => ({ testMCPServer: vi.fn() }));
 vi.mock("../src/utils/modelFetch", () => ({ fetchProviderModels: vi.fn() }));
+vi.mock("../src/utils/pricingFetch", () => ({ fetchPricingForModels: vi.fn() }));
+vi.mock("../src/utils/codexCli", async importOriginal => ({
+	...await importOriginal<typeof import("../src/utils/codexCli")>(),
+	findCodexBinary: vi.fn(() => null),
+}));
 
 class Element {
 	children: Element[] = [];
@@ -21,6 +27,7 @@ class Element {
 	text = "";
 	checked = false;
 	value = "";
+	scrollTop = 0;
 	disabled = false;
 	attributes = new Map<string, string>();
 	style: Record<string, string> = {};
@@ -600,5 +607,133 @@ describe("settings rendering has no persistence side effects", () => {
 			}
 			expect(plugin.saveSettings).toHaveBeenCalledTimes(3);
 		}
+	});
+});
+
+
+describe("provider modal updates in place", () => {
+	it("retains the modal, inputs, focus and scroll while presets patch values and visibility", async () => {
+		const modal: any = new UnifiedProviderModal({} as any, vi.fn());
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		const children = [...root.children];
+		const inputs = root.querySelectorAll("input");
+		const preset = settingNamed(root, "Preset").querySelector("select")!;
+		const name = settingNamed(root, "Provider name").querySelector("input")!;
+		const base = settingNamed(root, "Base URL");
+		const url = base.querySelector("input")!;
+		const keySetting = settingNamed(root, "API key");
+		const key = keySetting.querySelector("input")!;
+		const list = root.querySelector(".model-checklist")!;
+		key.value = "test-key";
+		await key.listeners.get("input")!();
+		for (const [id, type, endpoint, hideUrl, hideKey] of [
+			["openai", "OpenAI", "https://api.openai.com/v1", false, false],
+			["groq", "Groq", "https://api.groq.com/openai/v1", false, false],
+			["gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta", true, false],
+			["vertex", "Vertex", "", true, true],
+			["codex", "Codex", "", true, true],
+			["azure", "Azure", "", false, false],
+			["openai", "OpenAI", "https://api.openai.com/v1", false, false],
+		] as const) {
+			preset.focus();
+			root.scrollTop = 137;
+			preset.value = id;
+			await preset.listeners.get("change")!();
+			expect(modal.contentEl).toBe(root);
+			expect(root.children).toEqual(children);
+			root.querySelectorAll("input").forEach((input, index) => expect(input).toBe(inputs[index]));
+			expect(name.value).toBe(type);
+			expect(url.value).toBe(endpoint);
+			expect(key.value).toBe("test-key");
+			expect((key as any).placeholder).toBe(id === "gemini" ? "Google API key" : "sk-...");
+			expect(base.style.display).toBe(hideUrl ? "none" : "");
+			expect(keySetting.style.display).toBe(hideKey ? "none" : "");
+			for (const field of ["Project ID", "Location", "Service Account JSON"]) {
+				expect(settingNamed(root, field).style.display).toBe(id === "vertex" ? "" : "none");
+			}
+			expect(settingNamed(root, "Codex binary").style.display).toBe(id === "codex" ? "" : "none");
+			expect(root.querySelector(".model-checklist")).toBe(list);
+			expect(document.activeElement).toBe(preset);
+			expect(root.scrollTop).toBe(137);
+		}
+	});
+
+	it("keeps model checkboxes and parameter buttons mounted through selection changes", async () => {
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave, {
+			id: "provider", type: "Gemini", enabled: true, baseUrl: "", apiKey: "test",
+		});
+		modal.fetchedModelIds = ["vertex/gemini-3.1-pro-preview"];
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		const list = root.querySelector(".model-checklist")!;
+		const row = list.querySelector(".model-check-item")!;
+		const checkbox = row.querySelector("input")!;
+		const gear = row.querySelector("button")!;
+		expect(gear.style.visibility).toBe("hidden");
+		for (const checked of [true, false, true]) {
+			checkbox.focus();
+			list.scrollTop = 42;
+			checkbox.checked = checked;
+			await checkbox.listeners.get("change")!();
+			expect(list.querySelector(".model-check-item")).toBe(row);
+			expect(row.querySelector("input")).toBe(checkbox);
+			expect(row.querySelector("button")).toBe(gear);
+			expect(gear.style.visibility).toBe(checked ? "" : "hidden");
+			expect(gear.disabled).toBe(!checked);
+			expect(document.activeElement).toBe(checkbox);
+			expect(list.scrollTop).toBe(42);
+		}
+		gear.focus();
+		await gear.listeners.get("click")!();
+		expect(document.activeElement).toBe(gear);
+		expect(gear.attributes.get("aria-expanded")).toBe("true");
+		expect(list.querySelector(".model-params-editor")!.style.display).toBe("");
+		modal.save();
+		expect(onSave.mock.calls[0][1]).toEqual([expect.objectContaining({ model: "vertex/gemini-3.1-pro-preview" })]);
+	});
+
+	it.each([false, true])("ignores a fetch for a previous preset (rejected: %s)", async rejected => {
+		let resolve!: (models: string[]) => void;
+		let reject!: (error: Error) => void;
+		vi.mocked(fetchProviderModels).mockReturnValue(new Promise((done, fail) => { resolve = done; reject = fail; }));
+		const modal: any = new UnifiedProviderModal({} as any, vi.fn());
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		const button = root.querySelector(".provider-fetch-button")!;
+		const pending = button.listeners.get("click")!();
+		const preset = settingNamed(root, "Preset").querySelector("select")!;
+		preset.value = "gemini";
+		await preset.listeners.get("change")!();
+		if (rejected) reject(new Error("Old request failed"));
+		else resolve(["old-provider-model"]);
+		await pending;
+		expect(root.querySelector(".model-checklist")!.textContent).toBe('Click "Test & fetch models" to load available models.');
+		expect(root.textContent).not.toContain("Old request failed");
+		expect(button.disabled).toBe(false);
+	});
+
+	it("clears old selections and ignores pricing that finishes after a preset switch", async () => {
+		vi.mocked(fetchProviderModels).mockResolvedValue(["old-provider-model"]);
+		let finish!: (pricing: any) => void;
+		vi.mocked(fetchPricingForModels).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave);
+		modal.selectedModelIds.add("old-provider-model");
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		const pending = root.querySelector(".provider-fetch-button")!.listeners.get("click")!();
+		await Promise.resolve();
+		expect(finish).toBeTypeOf("function");
+		const preset = settingNamed(root, "Preset").querySelector("select")!;
+		preset.value = "gemini";
+		await preset.listeners.get("change")!();
+		finish(new Map([["old-provider-model", { inputCostPerMillion: 1, outputCostPerMillion: 2 }]]));
+		await pending;
+		expect(modal.pricingData).toBeUndefined();
+		expect(root.querySelector(".model-checklist")!.textContent).not.toContain("old-provider-model");
+		modal.save();
+		expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ type: "Gemini" }), []);
 	});
 });

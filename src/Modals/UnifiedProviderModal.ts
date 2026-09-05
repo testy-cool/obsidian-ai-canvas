@@ -46,6 +46,7 @@ export class UnifiedProviderModal extends Modal {
 	private baseUrlField?: { input: HTMLInputElement; error: HTMLElement };
   private selectedModelIds: Set<string> = new Set();
   private fetchedModelIds: string[] = [];
+	private modelFetchVersion = 0;
   private customModelInput = "";
   private filterText = "";
   private renderLimit = UnifiedProviderModal.MODEL_PAGE_SIZE;
@@ -100,7 +101,20 @@ export class UnifiedProviderModal extends Modal {
             this.provider.id = preset.id;
             this.provider.type = preset.type;
             this.provider.baseUrl = preset.baseUrl;
-            this.onOpen(); // re-render
+						const scrollTop = contentEl.scrollTop;
+						this.modelFetchVersion++;
+						this.fetchedModelIds = [];
+						this.selectedModelIds.clear();
+						this.modelParams.clear();
+						this.expandedParams.clear();
+						this.pricingData = undefined;
+						this.renderLimit = UnifiedProviderModal.MODEL_PAGE_SIZE;
+						updateProviderFields();
+						this.setFieldError(this.nameField, "");
+						this.setFieldError(this.baseUrlField, "");
+						connStatus.setText("");
+						this.renderModelList();
+						contentEl.scrollTop = scrollTop;
           }
         });
         if (this.provider.id) {
@@ -137,94 +151,74 @@ export class UnifiedProviderModal extends Modal {
 				.onChange(value => { this.provider.geminiNative = value; }));
 		geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
 
-    // --- Base URL (hidden for Gemini/Vertex/Codex) ---
-    if (
-      !isGeminiType(this.provider.type ?? "") &&
-      !isVertexType(this.provider.type ?? "") &&
-      !isCodexType(this.provider.type ?? "")
-    ) {
-      const isAzure = this.provider.type === "Azure";
-			const baseUrlSetting = new Setting(contentEl).setName("Base URL");
-			baseUrlSetting.controlEl.addClass("ac-settings-field");
-			baseUrlSetting
-        .setDesc(
-          isAzure
-            ? "Azure OpenAI resource endpoint — no path, no api-version"
-            : "OpenAI-compatible endpoint."
-        )
-        .addText((text) => {
-					this.baseUrlField = { input: text.inputEl, error: baseUrlSetting.controlEl.createDiv("ac-setting-error") };
-					this.baseUrlField.error.setAttribute("aria-live", "polite");
-          text
-            .setPlaceholder(
-              isAzure
-                ? "https://<resource>.services.ai.azure.com"
-                : "https://api.example.com/v1"
-            )
-            .setValue(this.provider.baseUrl ?? "")
-            .onChange((val) => {
-							this.provider.baseUrl = val;
-							if (geminiNativeSetting) geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
-							if (val.trim()) this.setFieldError(this.baseUrlField, "");
-						});
-        });
-    }
+		// Keep provider fields mounted so preset changes retain focus and values.
+		const baseUrlSetting = new Setting(contentEl).setName("Base URL");
+		baseUrlSetting.controlEl.addClass("ac-settings-field");
+		baseUrlSetting.addText(text => {
+			this.baseUrlField = { input: text.inputEl, error: baseUrlSetting.controlEl.createDiv("ac-setting-error") };
+			this.baseUrlField.error.setAttribute("aria-live", "polite");
+			text.setValue(this.provider.baseUrl ?? "").onChange(val => {
+				this.provider.baseUrl = val;
+				geminiNativeSetting!.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
+				if (val.trim()) this.setFieldError(this.baseUrlField, "");
+			});
+		});
 
-    // --- API Key (hidden for Vertex/Codex) ---
-    if (!isVertexType(this.provider.type ?? "") && !isCodexType(this.provider.type ?? "")) {
-      new Setting(contentEl).setName("API key").addText((text) => {
-        text.inputEl.type = "password";
-        text
-          .setPlaceholder("sk-...")
-          .setValue(this.provider.apiKey ?? "")
-          .onChange((val) => (this.provider.apiKey = val));
-      });
-    }
+		let apiKeyInput!: HTMLInputElement;
+		const apiKeySetting = new Setting(contentEl).setName("API key").addText(text => {
+			apiKeyInput = text.inputEl;
+			apiKeyInput.type = "password";
+			text.setValue(this.provider.apiKey ?? "").onChange(val => { this.provider.apiKey = val; });
+		});
 
-    // --- Vertex-specific fields ---
-    if (isVertexType(this.provider.type ?? "")) {
-      new Setting(contentEl).setName("Project ID").addText((text) => {
-        text
-          .setValue(this.provider.projectId ?? "")
-          .onChange((val) => (this.provider.projectId = val));
-      });
+		const projectSetting = new Setting(contentEl).setName("Project ID").addText(text => {
+			text.setValue(this.provider.projectId ?? "").onChange(val => { this.provider.projectId = val; });
+		});
+		const locationSetting = new Setting(contentEl).setName("Location").addText(text => {
+			text.setValue(this.provider.location ?? "us-central1").onChange(val => { this.provider.location = val; });
+		});
+		const serviceAccountSetting = new Setting(contentEl).setName("Service Account JSON").addTextArea(ta => {
+			ta.setValue(this.provider.serviceAccountJson ?? "").onChange(val => { this.provider.serviceAccountJson = val; });
+			ta.inputEl.rows = 4;
+			ta.inputEl.style.width = "100%";
+			ta.inputEl.style.fontFamily = "monospace";
+			ta.inputEl.style.fontSize = "12px";
+		});
 
-      new Setting(contentEl).setName("Location").addText((text) => {
-        text
-          .setValue(this.provider.location ?? "us-central1")
-          .onChange((val) => (this.provider.location = val));
-      });
+		const codexSetting = new Setting(contentEl).setName("Codex binary").addText(text => {
+			text.setPlaceholder("/path/to/codex (optional override)")
+				.setValue(this.provider.binaryPath ?? "")
+				.onChange(val => { this.provider.binaryPath = val || undefined; });
+		});
 
-      new Setting(contentEl)
-        .setName("Service Account JSON")
-        .addTextArea((ta) => {
-          ta.setValue(this.provider.serviceAccountJson ?? "").onChange(
-            (val) => (this.provider.serviceAccountJson = val)
-          );
-          ta.inputEl.rows = 4;
-          ta.inputEl.style.width = "100%";
-          ta.inputEl.style.fontFamily = "monospace";
-          ta.inputEl.style.fontSize = "12px";
-        });
-    }
-
-    // --- Codex-specific fields ---
-    if (isCodexType(this.provider.type ?? "")) {
-      const detected = findCodexBinary(this.provider.binaryPath);
-      new Setting(contentEl)
-        .setName("Codex binary")
-        .setDesc(
-          detected
-            ? `Detected: ${detected}`
-            : "Not found — install with `npm i -g @openai/codex` or set the path below."
-        )
-        .addText((text) => {
-          text
-            .setPlaceholder("/path/to/codex (optional override)")
-            .setValue(this.provider.binaryPath ?? "")
-            .onChange((val) => (this.provider.binaryPath = val || undefined));
-        });
-    }
+		const updateProviderFields = () => {
+			const type = this.provider.type ?? "";
+			const gemini = isGeminiType(type);
+			const vertex = isVertexType(type);
+			const codex = isCodexType(type);
+			const azure = type === "Azure";
+			this.nameField!.input.value = type;
+			this.baseUrlField!.input.value = this.provider.baseUrl ?? "";
+			this.baseUrlField!.input.placeholder = azure
+				? "https://<resource>.services.ai.azure.com" : "https://api.example.com/v1";
+			baseUrlSetting.setDesc(azure
+				? "Azure OpenAI resource endpoint — no path, no api-version" : "OpenAI-compatible endpoint.");
+			baseUrlSetting.settingEl.style.display = gemini || vertex || codex ? "none" : "";
+			apiKeyInput.placeholder = gemini ? "Google API key" : "sk-...";
+			apiKeySetting.settingEl.style.display = vertex || codex ? "none" : "";
+			for (const setting of [projectSetting, locationSetting, serviceAccountSetting]) {
+				setting.settingEl.style.display = vertex ? "" : "none";
+			}
+			codexSetting.settingEl.style.display = codex ? "" : "none";
+			if (codex) {
+				const detected = findCodexBinary(this.provider.binaryPath);
+				codexSetting.setDesc(detected
+					? `Detected: ${detected}`
+					: "Not found — install with `npm i -g @openai/codex` or set the path below.");
+			}
+			geminiNativeSetting!.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
+		};
+		updateProviderFields();
 
     // --- Test connection + Fetch models ---
     const connSetting = new Setting(contentEl);
@@ -233,6 +227,7 @@ export class UnifiedProviderModal extends Modal {
     connSetting.addButton((btn: ButtonComponent) => {
 			btn.buttonEl.addClass("provider-fetch-button");
       btn.setButtonText("Test & fetch models").onClick(async () => {
+				const fetchVersion = this.modelFetchVersion;
         btn.setDisabled(true);
         btn.setButtonText("Fetching…");
         connStatus?.setText("");
@@ -251,7 +246,8 @@ export class UnifiedProviderModal extends Modal {
             return;
           }
 
-          const models = await fetchProviderModels(this.provider as LLMProvider);
+          const models = await fetchProviderModels({ ...this.provider } as LLMProvider);
+					if (fetchVersion !== this.modelFetchVersion) return;
           this.fetchedModelIds = models;
           this.renderLimit = UnifiedProviderModal.MODEL_PAGE_SIZE;
           connStatus?.setText(`Found ${models.length} models`);
@@ -260,13 +256,17 @@ export class UnifiedProviderModal extends Modal {
 
           // Auto-fetch pricing (best-effort)
           try {
-            this.pricingData = await fetchPricingForModels(models);
+						const pricing = await fetchPricingForModels(models);
+						if (fetchVersion !== this.modelFetchVersion) return;
+						this.pricingData = pricing;
           } catch {
             // Pricing is best-effort
           }
 
+					if (fetchVersion !== this.modelFetchVersion) return;
           this.renderModelList();
         } catch (e) {
+					if (fetchVersion !== this.modelFetchVersion) return;
           connStatus?.setText(`Failed: ${e}`);
           connStatus?.addClass("mod-warning");
           connStatus?.removeClass("mod-success");
@@ -392,44 +392,41 @@ export class UnifiedProviderModal extends Modal {
     }
   }
 
-  private renderModelRow(itemWrap: HTMLElement, modelId: string): void {
-    itemWrap.empty();
-    const row = itemWrap.createDiv({ cls: "model-check-item" });
-    const cb = row.createEl("input", { type: "checkbox" });
-    cb.checked = this.selectedModelIds.has(modelId);
-    cb.addEventListener("change", () => {
-      if (cb.checked) {
-        this.selectedModelIds.add(modelId);
-      } else {
-        this.selectedModelIds.delete(modelId);
-      }
-      // Re-render only this row: a full list rebuild on every click makes
-      // Obsidian churn through thousands of DOM nodes on large providers.
-      this.renderModelRow(itemWrap, modelId);
-    });
-    row.createEl("span", { text: modelId, cls: "model-check-label" });
+	private renderModelRow(itemWrap: HTMLElement, modelId: string): void {
+		const row = itemWrap.createDiv({ cls: "model-check-item" });
+		const cb = row.createEl("input", { type: "checkbox" });
+		cb.checked = this.selectedModelIds.has(modelId);
+		cb.addEventListener("change", () => {
+			if (cb.checked) this.selectedModelIds.add(modelId);
+			else this.selectedModelIds.delete(modelId);
+			updateParams();
+		});
+		row.createEl("span", { text: modelId, cls: "model-check-label" });
 
-    const defs = getParamsForModel(modelId, this.provider.type ?? "");
-    if (this.selectedModelIds.has(modelId) && defs.length) {
-      const gearBtn = row.createEl("button", {
-        text: "⚙",
-        cls: "clickable-icon",
-      });
-      gearBtn.addEventListener("click", () => {
-        if (this.expandedParams.has(modelId)) {
-          this.expandedParams.delete(modelId);
-        } else {
-          this.expandedParams.add(modelId);
-        }
-        this.renderModelRow(itemWrap, modelId);
-      });
-
-      if (this.expandedParams.has(modelId)) {
-        const paramsContainer = itemWrap.createDiv({ cls: "model-params-editor" });
-        this.renderParamsEditor(paramsContainer, modelId);
-      }
-    }
-  }
+		const defs = getParamsForModel(modelId, this.provider.type ?? "");
+		const gearBtn = defs.length ? row.createEl("button", { text: "⚙", cls: "clickable-icon" }) : null;
+		const paramsContainer = defs.length ? itemWrap.createDiv({ cls: "model-params-editor" }) : null;
+		const updateParams = () => {
+			if (!gearBtn || !paramsContainer) return;
+			gearBtn.style.visibility = cb.checked ? "" : "hidden";
+			gearBtn.disabled = !cb.checked;
+			const expanded = cb.checked && this.expandedParams.has(modelId);
+			gearBtn.setAttribute("aria-expanded", String(expanded));
+			paramsContainer.style.display = expanded ? "" : "none";
+			paramsContainer.empty();
+			if (expanded) this.renderParamsEditor(paramsContainer, modelId);
+		};
+		if (gearBtn) {
+			gearBtn.setAttribute("aria-label", `Parameters for ${modelId}`);
+			gearBtn.style.fontSize = "max(12px, var(--font-ui-small))";
+			gearBtn.addEventListener("click", () => {
+				if (this.expandedParams.has(modelId)) this.expandedParams.delete(modelId);
+				else this.expandedParams.add(modelId);
+				updateParams();
+			});
+		}
+		updateParams();
+	}
 
   private renderParamsEditor(container: HTMLElement, modelId: string): void {
     const type = this.provider.type ?? "";
