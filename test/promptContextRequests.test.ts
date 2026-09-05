@@ -15,7 +15,9 @@ import { DEFAULT_SETTINGS } from "../src/settings/AugmentedCanvasSettings";
 import { addModelIndicator, restoreModelIndicators, setupCanvasIndicatorPersistence } from "../src/utils";
 import { streamResponse } from "../src/utils/llm";
 import * as indicators from "../src/utils";
+import { getAllMCPTools } from "../src/utils/mcpClient";
 
+vi.mock("../src/utils/mcpClient", () => ({ getAllMCPTools: vi.fn() }));
 vi.mock("../src/data/prompts.csv.txt", () => ({ default: "act,prompt" }));
 vi.mock("../src/utils/llm", () => ({ streamResponse: vi.fn(), getResponse: vi.fn() }));
 vi.mock("../src/obsidian/canvas-patches", async (importOriginal) => ({
@@ -396,6 +398,58 @@ describe("context picker request paths", () => {
 		const css = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 		const rule = css.match(/\.ai-model-indicator\s*\{([^}]+)\}/)![1];
 		expect(rule).toMatch(/font-size:\s*12px !important;/);
+	});
+});
+
+describe("feature usage line", () => {
+	it("counts MCP calls without counting results or provider tools and retains its segments", async () => {
+		const { app, canvas, settings } = fixture(false);
+		settings.mcpEnabled = true;
+		settings.mcpServers = [{}];
+		vi.mocked(getAllMCPTools).mockResolvedValue({ lookup: {}, read: {}, write: {} });
+		let features: Element;
+		let segment: Element;
+		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
+			const response = canvas.nodes.get("response");
+			features = response.contentEl.querySelector(".ai-features-indicator")!;
+			segment = features.children[0];
+			expect(segment.textContent).toBe("🔧 MCP (3 tools, 0 calls)");
+			callback(null, null, { type: "tool-call", toolName: "lookup", toolCallId: "one" }, null);
+			callback(null, null, { type: "tool-result", toolCallId: "one", result: "done" }, null);
+			expect(segment.textContent).toBe("🔧 MCP (3 tools, 1 calls)");
+			callback(null, null, { type: "tool-call", toolName: "read", toolCallId: "two" }, null);
+			callback(null, null, { type: "tool-call", toolName: "google_search", toolCallId: "three" }, null);
+			callback("answer", null, null, null);
+			callback(null, { text: "answer" }, null, null);
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(canvas.nodes.get("response").contentEl.querySelector(".ai-features-indicator")).toBe(features!);
+		expect(features!.children).toEqual([segment!]);
+		expect(segment!.textContent).toBe("🔧 MCP (3 tools, 2 calls)");
+	});
+
+	it.each([
+		{ metadata: { google: { groundingMetadata: { webSearchQueries: ["test"] }, urlContextMetadata: { urlMetadata: [{ urlRetrievalStatus: "URL_RETRIEVAL_STATUS_SUCCESS" }] } } }, search: "used", url: "used" },
+		{ metadata: { google: { groundingMetadata: null, urlContextMetadata: null } }, search: "not used", url: "not used" },
+		{ metadata: { google: { groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.test" } }] }, urlContextMetadata: { urlMetadata: [{ urlRetrievalStatus: "URL_RETRIEVAL_STATUS_ERROR" }] } } }, search: "used", url: "retrieval failed" },
+		{ metadata: undefined, search: "usage unknown", url: "usage unknown" },
+	])("reports Search $search and URL Context $url from final metadata", async ({ metadata, search, url }) => {
+		const { app, canvas, settings, provider, model } = fixture(false);
+		provider.type = "Gemini";
+		model.model = "gemini-3-flash-preview";
+		let features: Element;
+		let segments: Element[];
+		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
+			features = canvas.nodes.get("response").contentEl.querySelector(".ai-features-indicator")!;
+			segments = [...features.children];
+			expect(segments.map(segment => segment.textContent)).toEqual(["🌐 URL Context: enabled", "🔍 Search: enabled"]);
+			callback("answer", null, null, null);
+			callback(null, { text: "answer", providerMetadata: Promise.resolve(metadata) }, null, null);
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(features!.children).toEqual(segments!);
+		expect(segments!.map(segment => segment.textContent)).toEqual([`🌐 URL Context: ${url}`, `🔍 Search: ${search}`]);
+		expect(canvas.nodes.get("response").contentEl.querySelector(".ai-features-indicator")).toBe(features!);
 	});
 });
 

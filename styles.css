@@ -803,17 +803,24 @@
 
 /* AI Features Indicator */
 .ai-features-indicator {
-	display: inline-flex;
+	display: flex;
+	width: 100%;
+	box-sizing: border-box;
 	align-items: center;
 	gap: 8px;
 	padding: 4px 10px;
 	margin-bottom: 8px;
-	font-size: var(--font-ui-smaller);
+	font-size: 12px;
 	font-weight: 500;
 	color: var(--text-muted);
 	background: var(--background-secondary-alt);
 	border-radius: var(--radius-s);
 	border: 1px solid var(--background-modifier-border);
+}
+
+.ai-features-indicator > span {
+	flex: 1;
+	min-width: 0;
 }
 
 /* HTML Preview */

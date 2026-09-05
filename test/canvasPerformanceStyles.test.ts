@@ -48,3 +48,12 @@ describe("tool pill sizing", () => {
 		expect(block(css, ".mcp-tools-container")).toContain("width: 100%;");
 	});
 });
+
+
+it("keeps the feature line at a fixed available width with 12px text", () => {
+	const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+	const features = block(css, ".ai-features-indicator");
+	expect(features).toContain("width: 100%;");
+	expect(features).toContain("font-size: 12px;");
+	expect(block(css, ".ai-features-indicator > span")).toContain("flex: 1;");
+});

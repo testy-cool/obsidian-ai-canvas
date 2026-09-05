@@ -48330,6 +48330,12 @@ ${nodeText}`);
         let reasoningEl;
         let toolsContainer;
         let featuresEl;
+        let mcpFeature;
+        let urlFeature;
+        let searchFeature;
+        let featureUpdate;
+        let mcpCallCount = 0;
+        const countedCalls = /* @__PURE__ */ new Set();
         let firstDelta = true;
         let lastResizeAt = Date.now();
         const toolRefs = /* @__PURE__ */ new Map();
@@ -48339,6 +48345,15 @@ ${nodeText}`);
         const canUseGoogleTools = supportsGoogleTools(model.model) && !hasMcpTools;
         const usesUrlContext = capabilities.urlContext && canUseGoogleTools;
         const usesSearchGrounding = capabilities.search && canUseGoogleTools;
+        if (hasMcpTools || usesUrlContext || usesSearchGrounding) {
+          featuresEl = created.contentEl.createEl("div", { cls: "ai-features-indicator" });
+          if (hasMcpTools)
+            mcpFeature = featuresEl.createEl("span", { text: `\u{1F527} MCP (${mcpToolCount} tools, 0 calls)` });
+          if (usesUrlContext)
+            urlFeature = featuresEl.createEl("span", { text: "\u{1F310} URL Context: enabled" });
+          if (usesSearchGrounding)
+            searchFeature = featuresEl.createEl("span", { text: "\u{1F50D} Search: enabled" });
+        }
         const truncateText2 = (text2, maxLen = 100) => {
           if (!text2)
             return "";
@@ -48356,17 +48371,6 @@ ${nodeText}`);
           var _a21, _b20, _c2, _d2, _e2, _f2, _g2, _h, _i;
           if (firstDelta) {
             created.setText("");
-            if (hasMcpTools || usesUrlContext || usesSearchGrounding) {
-              featuresEl = created.contentEl.createEl("div", { cls: "ai-features-indicator" });
-              const features = [];
-              if (hasMcpTools)
-                features.push(`\u{1F527} MCP (${mcpToolCount} tools)`);
-              if (usesUrlContext)
-                features.push("\u{1F310} URL Context");
-              if (usesSearchGrounding)
-                features.push("\u{1F50D} Search");
-              featuresEl.setText(features.join(" \xB7 "));
-            }
             const details = created.contentEl.createEl("details");
             details.createEl("summary", { text: "Reasoning" });
             reasoningEl = details.createEl("div", { cls: "reasoning" });
@@ -48377,6 +48381,12 @@ ${nodeText}`);
             reasoningEl.setText(reasoningEl.getText() + reasoningDelta);
           }
           if (tool3) {
+            if (tool3.type === "tool-call" && tool3.toolName && (mcpTools == null ? void 0 : mcpTools[tool3.toolName]) && (!tool3.toolCallId || !countedCalls.has(tool3.toolCallId))) {
+              mcpCallCount++;
+              if (tool3.toolCallId)
+                countedCalls.add(tool3.toolCallId);
+            }
+            mcpFeature == null ? void 0 : mcpFeature.setText(`\u{1F527} MCP (${mcpToolCount} tools, ${mcpCallCount} calls)`);
             switch (tool3.type) {
               case "tool-call": {
                 const toolEl = toolsContainer.createEl("details", { cls: "mcp-tool-call" });
@@ -48430,6 +48440,20 @@ ${nodeText}`);
             }
           }
           if (final) {
+            featureUpdate = Promise.resolve(final.providerMetadata).then((metadata) => {
+              var _a26, _b21, _c3;
+              const google3 = metadata == null ? void 0 : metadata.google;
+              const grounding = google3 == null ? void 0 : google3.groundingMetadata;
+              const searchUsed = ((_a26 = grounding == null ? void 0 : grounding.webSearchQueries) == null ? void 0 : _a26.length) > 0 || ((_b21 = grounding == null ? void 0 : grounding.groundingChunks) == null ? void 0 : _b21.some((chunk) => chunk.web));
+              const searchState = google3 && "groundingMetadata" in google3 ? searchUsed ? "used" : "not used" : "usage unknown";
+              const urls = (_c3 = google3 == null ? void 0 : google3.urlContextMetadata) == null ? void 0 : _c3.urlMetadata;
+              const urlState = google3 && "urlContextMetadata" in google3 ? (urls == null ? void 0 : urls.some((url2) => url2.urlRetrievalStatus === "URL_RETRIEVAL_STATUS_SUCCESS")) ? "used" : (urls == null ? void 0 : urls.length) ? "retrieval failed" : "not used" : "usage unknown";
+              searchFeature == null ? void 0 : searchFeature.setText(`\u{1F50D} Search: ${searchState}`);
+              urlFeature == null ? void 0 : urlFeature.setText(`\u{1F310} URL Context: ${urlState}`);
+            }).catch(() => {
+              searchFeature == null ? void 0 : searchFeature.setText("\u{1F50D} Search: usage unknown");
+              urlFeature == null ? void 0 : urlFeature.setText("\u{1F310} URL Context: usage unknown");
+            });
             (_e2 = created.nodeEl) == null ? void 0 : _e2.removeClass("ai-generating");
             const finalDimensions = calculateNoteDimensions(created.text);
             created.moveAndResize({
@@ -48447,10 +48471,13 @@ ${nodeText}`);
               console.log("[HTML Preview] Preview element created:", !!previewEl);
             }
           }
+          if (featuresEl && !created.contentEl.contains(featuresEl))
+            created.contentEl.appendChild(featuresEl);
           if (!created.contentEl.contains(toolsContainer))
             created.contentEl.appendChild(toolsContainer);
           setModelIndicatorText(created, provider.type, model.model, !final);
         });
+        await featureUpdate;
         if (isNewNode) {
           await maybeAutoGenerateCardTitle(app, settings2, created);
         }

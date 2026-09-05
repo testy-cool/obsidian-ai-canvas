@@ -733,7 +733,13 @@ export function noteGenerator(
 
 				let reasoningEl: HTMLElement;
 				let toolsContainer: HTMLElement;
-				let featuresEl: HTMLElement;
+				let featuresEl: HTMLElement | undefined;
+				let mcpFeature: HTMLElement | undefined;
+				let urlFeature: HTMLElement | undefined;
+				let searchFeature: HTMLElement | undefined;
+				let featureUpdate: Promise<void> | undefined;
+				let mcpCallCount = 0;
+				const countedCalls = new Set<string>();
 				let firstDelta = true;
 				let lastResizeAt = Date.now();
 				const toolRefs = new Map<string, HTMLElement>();
@@ -745,6 +751,13 @@ export function noteGenerator(
 				const canUseGoogleTools = supportsGoogleTools(model.model) && !hasMcpTools;
 				const usesUrlContext = capabilities.urlContext && canUseGoogleTools;
 				const usesSearchGrounding = capabilities.search && canUseGoogleTools;
+
+				if (hasMcpTools || usesUrlContext || usesSearchGrounding) {
+					featuresEl = created.contentEl.createEl("div", { cls: "ai-features-indicator" });
+					if (hasMcpTools) mcpFeature = featuresEl.createEl("span", { text: `🔧 MCP (${mcpToolCount} tools, 0 calls)` });
+					if (usesUrlContext) urlFeature = featuresEl.createEl("span", { text: "🌐 URL Context: enabled" });
+					if (usesSearchGrounding) searchFeature = featuresEl.createEl("span", { text: "🔍 Search: enabled" });
+				}
 
 				const truncateText = (text: string, maxLen = 100) => {
 					if (!text) return "";
@@ -767,15 +780,6 @@ export function noteGenerator(
 						if (firstDelta) {
 							created.setText("");
 
-							// Show active features indicator
-							if (hasMcpTools || usesUrlContext || usesSearchGrounding) {
-								featuresEl = created.contentEl.createEl("div", { cls: "ai-features-indicator" });
-								const features: string[] = [];
-								if (hasMcpTools) features.push(`🔧 MCP (${mcpToolCount} tools)`);
-								if (usesUrlContext) features.push("🌐 URL Context");
-								if (usesSearchGrounding) features.push("🔍 Search");
-								featuresEl.setText(features.join(" · "));
-							}
 
 							const details = created.contentEl.createEl("details");
 							details.createEl("summary", { text: "Reasoning" });
@@ -792,6 +796,12 @@ export function noteGenerator(
 
 						// Handle MCP tool events
 						if (tool) {
+							if (tool.type === "tool-call" && tool.toolName && mcpTools?.[tool.toolName] &&
+								(!tool.toolCallId || !countedCalls.has(tool.toolCallId))) {
+								mcpCallCount++;
+								if (tool.toolCallId) countedCalls.add(tool.toolCallId);
+							}
+							mcpFeature?.setText(`🔧 MCP (${mcpToolCount} tools, ${mcpCallCount} calls)`);
 							switch (tool.type) {
 								case 'tool-call': {
 									const toolEl = toolsContainer.createEl("details", { cls: "mcp-tool-call" });
@@ -851,6 +861,23 @@ export function noteGenerator(
 						}
 
 						if (final) {
+							featureUpdate = Promise.resolve(final.providerMetadata).then((metadata) => {
+								const google = metadata?.google;
+								const grounding = google?.groundingMetadata;
+								const searchUsed = grounding?.webSearchQueries?.length > 0 ||
+									grounding?.groundingChunks?.some((chunk: any) => chunk.web);
+								const searchState = google && "groundingMetadata" in google
+									? (searchUsed ? "used" : "not used") : "usage unknown";
+								const urls = google?.urlContextMetadata?.urlMetadata;
+								const urlState = google && "urlContextMetadata" in google
+									? (urls?.some((url: any) => url.urlRetrievalStatus === "URL_RETRIEVAL_STATUS_SUCCESS")
+										? "used" : urls?.length ? "retrieval failed" : "not used") : "usage unknown";
+								searchFeature?.setText(`🔍 Search: ${searchState}`);
+								urlFeature?.setText(`🌐 URL Context: ${urlState}`);
+							}).catch(() => {
+								searchFeature?.setText("🔍 Search: usage unknown");
+								urlFeature?.setText("🌐 URL Context: usage unknown");
+							});
 							created.nodeEl?.removeClass("ai-generating");
 							// Final resize to ensure optimal dimensions
 							const finalDimensions = calculateNoteDimensions(created.text);
@@ -871,10 +898,13 @@ export function noteGenerator(
 								console.log("[HTML Preview] Preview element created:", !!previewEl);
 							}
 						}
+						if (featuresEl && !created.contentEl.contains(featuresEl)) created.contentEl.appendChild(featuresEl);
 						if (!created.contentEl.contains(toolsContainer)) created.contentEl.appendChild(toolsContainer);
 						setModelIndicatorText(created, provider.type, model.model, !final);
 					}
 				);
+
+				await featureUpdate;
 
 				if (isNewNode) {
 					await maybeAutoGenerateCardTitle(app, settings, created);
