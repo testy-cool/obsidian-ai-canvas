@@ -34,6 +34,11 @@ Google (Gemini) · OpenAI · Anthropic · Vertex AI · OpenRouter · Groq · Oll
 3. Right-click → "Ask AI"
 4. Response appears in connected note
 
+## Development
+
+See the [local development workflow](docs/development-workflow.md) for the source
+map, verification steps, commit guidance, installation and rollback procedure.
+
 ## Credits
 
 Based on [MetaCorp/obsidian-augmented-canvas](https://github.com/MetaCorp/obsidian-augmented-canvas)
