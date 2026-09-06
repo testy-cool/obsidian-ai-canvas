@@ -28,7 +28,6 @@ describe("canvas sizing and motion", () => {
 		const withoutMotion = css.replace(motion, "");
 		if (path === "styles.css") {
 			expect(block(motion, ".ai-generation-mark")).toContain("animation: ai-generation-breathe");
-			expect(block(motion, ".ai-generation-skeleton span::after")).toContain("animation: ai-generation-shimmer");
 			expect(withoutMotion).not.toContain("animation: ai-generation-");
 		}
 		expect(withoutMotion).not.toMatch(/transition:/);

@@ -15,11 +15,9 @@ export function createGenerationStatus(
 	root.createEl("div", { cls: "ai-generation-mark", text: "✦" }).setAttribute("aria-hidden", "true");
 	const phase = root.createEl("div", { cls: "ai-generation-phase", text: "Generating…" });
 	phase.setAttribute("role", "status");
-	root.createEl("div", { cls: "ai-generation-model", text: `${provider} • ${model}` });
-	root.createEl("div", { cls: "ai-generation-context", text: `${contextCount} ${contextCount === 1 ? "card" : "cards"} in context` });
-	const skeleton = root.createEl("div", { cls: "ai-generation-skeleton" });
-	skeleton.setAttribute("aria-hidden", "true");
-	for (let i = 0; i < 3; i++) skeleton.createEl("span");
+	const details = root.createEl("div", { cls: "ai-generation-details" });
+	details.createEl("div", { cls: "ai-generation-model", text: `${provider} • ${model}` });
+	details.createEl("div", { cls: "ai-generation-context", text: `${contextCount} ${contextCount === 1 ? "card" : "cards"} in context` });
 	const controls = root.createEl("div", { cls: "ai-generation-controls" });
 	const elapsed = controls.createEl("span", { cls: "ai-generation-timer", text: "0s" });
 	const stop = controls.createEl("button", { cls: "ai-generation-stop", text: "Stop" });

@@ -535,7 +535,7 @@
 }
 
 .ai-card-ui-host {
-	--ai-card-ui-padding: 24px;
+	--ai-card-ui-padding: 32px;
 }
 
 .ai-model-indicator {
@@ -646,7 +646,7 @@
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 10px;
+	gap: 20px;
 	text-align: center;
 	border-radius: var(--radius-m);
 	background: linear-gradient(rgba(var(--canvas-color, 139, 124, 196), 0.07), rgba(var(--canvas-color, 139, 124, 196), 0.07)), var(--background-primary);
@@ -658,16 +658,21 @@
 }
 
 .ai-generation-mark {
-	font-size: 30px;
+	font-size: 24px;
 	line-height: 1.2;
 	color: var(--text-accent);
-	margin-bottom: 6px;
 }
 
 .ai-generation-phase {
 	font-size: 16px;
 	font-weight: 600;
 	overflow-wrap: anywhere;
+}
+
+.ai-generation-details {
+	display: grid;
+	gap: 4px;
+	width: 100%;
 }
 
 .ai-generation-model {
@@ -694,7 +699,6 @@
 	align-items: center;
 	justify-content: center;
 	gap: 12px;
-	margin-top: 12px;
 }
 
 .ai-generation-stop {
@@ -709,51 +713,26 @@
 	outline-offset: 3px;
 }
 
-.ai-generation-skeleton {
-	display: grid;
-	gap: 8px;
-	width: 100%;
-	max-width: 200px;
-	margin-top: 14px;
-}
-
-.ai-generation-skeleton span {
-	display: block;
-	position: relative;
-	height: 8px;
-	border-radius: 4px;
-	background: var(--background-modifier-border);
-	overflow: hidden;
-}
-
-.ai-generation-skeleton span:nth-child(2) { width: 82%; }
-.ai-generation-skeleton span:nth-child(3) { width: 58%; }
-
-.ai-generation-skeleton span::after {
-	content: "";
-	position: absolute;
-	inset: 0;
-	transform: translateX(-100%);
-	background: linear-gradient(90deg, transparent, var(--background-modifier-hover), transparent);
-}
-
 .ai-generation-status[data-state="streaming"] {
 	inset: 12px var(--ai-card-ui-padding) auto;
 	padding: 0;
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
 	gap: 6px 10px;
 	text-align: left;
 	background: none;
 }
 
 .ai-generation-status[data-state="streaming"] .ai-generation-mark,
-.ai-generation-status[data-state="streaming"] .ai-generation-context,
-.ai-generation-status[data-state="streaming"] .ai-generation-skeleton { display: none; }
+.ai-generation-status[data-state="streaming"] .ai-generation-details { display: none; }
 
 .ai-generation-status[data-state="streaming"] .ai-generation-phase {
 	grid-area: 1 / 1;
 	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .ai-generation-status[data-state="streaming"] .ai-generation-controls {
@@ -762,17 +741,9 @@
 	gap: 8px;
 }
 
-.ai-generation-status[data-state="streaming"] .ai-generation-model {
-	grid-area: 2 / 1 / auto / span 2;
-	font-size: 12px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
 .canvas-node.ai-generation-streaming .canvas-node-content {
 	box-sizing: border-box;
-	padding-top: 76px;
+	padding-top: 60px;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -796,17 +767,9 @@
 		animation: ai-generation-breathe 2s ease-in-out infinite;
 	}
 
-	.ai-generation-skeleton span::after {
-		animation: ai-generation-shimmer 2s ease-in-out infinite;
-	}
-
 	@keyframes ai-generation-breathe {
 		0%, 100% { opacity: 0.55; transform: scale(1); }
 		50% { opacity: 1; transform: scale(1.08); }
-	}
-
-	@keyframes ai-generation-shimmer {
-		to { transform: translateX(100%); }
 	}
 
 	@keyframes ai-image-pulse {
