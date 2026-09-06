@@ -716,7 +716,7 @@ export function noteGenerator(
 				// Render this card before attaching UI, without selecting or focusing it.
 				created.render();
 				addModelIndicator(created, provider.type, model.model, true);
-				generationStatus = createGenerationStatus(created, provider.type, model.model, contextCount, controller);
+				generationStatus = createGenerationStatus(created, controller);
 
 				const isGpt = provider?.type === "OpenAI";
 				let noticeMessage = `Sending ${messages.length} notes to the AI`;

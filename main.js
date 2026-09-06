@@ -50603,18 +50603,14 @@ var addGenerateGroupNameButton = (app, settings2, menuEl) => {
 
 // src/utils/generationStatus.ts
 var activeGenerations = /* @__PURE__ */ new Set();
-function createGenerationStatus(node, provider, model, contextCount, controller) {
+function createGenerationStatus(node, controller) {
   var _a20;
   const host = (_a20 = node.nodeEl) != null ? _a20 : node.contentEl;
   host.addClass("ai-card-ui-host", "ai-generating");
   const root = host.createEl("div", { cls: "ai-generation-status" });
   root.setAttribute("data-state", "waiting");
-  root.createEl("div", { cls: "ai-generation-mark", text: "\u2726" }).setAttribute("aria-hidden", "true");
   const phase = root.createEl("div", { cls: "ai-generation-phase", text: "Generating\u2026" });
   phase.setAttribute("role", "status");
-  const details = root.createEl("div", { cls: "ai-generation-details" });
-  details.createEl("div", { cls: "ai-generation-model", text: `${provider} \u2022 ${model}` });
-  details.createEl("div", { cls: "ai-generation-context", text: `${contextCount} ${contextCount === 1 ? "card" : "cards"} in context` });
   const controls = root.createEl("div", { cls: "ai-generation-controls" });
   const elapsed = controls.createEl("span", { cls: "ai-generation-timer", text: "0s" });
   const stop = controls.createEl("button", { cls: "ai-generation-stop", text: "Stop" });
@@ -51630,7 +51626,7 @@ ${nodeText}`);
       try {
         created.render();
         addModelIndicator(created, provider.type, model.model, true);
-        generationStatus = createGenerationStatus(created, provider.type, model.model, contextCount, controller);
+        generationStatus = createGenerationStatus(created, controller);
         const isGpt = (provider == null ? void 0 : provider.type) === "OpenAI";
         let noticeMessage = `Sending ${messages.length} notes to the AI`;
         if (isGpt) {

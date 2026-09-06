@@ -3,21 +3,14 @@ const activeGenerations = new Set<() => void>();
 /** Runtime UI only: loading placeholders never become prompt/card text. */
 export function createGenerationStatus(
 	node: any,
-	provider: string,
-	model: string,
-	contextCount: number,
 	controller: AbortController
 ) {
 	const host: HTMLElement = node.nodeEl ?? node.contentEl;
 	host.addClass("ai-card-ui-host", "ai-generating");
 	const root = host.createEl("div", { cls: "ai-generation-status" });
 	root.setAttribute("data-state", "waiting");
-	root.createEl("div", { cls: "ai-generation-mark", text: "✦" }).setAttribute("aria-hidden", "true");
 	const phase = root.createEl("div", { cls: "ai-generation-phase", text: "Generating…" });
 	phase.setAttribute("role", "status");
-	const details = root.createEl("div", { cls: "ai-generation-details" });
-	details.createEl("div", { cls: "ai-generation-model", text: `${provider} • ${model}` });
-	details.createEl("div", { cls: "ai-generation-context", text: `${contextCount} ${contextCount === 1 ? "card" : "cards"} in context` });
 	const controls = root.createEl("div", { cls: "ai-generation-controls" });
 	const elapsed = controls.createEl("span", { cls: "ai-generation-timer", text: "0s" });
 	const stop = controls.createEl("button", { cls: "ai-generation-stop", text: "Stop" });

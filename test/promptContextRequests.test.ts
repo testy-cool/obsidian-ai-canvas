@@ -672,15 +672,15 @@ describe("provider media input", () => {
 });
 
 describe("in-card generation state", () => {
-	it("shows the model, context and elapsed time until the first answer", async () => {
+	it("shows a quiet status and elapsed time until the first answer", async () => {
 		const { app, canvas, settings } = fixture();
 		vi.mocked(streamResponse).mockImplementation(async (_provider, _messages, _options, callback) => {
 			const response = canvas.nodes.get("response");
 			const status = response.nodeEl.querySelector(".ai-generation-status")!;
 			expect(status).not.toBeNull();
 			expect(status.attributes.get("data-state")).toBe("waiting");
-			expect(status.querySelector(".ai-generation-model")!.textContent).toContain("test-model");
-			expect(status.querySelector(".ai-generation-context")!.textContent).toBe("3 cards in context");
+			expect(status.children).toHaveLength(2);
+			expect(status.querySelector(".ai-generation-phase")!.textContent).toBe("Generating…");
 			expect(status.querySelector(".ai-generation-timer")!.textContent).toBe("0s");
 			await vi.advanceTimersByTimeAsync(3000);
 			expect(status.querySelector(".ai-generation-timer")!.textContent).toBe("3s");
