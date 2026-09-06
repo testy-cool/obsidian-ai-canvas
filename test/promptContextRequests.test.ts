@@ -16,6 +16,7 @@ import { addModelIndicator, restoreModelIndicators, setupCanvasIndicatorPersiste
 import { streamResponse } from "../src/utils/llm";
 import * as indicators from "../src/utils";
 import { getAllMCPTools } from "../src/utils/mcpClient";
+import { cancelActiveGenerations } from "../src/utils/generationStatus";
 
 vi.mock("../src/utils/mcpClient", () => ({ getAllMCPTools: vi.fn() }));
 vi.mock("../src/data/prompts.csv.txt", () => ({ default: "act,prompt" }));
@@ -44,7 +45,8 @@ class Element {
 		this.appendChild(child);
 		return child;
 	}
-	appendChild(child: Element) { child.parent = this; this.children.push(child); }
+	get parentElement() { return this.parent; }
+	appendChild(child: Element) { child.remove(); child.parent = this; this.children.push(child); }
 	querySelector(selector: string): Element | null {
 		for (const child of this.children) {
 			if (child.className.split(" ").includes(selector.slice(1))) return child;
@@ -60,7 +62,7 @@ class Element {
 	setText(text: string) { this.textContent = text; }
 	empty() { this.children = []; this.textContent = ""; }
 	getText() { return this.textContent; }
-	addClass(name: string) { this.className = `${this.className} ${name}`.trim(); }
+	addClass(...names: string[]) { this.className = `${this.className} ${names.join(" ")}`.trim(); }
 	removeClass(...names: string[]) { this.className = this.className.split(" ").filter(value => !names.includes(value)).join(" "); }
 	contains(child: Element): boolean { return this.children.some(entry => entry === child || entry.contains(child)); }
 }
@@ -119,7 +121,7 @@ const fixture = (ancestors = true) => {
 	return { app, canvas, prompt, settings, events, provider, model };
 };
 
-const badge = (node: any) => node.contentEl.querySelector(".ai-model-indicator") as Element;
+const badge = (node: any) => node.nodeEl.querySelector(".ai-model-indicator") as Element;
 const run = async (action: () => unknown) => {
 	const result = action();
 	await vi.advanceTimersByTimeAsync(250);
@@ -139,6 +141,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	cancelActiveGenerations();
 	vi.restoreAllMocks();
 	vi.clearAllMocks();
 	vi.unstubAllGlobals();
@@ -271,7 +274,7 @@ describe("context picker request paths", () => {
 		const { prompt, canvas } = fixture(false);
 		prompt.setData({ ai_provider: "Custom", ai_model: "test", ...(notes.length ? { ai_notes: notes } : {}) });
 		addModelIndicator(prompt, "Custom", "test");
-		const lines = () => prompt.contentEl.querySelector(".ai-card-notes")?.children.map((line: Element) => line.textContent) ?? [];
+		const lines = () => prompt.nodeEl.querySelector(".ai-card-notes")?.children.map((line: Element) => line.textContent) ?? [];
 		expect(lines()).toEqual(notes);
 		prompt.contentEl.children = [];
 		restoreModelIndicators(canvas);
@@ -280,8 +283,8 @@ describe("context picker request paths", () => {
 		const reloaded = canvas.makeNode("reloaded", "answer");
 		reloaded.setData(saved);
 		restoreModelIndicators(canvas);
-		expect(reloaded.contentEl.querySelector(".ai-card-notes")?.children.map((line: Element) => line.textContent) ?? []).toEqual(notes);
-		if (!notes.length) expect(prompt.contentEl.querySelector(".ai-card-notes")).toBeNull();
+		expect(reloaded.nodeEl.querySelector(".ai-card-notes")?.children.map((line: Element) => line.textContent) ?? []).toEqual(notes);
+		if (!notes.length) expect(prompt.nodeEl.querySelector(".ai-card-notes")).toBeNull();
 	});
 
 	it("reserves the final and loading labels from the first frame", () => {
@@ -425,7 +428,7 @@ describe("context picker request paths", () => {
 		expect(response.getData().ai_context_count).toBe(3);
 	});
 
-	it("shows a 12px context badge during streaming and restores it through canvas events", async () => {
+	it("keeps the context badge during streaming and restores it through canvas events", async () => {
 		const { app, canvas, settings, events } = fixture();
 		const cleanup = setupCanvasIndicatorPersistence(app);
 		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
@@ -433,7 +436,6 @@ describe("context picker request paths", () => {
 			expect(badge(response).querySelector(".ai-model-indicator-label")!.textContent).toBe("3 cards • generating");
 			callback("ANSWER", null, null, null);
 			expect(badge(response).querySelector(".ai-model-indicator-label")!.textContent).toBe("3 cards • generating");
-			expect(badge(response).style.cssText).toMatch(/font-size: 12px;/);
 			response.contentEl.children = [];
 			events.get("layout-change")!();
 			await vi.advanceTimersByTimeAsync(100);
@@ -449,7 +451,6 @@ describe("context picker request paths", () => {
 		events.get("active-leaf-change")!();
 		await vi.advanceTimersByTimeAsync(100);
 		expect(badge(reloaded).querySelector(".ai-model-indicator-label")!.textContent).toBe("3 cards • Custom • test-model");
-		expect(badge(reloaded).style.cssText).toMatch(/font-size: 12px;/);
 		cleanup();
 	});
 
@@ -582,7 +583,7 @@ describe("provider media input", () => {
 		await run(() => noteGenerator(app, settings).generateNote());
 		const response = canvas.nodes.get("response");
 		expect(response.getData().ai_notes).toEqual(["Skipped attachment.mp4, 24.0 MB exceeds the 20.0 MB limit"]);
-		expect(response.contentEl.querySelector(".ai-card-notes")!.children[0].textContent).toBe(response.getData().ai_notes[0]);
+		expect(response.nodeEl.querySelector(".ai-card-notes")!.children[0].textContent).toBe(response.getData().ai_notes[0]);
 		expect(app.vault.readBinary).not.toHaveBeenCalled();
 	});
 
@@ -667,5 +668,120 @@ describe("provider media input", () => {
 		attachFile(app, prompt, "mp4");
 		await run(() => noteGenerator(app, settings).generateNote());
 		expect(sentParts()).toContainEqual({ type: "file", data: "AQIDBA==", mediaType: "video/mp4", filename: "attachment" });
+	});
+});
+
+describe("in-card generation state", () => {
+	it("shows the model, context and elapsed time until the first answer", async () => {
+		const { app, canvas, settings } = fixture();
+		vi.mocked(streamResponse).mockImplementation(async (_provider, _messages, _options, callback) => {
+			const response = canvas.nodes.get("response");
+			const status = response.nodeEl.querySelector(".ai-generation-status")!;
+			expect(status).not.toBeNull();
+			expect(status.attributes.get("data-state")).toBe("waiting");
+			expect(status.querySelector(".ai-generation-model")!.textContent).toContain("test-model");
+			expect(status.querySelector(".ai-generation-context")!.textContent).toBe("3 cards in context");
+			expect(status.querySelector(".ai-generation-timer")!.textContent).toBe("0s");
+			await vi.advanceTimersByTimeAsync(3000);
+			expect(status.querySelector(".ai-generation-timer")!.textContent).toBe("3s");
+			expect(response.text).toBe("");
+			callback(null, null, null, "Checking context.");
+			expect(status.querySelector(".ai-generation-phase")!.textContent).toBe("Thinking…");
+			callback(null, null, { type: "tool-call", toolName: "lookup", toolCallId: "one" }, null);
+			expect(status.querySelector(".ai-generation-phase")!.textContent).toBe("Using lookup…");
+			callback("Answer", null, null, null);
+			expect(status.attributes.get("data-state")).toBe("streaming");
+			expect(status.querySelector(".ai-generation-stop")).not.toBeNull();
+			callback(null, { text: "Answer" }, null, null);
+			expect(response.nodeEl.querySelector(".ai-generation-status")).toBeNull();
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(canvas.nodes.get("response").text).toBe("Answer");
+	});
+
+	it.each([false, true])("stops generation and saves a usable card (partial answer: %s)", async partial => {
+		const { app, canvas, settings } = fixture(false);
+		vi.mocked(streamResponse).mockImplementation(async (_provider, _messages, options, callback) => {
+			const response = canvas.nodes.get("response");
+			if (partial) callback("Partial answer", null, null, null);
+			expect(options!.abortSignal).toBeDefined();
+			const stopped = new Promise<never>((_, reject) => options!.abortSignal!.addEventListener("abort", () => reject(new DOMException("Stopped", "AbortError")), { once: true }));
+			response.nodeEl.querySelector(".ai-generation-stop")!.click();
+			expect(options!.abortSignal!.aborted).toBe(true);
+			await stopped;
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		const response = canvas.nodes.get("response");
+		expect(response.text).toBe(partial ? "Partial answer" : "Generation stopped.");
+		expect(response.getData().ai_notes).toContain("Generation stopped");
+		expect(response.nodeEl.querySelector(".ai-generation-status")).toBeNull();
+		expect(response.nodeEl.className).not.toContain("ai-generating");
+		expect(canvas.requestSave).toHaveBeenCalled();
+	});
+
+	it("removes the loading state and timer on an error", async () => {
+		const { app, canvas, settings } = fixture(false);
+		vi.mocked(streamResponse).mockRejectedValue(new Error("HTTP 402: Budget exceeded"));
+		await run(() => noteGenerator(app, settings).generateNote());
+		const response = canvas.nodes.get("response");
+		expect(response.nodeEl.querySelector(".ai-generation-status")).toBeNull();
+		expect(response.text).toContain("HTTP 402: Budget exceeded");
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it.each(["delete", "unload"])("stops an active request on %s", async action => {
+		const { app, canvas, settings } = fixture(false);
+		vi.mocked(streamResponse).mockImplementation(async (_provider, _messages, options) => {
+			const response = canvas.nodes.get("response");
+			const stopped = new Promise<never>((_, reject) => options!.abortSignal!.addEventListener("abort", () => reject(new DOMException("Stopped", "AbortError")), { once: true }));
+			// Attach the rejection handler before advancing the timer.
+			const settled = stopped.catch(error => error);
+			if (action === "delete") {
+				canvas.nodes.delete(response.id);
+				await vi.advanceTimersByTimeAsync(1000);
+			} else {
+				cancelActiveGenerations();
+			}
+			expect(options!.abortSignal!.aborted).toBe(true);
+			expect(response.nodeEl.querySelector(".ai-generation-status")).toBeNull();
+			throw await settled;
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("stops while tools are connecting without starting an AI request", async () => {
+		const { app, canvas, settings } = fixture(false);
+		settings.mcpEnabled = true;
+		settings.mcpServers = [{ id: "pending", enabled: true }];
+		vi.mocked(getAllMCPTools).mockImplementation(() => {
+			const response = canvas.nodes.get("response");
+			expect(response.nodeEl.querySelector(".ai-generation-phase")!.textContent).toBe("Connecting tools…");
+			response.nodeEl.querySelector(".ai-generation-stop")!.click();
+			return new Promise(() => {});
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(streamResponse).not.toHaveBeenCalled();
+		expect(canvas.nodes.get("response").text).toBe("Generation stopped.");
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("anchors the model badge to the card outside replaceable markdown", () => {
+		const { prompt } = fixture(false);
+		addModelIndicator(prompt, "Custom", "test-model");
+		expect(prompt.nodeEl.querySelector(".ai-model-indicator")).not.toBeNull();
+		expect(prompt.contentEl.querySelector(".ai-model-indicator")).toBeNull();
+	});
+
+	it("moves an existing badge out of markdown when restoring cards", () => {
+		const { prompt, canvas } = fixture(false);
+		prompt.setData({ ai_provider: "Custom", ai_model: "test-model" });
+		prompt.nodeEl.appendChild(prompt.contentEl);
+		addModelIndicator(prompt, "Custom", "test-model");
+		const indicator = badge(prompt);
+		prompt.contentEl.appendChild(indicator);
+		restoreModelIndicators(canvas);
+		expect(badge(prompt)).toBe(indicator);
+		expect(indicator.parentElement).toBe(prompt.nodeEl);
 	});
 });

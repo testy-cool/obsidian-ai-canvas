@@ -286,6 +286,7 @@ export function getYouTubeVideoId(url: string): string | null {
 
 const generatingNodes = new WeakSet<object>();
 const modelIndicators = new WeakMap<object, HTMLElement>();
+const modelIndicatorHost = (node: any): HTMLElement => node.nodeEl ?? node.contentEl;
 
 /**
  * Add a persistent context and model indicator to a canvas node
@@ -293,10 +294,10 @@ const modelIndicators = new WeakMap<object, HTMLElement>();
 export const setModelIndicatorText = (node: any, provider: string, model: string, generating = false) => {
 	if (generating) generatingNodes.add(node);
 	else generatingNodes.delete(node);
-	const existing = node.contentEl.querySelector(".ai-model-indicator");
+	const existing = modelIndicatorHost(node).querySelector(".ai-model-indicator");
 	const indicator = existing ?? modelIndicators.get(node);
 	if (!indicator) return;
-	if (!existing) node.contentEl.appendChild(indicator);
+	if (indicator.parentElement !== modelIndicatorHost(node)) modelIndicatorHost(node).appendChild(indicator);
 	const contextCount = node.getData().ai_context_count;
 	const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} • ` : "";
 	const text = `${contextLabel}${generating ? "generating" : `${provider} • ${model}`}`;
@@ -310,8 +311,9 @@ export const setModelIndicatorText = (node: any, provider: string, model: string
 };
 
 export const addModelIndicator = (node: any, provider: string, model: string, generating = false) => {
-	const indicator = node.contentEl.querySelector(".ai-model-indicator") ?? modelIndicators.get(node) ??
-		node.contentEl.createEl("div", { cls: "ai-model-indicator" });
+	modelIndicatorHost(node).addClass("ai-card-ui-host");
+	const indicator = modelIndicatorHost(node).querySelector<HTMLElement>(".ai-model-indicator") ?? modelIndicators.get(node) ??
+		modelIndicatorHost(node).createEl("div", { cls: "ai-model-indicator" });
 	modelIndicators.set(node, indicator);
 	indicator.className = "ai-model-indicator";
 	if (!indicator.querySelector(".ai-model-indicator-size")) {
@@ -330,21 +332,6 @@ export const addModelIndicator = (node: any, provider: string, model: string, ge
 	}
 	setModelIndicatorText(node, provider, model, generating);
 
-	// Style the indicator to be subtle
-	indicator.style.cssText = `
-		position: absolute;
-		bottom: 4px;
-		right: 8px;
-		font-size: 12px;
-		color: var(--text-faint);
-		opacity: 0.6;
-		pointer-events: none;
-		background: var(--background-primary);
-		padding: 2px 6px;
-		border-radius: 4px;
-		font-family: var(--font-monospace);
-		z-index: 1;
-	`;
 };
 
 /**
@@ -361,7 +348,7 @@ export const restoreModelIndicators = (canvas: any) => {
 		// Check if this node has AI model information
 		if (nodeData.ai_model && nodeData.ai_provider) {
 			// Add the indicator if it doesn't already exist
-			if (!node.contentEl.querySelector(".ai-model-indicator")) {
+			if (modelIndicatorHost(node).querySelector(".ai-model-indicator")?.parentElement !== modelIndicatorHost(node)) {
 				addModelIndicator(node, nodeData.ai_provider, nodeData.ai_model, generatingNodes.has(node));
 			}
 		}

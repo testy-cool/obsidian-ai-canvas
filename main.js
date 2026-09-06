@@ -6716,17 +6716,21 @@ function getYouTubeVideoId(url2) {
 }
 var generatingNodes = /* @__PURE__ */ new WeakSet();
 var modelIndicators = /* @__PURE__ */ new WeakMap();
+var modelIndicatorHost = (node) => {
+  var _a20;
+  return (_a20 = node.nodeEl) != null ? _a20 : node.contentEl;
+};
 var setModelIndicatorText = (node, provider, model, generating = false) => {
   if (generating)
     generatingNodes.add(node);
   else
     generatingNodes.delete(node);
-  const existing = node.contentEl.querySelector(".ai-model-indicator");
+  const existing = modelIndicatorHost(node).querySelector(".ai-model-indicator");
   const indicator = existing != null ? existing : modelIndicators.get(node);
   if (!indicator)
     return;
-  if (!existing)
-    node.contentEl.appendChild(indicator);
+  if (indicator.parentElement !== modelIndicatorHost(node))
+    modelIndicatorHost(node).appendChild(indicator);
   const contextCount = node.getData().ai_context_count;
   const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} \u2022 ` : "";
   const text2 = `${contextLabel}${generating ? "generating" : `${provider} \u2022 ${model}`}`;
@@ -6742,7 +6746,8 @@ var setModelIndicatorText = (node, provider, model, generating = false) => {
 };
 var addModelIndicator = (node, provider, model, generating = false) => {
   var _a20, _b19;
-  const indicator = (_b19 = (_a20 = node.contentEl.querySelector(".ai-model-indicator")) != null ? _a20 : modelIndicators.get(node)) != null ? _b19 : node.contentEl.createEl("div", { cls: "ai-model-indicator" });
+  modelIndicatorHost(node).addClass("ai-card-ui-host");
+  const indicator = (_b19 = (_a20 = modelIndicatorHost(node).querySelector(".ai-model-indicator")) != null ? _a20 : modelIndicators.get(node)) != null ? _b19 : modelIndicatorHost(node).createEl("div", { cls: "ai-model-indicator" });
   modelIndicators.set(node, indicator);
   indicator.className = "ai-model-indicator";
   if (!indicator.querySelector(".ai-model-indicator-size")) {
@@ -6761,30 +6766,17 @@ var addModelIndicator = (node, provider, model, generating = false) => {
     notesEl == null ? void 0 : notesEl.remove();
   }
   setModelIndicatorText(node, provider, model, generating);
-  indicator.style.cssText = `
-		position: absolute;
-		bottom: 4px;
-		right: 8px;
-		font-size: 12px;
-		color: var(--text-faint);
-		opacity: 0.6;
-		pointer-events: none;
-		background: var(--background-primary);
-		padding: 2px 6px;
-		border-radius: 4px;
-		font-family: var(--font-monospace);
-		z-index: 1;
-	`;
 };
 var restoreModelIndicators = (canvas) => {
   if (!canvas || !canvas.nodes)
     return;
   canvas.nodes.forEach((node) => {
+    var _a20;
     if (!(node == null ? void 0 : node.contentEl) || node.isContentMounted === false || node.initialized === false)
       return;
     const nodeData = node.getData();
     if (nodeData.ai_model && nodeData.ai_provider) {
-      if (!node.contentEl.querySelector(".ai-model-indicator")) {
+      if (((_a20 = modelIndicatorHost(node).querySelector(".ai-model-indicator")) == null ? void 0 : _a20.parentElement) !== modelIndicatorHost(node)) {
         addModelIndicator(node, nodeData.ai_provider, nodeData.ai_model, generatingNodes.has(node));
       }
     }
@@ -50609,6 +50601,85 @@ var addGenerateGroupNameButton = (app, settings2, menuEl) => {
   });
 };
 
+// src/utils/generationStatus.ts
+var activeGenerations = /* @__PURE__ */ new Set();
+function createGenerationStatus(node, provider, model, contextCount, controller) {
+  var _a20;
+  const host = (_a20 = node.nodeEl) != null ? _a20 : node.contentEl;
+  host.addClass("ai-card-ui-host", "ai-generating");
+  const root = host.createEl("div", { cls: "ai-generation-status" });
+  root.setAttribute("data-state", "waiting");
+  root.createEl("div", { cls: "ai-generation-mark", text: "\u2726" }).setAttribute("aria-hidden", "true");
+  const phase = root.createEl("div", { cls: "ai-generation-phase", text: "Generating\u2026" });
+  phase.setAttribute("role", "status");
+  root.createEl("div", { cls: "ai-generation-model", text: `${provider} \u2022 ${model}` });
+  root.createEl("div", { cls: "ai-generation-context", text: `${contextCount} ${contextCount === 1 ? "card" : "cards"} in context` });
+  const skeleton = root.createEl("div", { cls: "ai-generation-skeleton" });
+  skeleton.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 3; i++)
+    skeleton.createEl("span");
+  const controls = root.createEl("div", { cls: "ai-generation-controls" });
+  const elapsed = controls.createEl("span", { cls: "ai-generation-timer", text: "0s" });
+  const stop = controls.createEl("button", { cls: "ai-generation-stop", text: "Stop" });
+  stop.setAttribute("aria-label", "Stop generation");
+  stop.addEventListener("pointerdown", (event) => event.stopPropagation());
+  stop.addEventListener("mousedown", (event) => event.stopPropagation());
+  stop.addEventListener("keydown", (event) => event.stopPropagation());
+  stop.addEventListener("click", (event) => {
+    event == null ? void 0 : event.stopPropagation();
+    controller.abort();
+  });
+  const onAbort = () => {
+    phase.setText("Stopping\u2026");
+    stop.disabled = true;
+  };
+  controller.signal.addEventListener("abort", onAbort, { once: true });
+  const started = Date.now();
+  let destroyed = false;
+  const cancel = () => {
+    controller.abort();
+    destroy();
+  };
+  activeGenerations.add(cancel);
+  const timer = setInterval(() => {
+    var _a21;
+    if (((_a21 = node.canvas) == null ? void 0 : _a21.nodes) && !node.canvas.nodes.has(node.id)) {
+      cancel();
+      return;
+    }
+    const seconds = Math.floor((Date.now() - started) / 1e3);
+    elapsed.setText(seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`);
+  }, 1e3);
+  function destroy() {
+    if (destroyed)
+      return;
+    destroyed = true;
+    clearInterval(timer);
+    controller.signal.removeEventListener("abort", onAbort);
+    activeGenerations.delete(cancel);
+    root.remove();
+    host.removeClass("ai-generating", "ai-generation-streaming");
+  }
+  return {
+    destroy,
+    setPhase(text2) {
+      if (!destroyed && !controller.signal.aborted)
+        phase.setText(text2);
+    },
+    showStreaming() {
+      if (destroyed)
+        return;
+      root.setAttribute("data-state", "streaming");
+      host.addClass("ai-generation-streaming");
+      phase.setText("Writing\u2026");
+    }
+  };
+}
+function cancelActiveGenerations() {
+  for (const cancel of activeGenerations)
+    cancel();
+}
+
 // src/utils/htmlPreview.ts
 var import_obsidian10 = require("obsidian");
 
@@ -51557,10 +51628,12 @@ ${nodeText}`);
           y: created.y
         });
       }
+      const controller = new AbortController();
+      let generationStatus;
       try {
         created.render();
         addModelIndicator(created, provider.type, model.model, true);
-        (_a20 = created.nodeEl) == null ? void 0 : _a20.addClass("ai-generating");
+        generationStatus = createGenerationStatus(created, provider.type, model.model, contextCount, controller);
         const isGpt = (provider == null ? void 0 : provider.type) === "OpenAI";
         let noticeMessage = `Sending ${messages.length} notes to the AI`;
         if (isGpt) {
@@ -51570,16 +51643,30 @@ ${nodeText}`);
         let mcpTools;
         if (settings2.mcpEnabled && settings2.mcpServers.length > 0) {
           try {
-            mcpTools = await getAllMCPTools(settings2.mcpServers);
+            generationStatus.setPhase("Connecting tools\u2026");
+            let stopLoading;
+            const stopped = new Promise((_, reject) => {
+              stopLoading = () => reject(new DOMException("Generation stopped", "AbortError"));
+              controller.signal.addEventListener("abort", stopLoading, { once: true });
+            });
+            try {
+              mcpTools = await Promise.race([getAllMCPTools(settings2.mcpServers), stopped]);
+            } finally {
+              controller.signal.removeEventListener("abort", stopLoading);
+            }
+            generationStatus.setPhase("Generating\u2026");
             const toolCount = Object.keys(mcpTools).length;
             if (toolCount > 0) {
               new import_obsidian12.Notice(`Loaded ${toolCount} MCP tools`);
             }
           } catch (error40) {
+            if (controller.signal.aborted)
+              throw error40;
             new import_obsidian12.Notice(`Failed to load MCP tools: ${error40}`);
           }
         }
         let reasoningEl;
+        let reasoningDetails;
         let toolsContainer;
         let featuresEl;
         let mcpFeature;
@@ -51618,21 +51705,28 @@ ${nodeText}`);
           tools: mcpTools,
           maxSteps: settings2.mcpMaxSteps || 5,
           providerParams: model.providerParams,
-          timeoutMs: model.timeoutMs
+          timeoutMs: model.timeoutMs,
+          abortSignal: controller.signal
         }, (delta, final, tool3, reasoningDelta) => {
           var _a21, _b20, _c2, _d2, _e2, _f2, _g2, _h, _i;
+          if (controller.signal.aborted)
+            return;
           if (firstDelta) {
             created.setText("");
-            const details = created.contentEl.createEl("details");
-            details.createEl("summary", { text: "Reasoning" });
-            reasoningEl = details.createEl("div", { cls: "reasoning" });
             toolsContainer = created.contentEl.createEl("div", { cls: "mcp-tools-container" });
             firstDelta = false;
           }
           if (reasoningDelta) {
+            generationStatus == null ? void 0 : generationStatus.setPhase("Thinking\u2026");
+            if (!reasoningDetails) {
+              reasoningDetails = created.contentEl.createEl("details");
+              reasoningDetails.createEl("summary", { text: "Reasoning" });
+              reasoningEl = reasoningDetails.createEl("div", { cls: "reasoning" });
+            }
             reasoningEl.setText(reasoningEl.getText() + reasoningDelta);
           }
           if (tool3) {
+            generationStatus == null ? void 0 : generationStatus.setPhase(tool3.type === "tool-call" ? `Using ${tool3.toolName || "tool"}\u2026` : "Generating\u2026");
             if (tool3.type === "tool-call" && tool3.toolName && (mcpTools == null ? void 0 : mcpTools[tool3.toolName]) && (!tool3.toolCallId || !countedCalls.has(tool3.toolCallId))) {
               mcpCallCount++;
               if (tool3.toolCallId)
@@ -51673,6 +51767,7 @@ ${nodeText}`);
             }
           }
           if (delta) {
+            generationStatus == null ? void 0 : generationStatus.showStreaming();
             created.setText(created.text + delta);
             const now2 = Date.now();
             if (now2 - lastResizeAt >= 500) {
@@ -51692,6 +51787,7 @@ ${nodeText}`);
             }
           }
           if (final) {
+            generationStatus == null ? void 0 : generationStatus.destroy();
             featureUpdate = Promise.resolve(final.providerMetadata).then((metadata) => {
               var _a26, _b21, _c3;
               const google3 = metadata == null ? void 0 : metadata.google;
@@ -51723,6 +51819,8 @@ ${nodeText}`);
               logDebug("[HTML Preview] Preview element created:", !!previewEl);
             }
           }
+          if (reasoningDetails && !created.contentEl.contains(reasoningDetails))
+            created.contentEl.appendChild(reasoningDetails);
           if (featuresEl && !created.contentEl.contains(featuresEl))
             created.contentEl.appendChild(featuresEl);
           if (!created.contentEl.contains(toolsContainer))
@@ -51734,35 +51832,43 @@ ${nodeText}`);
           await maybeAutoGenerateCardTitle(app, settings2, created);
         }
       } catch (error40) {
-        let errorDetail = error40.message || String(error40);
-        if ((_b19 = error40.cause) == null ? void 0 : _b19.message) {
-          errorDetail = error40.cause.message;
-        }
-        if (error40.responseBody) {
-          try {
-            const body = typeof error40.responseBody === "string" ? JSON.parse(error40.responseBody) : error40.responseBody;
-            if ((_c = body == null ? void 0 : body.error) == null ? void 0 : _c.message) {
-              errorDetail = body.error.message;
-            }
-          } catch (e) {
+        if (controller.signal.aborted) {
+          if (!created.text.trim())
+            created.setText("Generation stopped.");
+          const data = created.getData();
+          created.setData({ ...data, ai_notes: [...(_a20 = data.ai_notes) != null ? _a20 : [], "Generation stopped"] });
+        } else {
+          let errorDetail = error40.message || String(error40);
+          if ((_b19 = error40.cause) == null ? void 0 : _b19.message) {
+            errorDetail = error40.cause.message;
           }
+          if (error40.responseBody) {
+            try {
+              const body = typeof error40.responseBody === "string" ? JSON.parse(error40.responseBody) : error40.responseBody;
+              if ((_c = body == null ? void 0 : body.error) == null ? void 0 : _c.message) {
+                errorDetail = body.error.message;
+              }
+            } catch (e) {
+            }
+          }
+          if ((_e = (_d = error40.data) == null ? void 0 : _d.error) == null ? void 0 : _e.message) {
+            errorDetail = error40.data.error.message;
+          }
+          if (error40.statusCode && ((_f = error40.message) == null ? void 0 : _f.startsWith(`HTTP ${error40.statusCode}:`))) {
+            errorDetail = error40.message;
+          }
+          new import_obsidian12.Notice(`Error calling the AI: ${errorDetail}`, 1e4);
+          created.setText(`**Error:** ${errorDetail}`);
+          const errorDimensions = calculateNoteDimensions(created.text, 300, 500);
+          created.moveAndResize({
+            height: errorDimensions.height,
+            width: errorDimensions.width,
+            x: created.x,
+            y: created.y
+          });
         }
-        if ((_e = (_d = error40.data) == null ? void 0 : _d.error) == null ? void 0 : _e.message) {
-          errorDetail = error40.data.error.message;
-        }
-        if (error40.statusCode && ((_f = error40.message) == null ? void 0 : _f.startsWith(`HTTP ${error40.statusCode}:`))) {
-          errorDetail = error40.message;
-        }
-        new import_obsidian12.Notice(`Error calling the AI: ${errorDetail}`, 1e4);
-        created.setText(`**Error:** ${errorDetail}`);
-        const errorDimensions = calculateNoteDimensions(created.text, 300, 500);
-        created.moveAndResize({
-          height: errorDimensions.height,
-          width: errorDimensions.width,
-          x: created.x,
-          y: created.y
-        });
       } finally {
+        generationStatus == null ? void 0 : generationStatus.destroy();
         (_g = created.nodeEl) == null ? void 0 : _g.removeClass("ai-generating");
         if (created.contentEl)
           addModelIndicator(created, provider.type, model.model);
@@ -54493,6 +54599,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian26.Plugin {
   }
   onunload() {
     var _a20;
+    cancelActiveGenerations();
     if (this.cleanupIndicatorPersistence) {
       this.cleanupIndicatorPersistence();
     }

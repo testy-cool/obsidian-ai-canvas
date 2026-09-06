@@ -50,6 +50,7 @@ import { insertWebsiteContent } from "./actions/commands/websiteContent";
 import { noteGenerator } from "./actions/canvasNodeMenuActions/noteGenerator";
 import { setupHtmlPreviewPersistence } from "./utils/htmlPreview";
 import { ObservabilityClient } from "./utils/observability";
+import { cancelActiveGenerations } from "./utils/generationStatus";
 import { configureLLMObservability } from "./utils/llmObservability";
 import { getImageGenerationPrompt } from "./utils/imageGenerationPrompt";
 
@@ -144,6 +145,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	}
 
 	onunload() {
+		cancelActiveGenerations();
 		// Clean up event listeners
 		if (this.cleanupIndicatorPersistence) {
 			this.cleanupIndicatorPersistence();

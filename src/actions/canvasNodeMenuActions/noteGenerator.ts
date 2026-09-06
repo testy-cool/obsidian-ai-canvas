@@ -29,6 +29,7 @@ import { handleGenerateImage } from "../canvasNodeContextMenuActions/generateIma
 import { getResponse, streamResponse, ToolEvent } from "../../utils/llm";
 import { addModelIndicator, setModelIndicatorText, getYouTubeVideoId } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
+import { createGenerationStatus } from "../../utils/generationStatus";
 import { getAllMCPTools } from "../../utils/mcpClient";
 import { getProviderCapabilities, supportsGoogleTools } from "../../utils/providerCapabilities";
 import { extractHtmlCodeBlocks, addHtmlPreviewToNode } from "../../utils/htmlPreview";
@@ -654,7 +655,7 @@ export function noteGenerator(
 			let created: CanvasNode;
 			const isNewNode = !toNode;
 			if (!toNode) {
-				// Keep the body empty while the badge reports generation.
+				// Loading UI is separate from the persisted markdown body.
 				const initialText = "";
 				const initialDimensions = calculateNoteDimensions(initialText, 300, 500);
 				
@@ -708,12 +709,14 @@ export function noteGenerator(
 				});
 			}
 
+			const controller = new AbortController();
+			let generationStatus: ReturnType<typeof createGenerationStatus> | undefined;
 			try {
 				// Unfocused cards can lack contentEl until Canvas renders them.
 				// Render this card before attaching UI, without selecting or focusing it.
 				created.render();
 				addModelIndicator(created, provider.type, model.model, true);
-				created.nodeEl?.addClass("ai-generating");
+				generationStatus = createGenerationStatus(created, provider.type, model.model, contextCount, controller);
 
 				const isGpt = provider?.type === "OpenAI";
 				let noticeMessage = `Sending ${messages.length} notes to the AI`;
@@ -728,17 +731,30 @@ export function noteGenerator(
 				let mcpTools: Record<string, any> | undefined;
 				if (settings.mcpEnabled && settings.mcpServers.length > 0) {
 					try {
-						mcpTools = await getAllMCPTools(settings.mcpServers);
+						generationStatus.setPhase("Connecting tools…");
+						let stopLoading: () => void;
+						const stopped = new Promise<never>((_, reject) => {
+							stopLoading = () => reject(new DOMException("Generation stopped", "AbortError"));
+							controller.signal.addEventListener("abort", stopLoading, { once: true });
+						});
+						try {
+							mcpTools = await Promise.race([getAllMCPTools(settings.mcpServers), stopped]);
+						} finally {
+							controller.signal.removeEventListener("abort", stopLoading!);
+						}
+						generationStatus.setPhase("Generating…");
 						const toolCount = Object.keys(mcpTools).length;
 						if (toolCount > 0) {
 							new Notice(`Loaded ${toolCount} MCP tools`);
 						}
 					} catch (error) {
+						if (controller.signal.aborted) throw error;
 						new Notice(`Failed to load MCP tools: ${error}`);
 					}
 				}
 
 				let reasoningEl: HTMLElement;
+				let reasoningDetails: HTMLElement | undefined;
 				let toolsContainer: HTMLElement;
 				let featuresEl: HTMLElement | undefined;
 				let mcpFeature: HTMLElement | undefined;
@@ -782,15 +798,13 @@ export function noteGenerator(
 						maxSteps: settings.mcpMaxSteps || 5,
 						providerParams: model.providerParams,
 						timeoutMs: model.timeoutMs,
+						abortSignal: controller.signal,
 					},
 					(delta: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => {
+						if (controller.signal.aborted) return;
 						if (firstDelta) {
 							created.setText("");
 
-
-							const details = created.contentEl.createEl("details");
-							details.createEl("summary", { text: "Reasoning" });
-							reasoningEl = details.createEl("div", { cls: "reasoning" });
 
 							// Create tools container for MCP tool calls
 							toolsContainer = created.contentEl.createEl("div", { cls: "mcp-tools-container" });
@@ -798,11 +812,18 @@ export function noteGenerator(
 						}
 
 						if (reasoningDelta) {
+							generationStatus?.setPhase("Thinking…");
+							if (!reasoningDetails) {
+								reasoningDetails = created.contentEl.createEl("details");
+								reasoningDetails.createEl("summary", { text: "Reasoning" });
+								reasoningEl = reasoningDetails.createEl("div", { cls: "reasoning" });
+							}
 							reasoningEl.setText(reasoningEl.getText() + reasoningDelta);
 						}
 
 						// Handle MCP tool events
 						if (tool) {
+							generationStatus?.setPhase(tool.type === "tool-call" ? `Using ${tool.toolName || "tool"}…` : "Generating…");
 							if (tool.type === "tool-call" && tool.toolName && mcpTools?.[tool.toolName] &&
 								(!tool.toolCallId || !countedCalls.has(tool.toolCallId))) {
 								mcpCallCount++;
@@ -847,6 +868,7 @@ export function noteGenerator(
 						}
 
 						if (delta) {
+							generationStatus?.showStreaming();
 							created.setText(created.text + delta);
 
 							const now = Date.now();
@@ -868,6 +890,7 @@ export function noteGenerator(
 						}
 
 						if (final) {
+							generationStatus?.destroy();
 							featureUpdate = Promise.resolve(final.providerMetadata).then((metadata) => {
 								const google = metadata?.google;
 								const grounding = google?.groundingMetadata;
@@ -905,6 +928,7 @@ export function noteGenerator(
 								logDebug("[HTML Preview] Preview element created:", !!previewEl);
 							}
 						}
+						if (reasoningDetails && !created.contentEl.contains(reasoningDetails)) created.contentEl.appendChild(reasoningDetails);
 						if (featuresEl && !created.contentEl.contains(featuresEl)) created.contentEl.appendChild(featuresEl);
 						if (!created.contentEl.contains(toolsContainer)) created.contentEl.appendChild(toolsContainer);
 						setModelIndicatorText(created, provider.type, model.model, !final);
@@ -951,43 +975,50 @@ export function noteGenerator(
 				// 	canvas.selectOnly(created, false /* startEditing */);
 				// }
 			} catch (error: any) {
-				// Extract detailed error info from AI SDK errors
-				let errorDetail = error.message || String(error);
+				if (controller.signal.aborted) {
+					if (!created.text.trim()) created.setText("Generation stopped.");
+					const data = created.getData();
+					created.setData({ ...data, ai_notes: [...(data.ai_notes ?? []), "Generation stopped"] });
+				} else {
+					// Extract detailed error info from AI SDK errors
+					let errorDetail = error.message || String(error);
 
-				// AI SDK errors often have nested details
-				if (error.cause?.message) {
-					errorDetail = error.cause.message;
-				}
-				if (error.responseBody) {
-					try {
-						const body = typeof error.responseBody === 'string'
-							? JSON.parse(error.responseBody)
-							: error.responseBody;
-						if (body?.error?.message) {
-							errorDetail = body.error.message;
-						}
-					} catch {}
-				}
-				// Gemini specific error format
-				if (error.data?.error?.message) {
-					errorDetail = error.data.error.message;
-				}
-				if (error.statusCode && error.message?.startsWith(`HTTP ${error.statusCode}:`)) {
-					errorDetail = error.message;
-				}
+					// AI SDK errors often have nested details
+					if (error.cause?.message) {
+						errorDetail = error.cause.message;
+					}
+					if (error.responseBody) {
+						try {
+							const body = typeof error.responseBody === 'string'
+								? JSON.parse(error.responseBody)
+								: error.responseBody;
+							if (body?.error?.message) {
+								errorDetail = body.error.message;
+							}
+						} catch {}
+					}
+					// Gemini specific error format
+					if (error.data?.error?.message) {
+						errorDetail = error.data.error.message;
+					}
+					if (error.statusCode && error.message?.startsWith(`HTTP ${error.statusCode}:`)) {
+						errorDetail = error.message;
+					}
 
-				new Notice(`Error calling the AI: ${errorDetail}`, 10000);
+					new Notice(`Error calling the AI: ${errorDetail}`, 10000);
 
-				// Show the error in the node instead of removing it
-				created.setText(`**Error:** ${errorDetail}`);
-				const errorDimensions = calculateNoteDimensions(created.text, 300, 500);
-				created.moveAndResize({
-					height: errorDimensions.height,
-					width: errorDimensions.width,
-					x: created.x,
-					y: created.y
-				});
+					// Show the error in the node instead of removing it
+					created.setText(`**Error:** ${errorDetail}`);
+					const errorDimensions = calculateNoteDimensions(created.text, 300, 500);
+					created.moveAndResize({
+						height: errorDimensions.height,
+						width: errorDimensions.width,
+						x: created.x,
+						y: created.y
+					});
+				}
 			} finally {
+				generationStatus?.destroy();
 				created.nodeEl?.removeClass("ai-generating");
 				if (created.contentEl) addModelIndicator(created, provider.type, model.model);
 			}

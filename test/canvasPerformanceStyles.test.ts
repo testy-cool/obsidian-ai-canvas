@@ -26,6 +26,11 @@ describe("canvas sizing and motion", () => {
 		expect(block(motion, ".canvas-node.ai-generating")).toContain("transition: width 0.1s ease-out, height 0.1s ease-out !important;");
 		expect(block(motion, ".canvas-node.ai-image-placeholder .canvas-node-content")).toContain("animation: ai-image-pulse 1.4s ease-in-out infinite;");
 		const withoutMotion = css.replace(motion, "");
+		if (path === "styles.css") {
+			expect(block(motion, ".ai-generation-mark")).toContain("animation: ai-generation-breathe");
+			expect(block(motion, ".ai-generation-skeleton span::after")).toContain("animation: ai-generation-shimmer");
+			expect(withoutMotion).not.toContain("animation: ai-generation-");
+		}
 		expect(withoutMotion).not.toMatch(/transition:/);
 		expect(withoutMotion).not.toContain("animation: ai-image-pulse");
 		const badge = block(css, ".ai-model-indicator");
