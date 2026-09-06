@@ -48700,7 +48700,9 @@ var flattenMessages = (messages) => messages.map((m) => {
   const content = typeof m.content === "string" ? m.content : m.content.map((part) => part.type === "text" ? part.text : "").join("");
   return m.role === "system" ? content : `${m.role}: ${content}`;
 }).join("\n\n");
-var streamCodexResponse = async (provider, messages, { model, providerParams, timeoutMs, onComplete }, cb) => {
+var streamCodexResponse = async (provider, messages, { model, providerParams, timeoutMs, onComplete, abortSignal }, cb) => {
+  if (abortSignal == null ? void 0 : abortSignal.aborted)
+    throw new DOMException("Generation stopped", "AbortError");
   if (!import_obsidian4.Platform.isDesktopApp) {
     throw new Error("The Codex provider only works in the desktop app.");
   }
@@ -48732,8 +48734,9 @@ var streamCodexResponse = async (provider, messages, { model, providerParams, ti
         return;
       settled = true;
       clearTimeout(timer);
+      abortSignal == null ? void 0 : abortSignal.removeEventListener("abort", onAbort);
       if (err) {
-        onComplete == null ? void 0 : onComplete({ inputTokens: 0, outputTokens: 0, totalText: "", error: err.message });
+        onComplete == null ? void 0 : onComplete({ inputTokens: 0, outputTokens: 0, totalText: streamedText, error: err.message });
         reject(err);
         return;
       }
@@ -48744,6 +48747,11 @@ var streamCodexResponse = async (provider, messages, { model, providerParams, ti
       onComplete == null ? void 0 : onComplete({ inputTokens: 0, outputTokens: 0, totalText: text2 });
       resolve2();
     };
+    const onAbort = () => {
+      child.kill("SIGKILL");
+      settle(new DOMException("Generation stopped", "AbortError"));
+    };
+    abortSignal == null ? void 0 : abortSignal.addEventListener("abort", onAbort, { once: true });
     let buffer = "";
     child.stdout.on("data", (chunk) => {
       var _a20;
@@ -49117,11 +49125,17 @@ var streamResponse = async (provider, messages, {
   maxSteps = 10,
   providerParams,
   timeoutMs,
-  onComplete
+  onComplete,
+  abortSignal
 } = {}, cb) => {
   var _a20, _b19, _c, _d, _e, _f, _g;
+  const throwIfStopped = () => {
+    if (abortSignal == null ? void 0 : abortSignal.aborted)
+      throw new DOMException("Generation stopped", "AbortError");
+  };
+  throwIfStopped();
   if (provider.type === "Codex") {
-    return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete }, cb);
+    return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete, abortSignal }, cb);
   }
   const mcpToolCount = mcpTools ? Object.keys(mcpTools).length : 0;
   logDebug("[AI Canvas] Stream request:", {
@@ -49140,7 +49154,12 @@ var streamResponse = async (provider, messages, {
   const isFlexTier = (providerParams == null ? void 0 : providerParams.serviceTier) === "flex";
   const wantsFlexFallback = isFlexTier && (providerParams == null ? void 0 : providerParams.flexFallback) === true;
   const effectiveTimeout = timeoutMs != null ? timeoutMs : isFlexTier ? 6e5 : 6e4;
+  let cleanupAttempt = () => {
+  };
+  let receivedText = "";
   const runStream = (useSearchGrounding, useUrlContext) => {
+    cleanupAttempt();
+    throwIfStopped();
     const tools = buildTools(provider, modelId, mcpTools, { useSearchGrounding, useUrlContext });
     const hasTools = tools && Object.keys(tools).length > 0;
     logDebug("[AI Canvas] Calling streamText:", {
@@ -49153,7 +49172,13 @@ var streamResponse = async (provider, messages, {
       maxSteps
     });
     const abortController = new AbortController();
-    const timer = setTimeout(() => abortController.abort(), effectiveTimeout);
+    const abortRequest = () => abortController.abort();
+    const timer = setTimeout(abortRequest, effectiveTimeout);
+    abortSignal == null ? void 0 : abortSignal.addEventListener("abort", abortRequest, { once: true });
+    cleanupAttempt = () => {
+      clearTimeout(timer);
+      abortSignal == null ? void 0 : abortSignal.removeEventListener("abort", abortRequest);
+    };
     const streamConfig = {
       model: llm(modelId),
       messages,
@@ -49167,7 +49192,6 @@ var streamResponse = async (provider, messages, {
       logDebug("[AI Canvas] Adding tools to request, first tool:", Object.keys(tools)[0], tools[Object.keys(tools)[0]]);
     }
     const stream = streamText(streamConfig);
-    stream.__timeoutTimer = timer;
     return stream;
   };
   let result;
@@ -49175,6 +49199,8 @@ var streamResponse = async (provider, messages, {
   try {
     result = await runStream(canUseSearch, canUseUrlContext);
   } catch (error40) {
+    cleanupAttempt();
+    throwIfStopped();
     enrichHttpError(error40, "Unknown stream error");
     console.error("[AI Canvas] Stream error:", {
       message: error40 == null ? void 0 : error40.message,
@@ -49183,7 +49209,7 @@ var streamResponse = async (provider, messages, {
       data: error40 == null ? void 0 : error40.data
     });
     if (!canUseSearch && !canUseUrlContext) {
-      if (wantsFlexFallback && !deliveredOutput) {
+      if (wantsFlexFallback && !deliveredOutput && !(abortSignal == null ? void 0 : abortSignal.aborted)) {
         logDebug("[AI] Flex tier failed, retrying at standard tier");
         return streamResponse(provider, messages, {
           max_tokens,
@@ -49193,22 +49219,36 @@ var streamResponse = async (provider, messages, {
           maxSteps,
           timeoutMs,
           onComplete,
+          abortSignal,
           providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false }
         }, cb);
       }
       throw error40;
     }
     logDebug("[AI Canvas] Retrying without Google features...");
-    result = await runStream(false, false);
+    try {
+      result = await runStream(false, false);
+    } catch (error41) {
+      cleanupAttempt();
+      throw error41;
+    }
   }
   try {
     for await (const part of result.fullStream) {
+      throwIfStopped();
       logDebug("[AI Canvas] Stream event:", part.type, part.type === "text-delta" ? (_a20 = part.textDelta) == null ? void 0 : _a20.substring(0, 50) : "");
       switch (part.type) {
         case "text-delta":
+          receivedText += part.text || part.textDelta || "";
           deliveredOutput = true;
           cb(part.text || part.textDelta, null, null, null);
           break;
+        case "reasoning-delta":
+          deliveredOutput = true;
+          cb(null, null, null, part.text || part.textDelta);
+          break;
+        case "abort":
+          throw new DOMException("Generation timed out", "AbortError");
         case "tool-call":
           deliveredOutput = true;
           logDebug("[AI Canvas] Tool call:", part.toolName, part.args);
@@ -49239,8 +49279,10 @@ var streamResponse = async (provider, messages, {
           break;
       }
     }
+    throwIfStopped();
     const finalResult = await result;
     const finalText = await finalResult.text;
+    throwIfStopped();
     logDebug("[AI Canvas] Final result text length:", finalText == null ? void 0 : finalText.length);
     cb(null, finalResult, null, null);
     if (onComplete) {
@@ -49260,7 +49302,7 @@ var streamResponse = async (provider, messages, {
       data: streamError == null ? void 0 : streamError.data,
       fullError: streamError
     });
-    if (wantsFlexFallback && !deliveredOutput) {
+    if (wantsFlexFallback && !deliveredOutput && !(abortSignal == null ? void 0 : abortSignal.aborted)) {
       logDebug("[AI] Flex tier failed, retrying at standard tier");
       return streamResponse(provider, messages, {
         max_tokens,
@@ -49270,6 +49312,7 @@ var streamResponse = async (provider, messages, {
         maxSteps,
         timeoutMs,
         onComplete,
+        abortSignal,
         providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false }
       }, cb);
     }
@@ -49277,13 +49320,14 @@ var streamResponse = async (provider, messages, {
       onComplete({
         inputTokens: 0,
         outputTokens: 0,
-        totalText: "",
-        error: errorMessage
+        totalText: receivedText,
+        error: (abortSignal == null ? void 0 : abortSignal.aborted) ? "Generation stopped" : errorMessage
       });
     }
+    throwIfStopped();
     throw streamError;
   } finally {
-    clearTimeout(result == null ? void 0 : result.__timeoutTimer);
+    cleanupAttempt();
   }
 };
 var stripJsonFence = (text2) => {

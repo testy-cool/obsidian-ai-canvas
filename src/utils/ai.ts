@@ -356,6 +356,7 @@ const enrichHttpError = (error: any, fallback: string): string => {
 };
 
 export interface StreamOptions {
+	abortSignal?: AbortSignal;
 	max_tokens?: number;
 	model?: string;
 	temperature?: number;
@@ -387,11 +388,16 @@ export const streamResponse = async (
 		providerParams,
 		timeoutMs,
 		onComplete,
+		abortSignal,
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ): Promise<void> => {
+	const throwIfStopped = () => {
+		if (abortSignal?.aborted) throw new DOMException("Generation stopped", "AbortError");
+	};
+	throwIfStopped();
 	if (provider.type === "Codex") {
-		return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete }, cb);
+		return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete, abortSignal }, cb);
 	}
 
 	const mcpToolCount = mcpTools ? Object.keys(mcpTools).length : 0;
@@ -415,7 +421,11 @@ export const streamResponse = async (
 	const wantsFlexFallback = isFlexTier && providerParams?.flexFallback === true;
 	const effectiveTimeout = timeoutMs ?? (isFlexTier ? 600_000 : 60_000);
 
+	let cleanupAttempt = () => {};
+	let receivedText = "";
 	const runStream = (useSearchGrounding: boolean, useUrlContext: boolean) => {
+		cleanupAttempt();
+		throwIfStopped();
 		const tools = buildTools(provider, modelId, mcpTools, { useSearchGrounding, useUrlContext });
 		const hasTools = tools && Object.keys(tools).length > 0;
 
@@ -430,7 +440,13 @@ export const streamResponse = async (
 		});
 
 		const abortController = new AbortController();
-		const timer = setTimeout(() => abortController.abort(), effectiveTimeout);
+		const abortRequest = () => abortController.abort();
+		const timer = setTimeout(abortRequest, effectiveTimeout);
+		abortSignal?.addEventListener("abort", abortRequest, { once: true });
+		cleanupAttempt = () => {
+			clearTimeout(timer);
+			abortSignal?.removeEventListener("abort", abortRequest);
+		};
 
 		const streamConfig: any = {
 			model: llm(modelId),
@@ -447,8 +463,6 @@ export const streamResponse = async (
 		}
 
 		const stream = streamText(streamConfig);
-		// Attach cleanup so we can clear the timer when done
-		(stream as any).__timeoutTimer = timer;
 		return stream;
 	};
 
@@ -458,6 +472,8 @@ export const streamResponse = async (
 	try {
 		result = await runStream(canUseSearch, canUseUrlContext);
 	} catch (error: any) {
+		cleanupAttempt();
+		throwIfStopped();
 		enrichHttpError(error, "Unknown stream error");
 		console.error("[AI Canvas] Stream error:", {
 			message: error?.message,
@@ -466,13 +482,13 @@ export const streamResponse = async (
 			data: error?.data,
 		});
 		if (!canUseSearch && !canUseUrlContext) {
-			if (wantsFlexFallback && !deliveredOutput) {
+			if (wantsFlexFallback && !deliveredOutput && !abortSignal?.aborted) {
 				logDebug("[AI] Flex tier failed, retrying at standard tier");
 				return streamResponse(
 					provider,
 					messages,
 					{
-						max_tokens, model, temperature, tools: mcpTools, maxSteps, timeoutMs, onComplete,
+						max_tokens, model, temperature, tools: mcpTools, maxSteps, timeoutMs, onComplete, abortSignal,
 						providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false },
 					},
 					cb
@@ -481,17 +497,30 @@ export const streamResponse = async (
 			throw error;
 		}
 		logDebug("[AI Canvas] Retrying without Google features...");
-		result = await runStream(false, false);
+		try {
+			result = await runStream(false, false);
+		} catch (error) {
+			cleanupAttempt();
+			throw error;
+		}
 	}
 
 	try {
 		for await (const part of result.fullStream) {
+			throwIfStopped();
 			logDebug("[AI Canvas] Stream event:", part.type, part.type === 'text-delta' ? (part as any).textDelta?.substring(0, 50) : '');
 			switch (part.type) {
 				case 'text-delta':
+					receivedText += (part as any).text || (part as any).textDelta || "";
 					deliveredOutput = true;
 					cb((part as any).text || (part as any).textDelta, null, null, null);
 					break;
+				case 'reasoning-delta':
+					deliveredOutput = true;
+					cb(null, null, null, (part as any).text || (part as any).textDelta);
+					break;
+				case 'abort':
+					throw new DOMException("Generation timed out", "AbortError");
 				case 'tool-call':
 					deliveredOutput = true;
 					logDebug("[AI Canvas] Tool call:", (part as any).toolName, (part as any).args);
@@ -525,8 +554,10 @@ export const streamResponse = async (
 					break;
 			}
 		}
+		throwIfStopped();
 		const finalResult = await result;
 		const finalText = await finalResult.text;
+		throwIfStopped();
 		logDebug("[AI Canvas] Final result text length:", finalText?.length);
 		cb(null, finalResult, null, null);
 		if (onComplete) {
@@ -546,13 +577,13 @@ export const streamResponse = async (
 			data: streamError?.data,
 			fullError: streamError,
 		});
-		if (wantsFlexFallback && !deliveredOutput) {
+		if (wantsFlexFallback && !deliveredOutput && !abortSignal?.aborted) {
 			logDebug("[AI] Flex tier failed, retrying at standard tier");
 			return streamResponse(
 				provider,
 				messages,
 				{
-					max_tokens, model, temperature, tools: mcpTools, maxSteps, timeoutMs, onComplete,
+					max_tokens, model, temperature, tools: mcpTools, maxSteps, timeoutMs, onComplete, abortSignal,
 					providerParams: { ...providerParams, serviceTier: "standard", flexFallback: false },
 				},
 				cb
@@ -562,13 +593,14 @@ export const streamResponse = async (
 			onComplete({
 				inputTokens: 0,
 				outputTokens: 0,
-				totalText: "",
-				error: errorMessage,
+				totalText: receivedText,
+				error: abortSignal?.aborted ? "Generation stopped" : errorMessage,
 			});
 		}
+		throwIfStopped();
 		throw streamError;
 	} finally {
-		clearTimeout((result as any)?.__timeoutTimer);
+		cleanupAttempt();
 	}
 };
 

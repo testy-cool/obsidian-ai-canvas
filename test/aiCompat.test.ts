@@ -452,3 +452,53 @@ describe("YouTube MIME hints on Google routes", () => {
 		expect(await requests[0].json()).toEqual(body);
 	});
 });
+
+describe("stream cancellation", () => {
+	it("does not start a request that was already stopped", async () => {
+		const abort = new AbortController();
+		abort.abort();
+		const requests = installFetchStub();
+		await expect(streamResponse(makeProvider(), [{ role: "user", content: "hello" }], {
+			model: "test-model", abortSignal: abort.signal,
+		}, vi.fn())).rejects.toMatchObject({ name: "AbortError" });
+		expect(requests).toHaveLength(0);
+	});
+
+	it.each([false, true])("stops the active stream without retrying or reporting completion (partial text: %s)", async partial => {
+		const abort = new AbortController();
+		let ready!: () => void;
+		const started = new Promise<void>(resolve => { ready = resolve; });
+		const callback = vi.fn((delta: string | null, _final: any) => { if (delta) ready(); });
+		globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			const request = new Request(input, init);
+			return new Response(new ReadableStream({ start(controller) {
+				request.signal.addEventListener("abort", () => controller.error(new DOMException("Stopped", "AbortError")), { once: true });
+				if (partial) controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ text: "Partial answer" }] } }] })}\n\n`));
+				else ready();
+			} }), { headers: { "Content-Type": "text/event-stream" } });
+		});
+		const pending = streamResponse(makeProvider({ type: "Bifrost", geminiNative: true }), [{ role: "user", content: "hello" }], {
+			model: "vertex/gemini-3.1-pro-preview", abortSignal: abort.signal,
+			providerParams: { serviceTier: "flex", flexFallback: true },
+		}, callback);
+		const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+		await started;
+		abort.abort();
+		await rejected;
+		expect(globalThis.fetch).toHaveBeenCalledOnce();
+		expect(callback.mock.calls.every(call => !call[1])).toBe(true);
+	});
+
+	it("delivers provider reasoning events before the answer", async () => {
+		globalThis.fetch = vi.fn(async () => new Response([
+			{ candidates: [{ content: { role: "model", parts: [{ text: "Checking the supplied information.", thought: true }] } }] },
+			{ candidates: [{ content: { role: "model", parts: [{ text: "Answer" }] }, finishReason: "STOP" }] },
+		].map(part => `data: ${JSON.stringify(part)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } }));
+		const callback = vi.fn();
+		await streamResponse(makeProvider({ type: "Bifrost", geminiNative: true }), [{ role: "user", content: "hello" }], {
+			model: "vertex/gemini-3.1-pro-preview",
+		}, callback);
+		expect(callback).toHaveBeenCalledWith(null, null, null, "Checking the supplied information.");
+		expect(callback).toHaveBeenCalledWith("Answer", null, null, null);
+	});
+});

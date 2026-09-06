@@ -162,9 +162,10 @@ const flattenMessages = (messages: ModelMessage[]): string =>
 export const streamCodexResponse = async (
 	provider: LLMProvider,
 	messages: ModelMessage[],
-	{ model, providerParams, timeoutMs, onComplete }: StreamOptions,
+	{ model, providerParams, timeoutMs, onComplete, abortSignal }: StreamOptions,
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ): Promise<void> => {
+	if (abortSignal?.aborted) throw new DOMException("Generation stopped", "AbortError");
 	if (!Platform.isDesktopApp) {
 		throw new Error("The Codex provider only works in the desktop app.");
 	}
@@ -203,8 +204,9 @@ export const streamCodexResponse = async (
 			if (settled) return;
 			settled = true;
 			clearTimeout(timer);
+			abortSignal?.removeEventListener("abort", onAbort);
 			if (err) {
-				onComplete?.({ inputTokens: 0, outputTokens: 0, totalText: "", error: err.message });
+				onComplete?.({ inputTokens: 0, outputTokens: 0, totalText: streamedText, error: err.message });
 				reject(err);
 				return;
 			}
@@ -215,6 +217,12 @@ export const streamCodexResponse = async (
 			onComplete?.({ inputTokens: 0, outputTokens: 0, totalText: text });
 			resolve();
 		};
+
+		const onAbort = () => {
+			child.kill("SIGKILL");
+			settle(new DOMException("Generation stopped", "AbortError"));
+		};
+		abortSignal?.addEventListener("abort", onAbort, { once: true });
 
 		let buffer = "";
 		child.stdout.on("data", (chunk: Buffer) => {
