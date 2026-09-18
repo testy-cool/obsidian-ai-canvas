@@ -27,6 +27,7 @@ repomix-output.xml
 
 # local env and docs
 .env
+.serena/
 bigdocs/
 tmp/
 nul

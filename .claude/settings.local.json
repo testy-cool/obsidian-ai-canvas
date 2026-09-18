@@ -8,5 +8,8 @@
       "Bash(pnpm run:*)"
     ],
     "deny": []
-  }
+  },
+  "disabledMcpjsonServers": [
+    "playwright"
+  ]
 }

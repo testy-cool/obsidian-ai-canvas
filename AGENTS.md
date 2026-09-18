@@ -15,7 +15,7 @@ Use `pnpm` (see `packageManager` in `package.json`). Key commands:
 Indent with tabs (4 width), LF, final newline per `.editorconfig`. TypeScript is the primary language; keep new files in the existing folder patterns (PascalCase modals like `src/Modals/InputModal.ts`, camelCase utilities like `src/utils/ai.ts`). ESLint is configured in `.eslintrc` with TypeScript rules; run manually with `pnpm exec eslint src --ext .ts` if needed.
 
 ## Testing Guidelines
-There is no automated test suite in the repo. Validate changes by running `pnpm run dev` and loading the plugin in Obsidian, then exercising the canvas actions you touched (menu items, commands, and modals). If you add tests in the future, keep them under `tests/` or alongside features with `*.test.ts`.
+An automated Vitest test suite lives under `test/` (14 test files covering AI compatibility, MCP, HTML preview, pricing, and canvas menu hosts). Run `pnpm test` for a single test run or `pnpm run test:watch` during active development. When making changes, validate both with `pnpm test` and by deploying to Obsidian via `pnpm run deploy` to exercise live canvas interactions. Keep new tests under `test/` with `*.test.ts`.
 
 ## Commit & Pull Request Guidelines
 Recent commits use short descriptive summaries (sentence-case or imperative). Keep messages concise and scoped to one change. For PRs, include a clear description, list testing performed, link related issues, and add screenshots or GIFs for UI or canvas behavior changes. Update `manifest.json`/`versions.json` only when releasing.
