@@ -14,11 +14,10 @@ The gaps below are what that probe exposed.
   so `sse` and `websocket` behave exactly like `http`. Make the field mean
   what it says, or narrow it to the transports the client really speaks.
 
-- [ ] AIC-002 Restore MCP tools in the live vault		#mcp !high
-  The one remote MCP server configured on this machine sits behind an access
-  proxy that answers 302 to a login page for both GET and POST, so tool calls
-  never reach it. It needs a bypass rule for that path. Owner's infrastructure,
-  so their call. Details are in the untracked local runbook.
+- [x] AIC-002 Restore MCP tools in the live vault		#mcp
+  Dropped, not fixed: the remote server behind the 302 is deprecated, so there
+  is nothing to restore. Local servers cover this now (AIC-001). The stale
+  entry can stay switched off in settings.
 
 - [ ] AIC-003 Use MCP resources and prompts, not only tools		#mcp !low
   The client reads `tools/list` and nothing else, announces protocol
