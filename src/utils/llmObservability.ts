@@ -3,7 +3,7 @@ import type { LLMProvider } from "../settings/AugmentedCanvasSettings";
 import type { StreamOptions } from "./ai";
 import { createTracePayload, ObservabilityClient, TraceInput } from "./observability";
 
-type TraceContext = Pick<TraceInput, "pluginVersion" | "vaultName" | "canvasName" | "inputCostPerMillion" | "outputCostPerMillion">;
+type TraceContext = Pick<TraceInput, "pluginVersion" | "vaultName" | "canvasName" | "inputCostPerMillion" | "outputCostPerMillion" | "cachedInputCostPerMillion">;
 type ContextGetter = (provider: LLMProvider, model?: string) => TraceContext;
 let configured: { client: ObservabilityClient; context: ContextGetter } | null = null;
 
@@ -53,6 +53,7 @@ export async function observeLLM<T, O extends StreamOptions>(
 				endTime: new Date().toISOString(),
 				inputTokens: completion.inputTokens,
 				outputTokens: completion.outputTokens,
+				cachedInputTokens: completion.cachedInputTokens,
 				error: completion.error,
 			}));
 		} catch {

@@ -809,3 +809,19 @@ describe("provider modal updates in place", () => {
 		expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ type: "Gemini" }), []);
 	});
 });
+
+describe("cached input pricing on a model", () => {
+	it("stores the cache-read rate so a warm prompt is not costed at full price", () => {
+		const onSave = vi.fn();
+		const provider = { id: "bifrost", type: "Bifrost", baseUrl: "https://example.test/v1", apiKey: "test", enabled: true };
+		const model = { id: "selected", model: "vertex/gemini-3.1-flash-lite", providerId: provider.id, enabled: true };
+		const modal: any = new UnifiedProviderModal({} as any, onSave, provider, [model]);
+		modal.onOpen();
+		modal.pricingData = new Map([[model.model, { inputCostPerMillion: 1, outputCostPerMillion: 4, cachedInputCostPerMillion: 0.25 }]]);
+		modal.save();
+		expect(onSave).toHaveBeenCalledWith(
+			expect.objectContaining({ id: provider.id }),
+			[expect.objectContaining({ model: model.model, inputCostPerMillion: 1, cachedInputCostPerMillion: 0.25 })],
+		);
+	});
+});

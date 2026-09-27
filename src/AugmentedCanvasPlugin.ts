@@ -78,6 +78,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 				canvasName: this.app.workspace.getActiveFile()?.name,
 				inputCostPerMillion: pricing?.inputCostPerMillion,
 				outputCostPerMillion: pricing?.outputCostPerMillion,
+				cachedInputCostPerMillion: pricing?.cachedInputCostPerMillion,
 			};
 		});
 		this.addSettingTab(new SettingsTab(this.app, this));

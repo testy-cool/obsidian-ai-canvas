@@ -2,11 +2,12 @@ import { requestUrl } from "obsidian";
 
 export interface OpenRouterModel {
   id: string;
-  pricing: { prompt: string; completion: string };
+  pricing: { prompt: string; completion: string; input_cache_read?: string };
 }
 
 export interface ModelPricing {
   inputCostPerMillion: number;
+  cachedInputCostPerMillion?: number;
   outputCostPerMillion: number;
 }
 
@@ -42,9 +43,14 @@ export function matchModelPricing(
 
   if (isNaN(promptPerToken) || isNaN(completionPerToken)) return null;
 
+  // Not every model publishes a cache-read rate; leave it unset rather than
+  // assuming a discount that may not exist.
+  const cachePerToken = parseFloat(match.pricing.input_cache_read ?? "");
+
   return {
     inputCostPerMillion: promptPerToken * 1_000_000,
     outputCostPerMillion: completionPerToken * 1_000_000,
+    ...(isNaN(cachePerToken) ? {} : { cachedInputCostPerMillion: cachePerToken * 1_000_000 }),
   };
 }
 

@@ -53,7 +53,7 @@ export class UnifiedProviderModal extends Modal {
   private modelListEl: HTMLElement | null = null;
   private editing: boolean;
 	private initialProvider?: LLMProvider;
-  private pricingData: Map<string, { inputCostPerMillion: number; outputCostPerMillion: number }> | undefined;
+  private pricingData: Map<string, { inputCostPerMillion: number; outputCostPerMillion: number; cachedInputCostPerMillion?: number }> | undefined;
   private modelParams = new Map<string, Record<string, unknown>>();
   private expandedParams = new Set<string>();
 
@@ -537,6 +537,9 @@ export class UnifiedProviderModal extends Modal {
         outputCostPerMillion: existing?.costOverridden
           ? existing.outputCostPerMillion
           : (price?.outputCostPerMillion ?? existing?.outputCostPerMillion),
+        // A manual cost override covers the two rates the user can type, so the
+        // published cache rate still applies underneath it.
+        cachedInputCostPerMillion: price?.cachedInputCostPerMillion ?? existing?.cachedInputCostPerMillion,
         providerParams:
           this.modelParams.get(modelId) ??
           existing?.providerParams ??

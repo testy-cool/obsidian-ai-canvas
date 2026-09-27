@@ -76,3 +76,14 @@ describe("text request tracing", () => {
 		expect(track).not.toHaveBeenCalled();
 	});
 });
+
+describe("cached prompt tokens", () => {
+	it("passes the cached count into the trace so cost is not overstated", async () => {
+		const track = setup();
+		vi.mocked(ai.streamResponse).mockImplementation(async (_provider, _messages, options) => {
+			options?.onComplete?.({ inputTokens: 1000, outputTokens: 10, cachedInputTokens: 800, totalText: "answer" });
+		});
+		await streamResponse(provider, messages, { model: "test-model" }, vi.fn());
+		expect(track.mock.calls[0][0].tokens).toMatchObject({ input: 1000, cachedInput: 800 });
+	});
+});

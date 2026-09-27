@@ -364,7 +364,7 @@ export interface StreamOptions {
 	maxSteps?: number;
 	providerParams?: Record<string, unknown>;
 	timeoutMs?: number;
-	onComplete?: (result: { inputTokens: number; outputTokens: number; totalText: string; error?: string }) => void;
+	onComplete?: (result: { inputTokens: number; outputTokens: number; cachedInputTokens?: number; totalText: string; error?: string }) => void;
 }
 
 export type ToolEvent = {
@@ -565,6 +565,7 @@ export const streamResponse = async (
 			onComplete({
 				inputTokens: usage?.inputTokens ?? 0,
 				outputTokens: usage?.outputTokens ?? 0,
+				cachedInputTokens: usage?.cachedInputTokens ?? 0,
 				totalText: finalText ?? "",
 			});
 		}
@@ -641,7 +642,7 @@ export const getResponse = async (
 		useUrlContext?: boolean;
 		providerParams?: Record<string, unknown>;
 		timeoutMs?: number;
-		onComplete?: (result: { inputTokens: number; outputTokens: number; totalText: string; error?: string }) => void;
+		onComplete?: (result: { inputTokens: number; outputTokens: number; cachedInputTokens?: number; totalText: string; error?: string }) => void;
 	} = {}
 ): Promise<any> => {
 	if (provider.type === "Codex") {
@@ -757,6 +758,7 @@ export const getResponse = async (
 		onComplete({
 			inputTokens: usage?.inputTokens ?? 0,
 			outputTokens: usage?.outputTokens ?? 0,
+			cachedInputTokens: usage?.cachedInputTokens ?? 0,
 			totalText: (text as string) ?? "",
 		});
 	}

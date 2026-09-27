@@ -18,7 +18,7 @@ export interface TracePayload {
   providerParams?: Record<string, unknown>;
   startTime: string;
   endTime: string;
-  tokens: { input: number; output: number; total: number };
+  tokens: { input: number; output: number; cachedInput: number; total: number };
   cost?: { input: number; output: number; total: number };
   metadata: { pluginVersion: string; vaultName?: string; canvasName?: string };
   status: "success" | "error";
@@ -36,8 +36,11 @@ export interface TraceInput {
   endTime: string;
   inputTokens: number;
   outputTokens: number;
+  /** Part of inputTokens the provider served from its own prefix cache. */
+  cachedInputTokens?: number;
   inputCostPerMillion?: number;
   outputCostPerMillion?: number;
+  cachedInputCostPerMillion?: number;
   pluginVersion: string;
   vaultName?: string;
   canvasName?: string;
@@ -46,10 +49,17 @@ export interface TraceInput {
 
 export function createTracePayload(input: TraceInput): TracePayload {
   const totalTokens = input.inputTokens + input.outputTokens;
+  // Providers cache a repeated prefix on their side and bill it cheaper. The
+  // cached count arrives with the usage; the rate exists only for models that
+  // publish one, so an unknown rate falls back to the full input price rather
+  // than inventing a discount.
+  const cachedTokens = Math.min(input.cachedInputTokens ?? 0, input.inputTokens);
   let cost: TracePayload["cost"];
 
   if (input.inputCostPerMillion != null && input.outputCostPerMillion != null) {
-    const inputCost = (input.inputTokens * input.inputCostPerMillion) / 1_000_000;
+    const cachedRate = input.cachedInputCostPerMillion ?? input.inputCostPerMillion;
+    const inputCost = ((input.inputTokens - cachedTokens) * input.inputCostPerMillion
+      + cachedTokens * cachedRate) / 1_000_000;
     const outputCost = (input.outputTokens * input.outputCostPerMillion) / 1_000_000;
     cost = { input: inputCost, output: outputCost, total: inputCost + outputCost };
   }
@@ -64,7 +74,7 @@ export function createTracePayload(input: TraceInput): TracePayload {
     providerParams: input.providerParams,
     startTime: input.startTime,
     endTime: input.endTime,
-    tokens: { input: input.inputTokens, output: input.outputTokens, total: totalTokens },
+    tokens: { input: input.inputTokens, output: input.outputTokens, cachedInput: cachedTokens, total: totalTokens },
     cost,
     metadata: {
       pluginVersion: input.pluginVersion,
@@ -110,6 +120,7 @@ export function formatLangfuseBatch(payloads: TracePayload[]) {
 						"gen_ai.system": p.provider,
 						"gen_ai.request.model": p.model,
 						"gen_ai.usage.input_tokens": p.tokens.input,
+						"gen_ai.usage.cached_input_tokens": p.tokens.cachedInput,
 						"gen_ai.usage.output_tokens": p.tokens.output,
 						"langfuse.observation.cost_details": p.cost ? JSON.stringify(p.cost) : undefined,
 						"langfuse.version": p.metadata.pluginVersion,

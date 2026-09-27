@@ -51,6 +51,12 @@ export interface LLMModel {
 	inputCostPerMillion?: number;
 
 	/**
+	 * Price per million prompt tokens the provider served from its own cache,
+	 * when the model publishes one.
+	 */
+	cachedInputCostPerMillion?: number;
+
+	/**
 	 * Output cost per million tokens (for cost tracking)
 	 */
 	outputCostPerMillion?: number;

@@ -31,3 +31,20 @@ describe("stream tool events", () => {
 		}, null);
 	});
 });
+
+describe("usage reporting", () => {
+	it("reports the cached part of the prompt the provider served from its own cache", async () => {
+		vi.mocked(streamText).mockReturnValue({
+			fullStream: (async function* () { yield { type: "text-delta", text: "hi" }; })(),
+			text: Promise.resolve("hi"),
+			totalUsage: Promise.resolve({ inputTokens: 6036, outputTokens: 1, cachedInputTokens: 4071 }),
+		} as any);
+		const onComplete = vi.fn();
+		await streamResponse(
+			{ id: "custom", type: "Custom", apiKey: "test", enabled: true },
+			[{ role: "user", content: "hello" }],
+			{ model: "test-model", onComplete }, vi.fn(),
+		);
+		expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ inputTokens: 6036, cachedInputTokens: 4071 }));
+	});
+});
