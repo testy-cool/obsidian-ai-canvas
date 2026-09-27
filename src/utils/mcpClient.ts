@@ -1,4 +1,4 @@
-import { requestUrl } from 'obsidian';
+import { Platform, requestUrl } from 'obsidian';
 import { MCPServer } from '../settings/AugmentedCanvasSettings';
 import { logDebug } from '../logDebug';
 import { jsonSchema, tool as createTool } from 'ai';
@@ -64,10 +64,126 @@ export const getToolSchema = (toolName: string): any => {
 	return toolSchemas.get(toolName);
 };
 
+type StdioConnection = {
+	child: any;
+	pending: Map<number | string, { resolve: (value: any) => void; reject: (error: Error) => void }>;
+	buffer: string;
+};
+
+// One live child process per stdio server, reused across requests.
+const stdioConnections = new Map<string, StdioConnection>();
+
+const STDIO_TIMEOUT_MS = 30000;
+
+/**
+ * Split a stdio read buffer into whole JSON-RPC messages, keeping the partial
+ * tail. A server's reply can arrive in several chunks, or several replies can
+ * arrive in one, so the leftover has to survive until the newline shows up.
+ */
+export const splitJsonLines = (buffer: string): { messages: string[]; rest: string } => {
+	const parts = buffer.split('\n');
+	const rest = parts.pop() ?? '';
+	return { messages: parts.map(line => line.trim()).filter(Boolean), rest };
+};
+
+/**
+ * Launch (or reuse) the local process for a `stdio` server.
+ */
+const openStdioConnection = (server: MCPServer): StdioConnection => {
+	const existing = stdioConnections.get(server.id);
+	if (existing) return existing;
+	if (!Platform.isDesktopApp) {
+		throw new Error(`MCP server "${server.name}" runs a local command, which only works in the desktop app.`);
+	}
+	if (!server.command) {
+		throw new Error(`MCP server "${server.name}" has no command to run.`);
+	}
+
+	const { spawn } = require('child_process');
+	const child = spawn(server.command, server.args ?? [], {
+		cwd: server.cwd || undefined,
+		env: { ...process.env, ...server.env },
+		stdio: ['pipe', 'pipe', 'pipe'],
+	});
+	const connection: StdioConnection = { child, pending: new Map(), buffer: '' };
+
+	child.stdout.setEncoding('utf8');
+	child.stdout.on('data', (chunk: string) => {
+		const { messages, rest } = splitJsonLines(connection.buffer + chunk);
+		connection.buffer = rest;
+		for (const line of messages) {
+			let message: any;
+			try {
+				message = JSON.parse(line);
+			} catch {
+				logDebug(`[MCP ${server.name}] ignoring unparseable line`);
+				continue;
+			}
+			const waiting = connection.pending.get(message.id);
+			if (!waiting) continue;
+			connection.pending.delete(message.id);
+			if (message.error) waiting.reject(new Error(message.error.message || 'MCP request failed'));
+			else waiting.resolve(message);
+		}
+	});
+
+	// Servers log to stderr; it is never part of the protocol.
+	child.stderr.setEncoding('utf8');
+	child.stderr.on('data', (chunk: string) => logDebug(`[MCP ${server.name}] ${chunk.trim()}`));
+
+	const abandon = (error: Error) => {
+		stdioConnections.delete(server.id);
+		toolsCache.delete(server.id);
+		for (const waiting of connection.pending.values()) waiting.reject(error);
+		connection.pending.clear();
+	};
+	child.on('error', (error: Error) => abandon(new Error(`Could not start MCP server "${server.name}": ${error.message}`)));
+	child.on('exit', (code: number | null) => abandon(new Error(`MCP server "${server.name}" stopped (exit code ${code ?? 'unknown'}).`)));
+
+	stdioConnections.set(server.id, connection);
+	return connection;
+};
+
+const stdioRequest = (server: MCPServer, method: string, params: any, id: number): Promise<any> => {
+	const connection = openStdioConnection(server);
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(() => {
+			if (connection.pending.delete(id)) {
+				reject(new Error(`MCP server "${server.name}" did not answer ${method} within ${STDIO_TIMEOUT_MS / 1000}s.`));
+			}
+		}, STDIO_TIMEOUT_MS);
+		connection.pending.set(id, {
+			resolve: value => { clearTimeout(timer); resolve(value); },
+			reject: error => { clearTimeout(timer); reject(error); },
+		});
+		connection.child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+	});
+};
+
+/** Fire-and-forget JSON-RPC notification (no id, no reply). */
+const stdioNotify = (server: MCPServer, method: string): void => {
+	const connection = openStdioConnection(server);
+	connection.child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method })}\n`);
+};
+
+/** Stop a stdio server's process, if it has one. */
+const closeStdioConnection = (serverId: string): void => {
+	const connection = stdioConnections.get(serverId);
+	if (!connection) return;
+	stdioConnections.delete(serverId);
+	for (const waiting of connection.pending.values()) waiting.reject(new Error('MCP connection closed'));
+	connection.pending.clear();
+	connection.child.kill();
+};
+
 /**
  * Make an MCP JSON-RPC request using Obsidian's requestUrl (bypasses CORS)
  */
 const mcpRequest = async (server: MCPServer, method: string, params: any = {}, id: number = 1) => {
+	if (server.transport === 'stdio') {
+		return stdioRequest(server, method, params, id);
+	}
+
 	const headers: Record<string, string> = {
 		'Content-Type': 'application/json',
 		'Accept': 'application/json, text/event-stream',
@@ -122,6 +238,10 @@ const initializeSession = async (server: MCPServer) => {
 		capabilities: {},
 		clientInfo: { name: 'obsidian-ai-canvas', version: '1.0' },
 	});
+	// Local servers hold the session open and wait for this before serving tools.
+	if (server.transport === 'stdio') {
+		stdioNotify(server, 'notifications/initialized');
+	}
 	return response.result;
 };
 
@@ -239,6 +359,7 @@ export const clearMCPCache = (serverId: string): void => {
  * Close all MCP client connections (clear caches)
  */
 export const closeAllMCPClients = async (): Promise<void> => {
+	for (const serverId of [...stdioConnections.keys()]) closeStdioConnection(serverId);
 	toolsCache.clear();
 	sessionIds.clear();
 };

@@ -66,7 +66,7 @@ export interface LLMModel {
 	providerParams?: Record<string, unknown>;
 }
 
-export type MCPTransportType = 'http' | 'sse' | 'websocket';
+export type MCPTransportType = 'http' | 'sse' | 'websocket' | 'stdio';
 
 export interface MCPServer {
 	/**
@@ -85,9 +85,29 @@ export interface MCPServer {
 	url: string;
 
 	/**
-	 * Transport type (http, sse, websocket)
+	 * Transport type (http, sse, websocket, stdio)
 	 */
 	transport: MCPTransportType;
+
+	/**
+	 * Command to launch for `stdio` servers. Desktop only.
+	 */
+	command?: string;
+
+	/**
+	 * Arguments for the `stdio` command.
+	 */
+	args?: string[];
+
+	/**
+	 * Extra environment variables for the `stdio` command.
+	 */
+	env?: Record<string, string>;
+
+	/**
+	 * Working directory for the `stdio` command.
+	 */
+	cwd?: string;
 
 	/**
 	 * Optional API key for authentication
