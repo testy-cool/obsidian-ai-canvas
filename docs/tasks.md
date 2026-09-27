@@ -85,3 +85,46 @@ The gaps below are what that probe exposed.
   and what came back, or the error. Image APIs bill per image rather than per
   token, so no cost is guessed. Covered by unit tests; not yet watched against
   a live image run.
+
+## Working on this repo
+
+- [ ] AIC-010 See the plugin running, not only its tests		#tooling !high
+  Obsidian's command line interface is off, so `pnpm run deploy` copies the
+  build and cannot reload it, and no rendered card, badge width or font size
+  was ever read from the real app this session. Everything UI shaped was
+  checked by unit test and type check instead. Turning it on is one in-app
+  step: Settings, General, Advanced, Command line interface, then follow the
+  register prompt. After that `obsidian dev:dom`, `dev:console` and
+  `dev:screenshot` work, which is what the 12px rule needs.
+
+- [ ] AIC-011 Write down which providers the gateway key may use		#tooling
+  Several probes went into discovering that the virtual key allows vertex but
+  not gemini, and that the gateway sends `/v1beta/cachedContents` to gemini
+  whatever model name is asked for. That is the fact that closed AIC-008. It
+  belongs in the untracked local runbook where the next session reads it in a
+  second.
+
+- [ ] AIC-012 Stop rewriting the live-test shim		#testing
+  The same throwaway was written three times: replace Obsidian's `requestUrl`
+  with real fetch, read the provider and observability keys out of the vault's
+  `data.json`, run something for real, delete the file. It should be one
+  helper with one opt-in test that uses it, skipped by default like the live
+  Gemini test, so the next live check is a few lines instead of a hundred.
+
+- [ ] AIC-013 Record how each local agent CLI is driven		#docs
+  Claude takes the prompt on stdin and prints JSON lines with hook noise first
+  and token counts last. Pi wants it as a positional argument, prints plain
+  text and puts its version warning on stderr. Hermes carries it in a flag.
+  gemini-cli has no working credentials here. All of that was rediscovered by
+  hand and is not written anywhere.
+
+- [ ] AIC-014 Make lint mean something again		#tooling
+  288 problems in 40 files, so lint carries no signal. 149 are `no-explicit-any`
+  and 47 are non-null assertions, both of which the Canvas internals require on
+  purpose. The rest are mechanical. Relax what the codebase deliberately does,
+  fix what is really wrong, and add a script so the command exists.
+
+- [ ] AIC-015 Remove the abandoned sdd briefs		#tooling
+  `.superpowers/sdd` holds 656K of step by step briefs from finished plans.
+  Untracked, referenced nowhere, and mdtask read every checkbox in them as an
+  open task until it was scoped away.
