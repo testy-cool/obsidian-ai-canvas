@@ -54,11 +54,22 @@ The gaps below are what that probe exposed.
   broken was the accounting, which charged full price for cached tokens, so
   that is what got fixed.
 
-- [ ] AIC-008 Make prefix caching reliable instead of occasional		#cost !low
-  Implicit caching hit once in four identical runs. An explicit cache, Gemini
-  `cachedContent` or Anthropic `cache_control` breakpoints, would make the
-  saving dependable on a long chain. Worth it only if the traces show chains
-  long enough to matter.
+- [x] AIC-008 Make prefix caching reliable instead of occasional		#cost !low
+  Closed without building it, because it cannot be reached or verified from
+  this setup. Explicit Gemini caching needs `POST /v1beta/cachedContents`. The
+  gateway answers that path with "Provider 'gemini' is not allowed for this
+  virtual key", with the vertex-prefixed model name too, so the gateway sends
+  that endpoint to AI Studio while ordinary generation goes to Vertex. The
+  direct Gemini key on this machine is invalid and the Vertex provider has no
+  credentials, so no route is left to test against. Anthropic
+  `cache_control` is the other half and there is no Anthropic provider here.
+  Shipping a cache lifecycle into the generation path with no way to run it
+  once would be worse than leaving implicit caching alone.
+
+  To unblock: allow the gemini provider on the gateway's virtual key, or put
+  working Vertex credentials on the Vertex provider. Cached tokens are now
+  recorded per generation, so the traces will show whether chains are long
+  enough to be worth it.
 
 - [x] AIC-006 Show what a card cost, on the card		#cost !low
   The badge beside the model now carries the cost, for example
