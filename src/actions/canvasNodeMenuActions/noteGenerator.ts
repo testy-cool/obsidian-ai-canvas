@@ -9,15 +9,12 @@ import { App, ItemView, Notice } from "obsidian";
 import { CanvasNode } from "../../obsidian/canvas-internal";
 import {
 	CanvasView,
-	calcHeight,
 	createNode,
-	DirectionBias,
 	getIncomingEdgeDirection,
 } from "../../obsidian/canvas-patches";
 import {
 	AugmentedCanvasSettings,
-	DEFAULT_SETTINGS,
-} from "../../settings/AugmentedCanvasSettings";
+	} from "../../settings/AugmentedCanvasSettings";
 // import { Logger } from "./util/logging";
 import {
 	collectNodeAndAncestors,
@@ -26,7 +23,7 @@ import {
 } from "../../obsidian/canvasUtil";
 import { getMediaMimeType, readNodeContent, readNodeMediaData } from "../../obsidian/fileUtil";
 import { handleGenerateImage } from "../canvasNodeContextMenuActions/generateImage";
-import { getResponse, streamResponse, ToolEvent } from "../../utils/llm";
+import { streamResponse, ToolEvent } from "../../utils/llm";
 import { addModelIndicator, setModelIndicatorText, getYouTubeVideoId } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { createGenerationStatus } from "../../utils/generationStatus";
@@ -47,14 +44,11 @@ const assistantColor = "6";
 /**
  * Height to use for placeholder note
  */
-const placeholderNoteHeight = 60;
 
 /**
  * Height to use for new empty note
  */
-const emptyNoteHeight = 100;
 
-const NOTE_MAX_WIDTH = 400;
 export const NOTE_MIN_HEIGHT = 400;
 export const NOTE_INCR_HEIGHT_STEP = 150;
 
@@ -241,11 +235,6 @@ const buildGeminiImagePartsFromMessages = (messages: any[]) => {
 // The response must be in the same language the user used.
 // `.trim();
 
-const SYSTEM_PROMPT = `
-You must respond in markdown.
-The response must be in the same language the user used.
-`.trim();
-
 export function noteGenerator(
 	app: App,
 	settings: AugmentedCanvasSettings,
@@ -289,13 +278,6 @@ export function noteGenerator(
 		return settings.apiKey || activeProvider.apiKey || null;
 	};
 	
-	const getActiveProviderBaseUrl = () => {
-		// Use custom provider if provided, otherwise use settings
-		const activeProvider = resolveProvider();
-		
-		return activeProvider?.baseUrl || undefined;
-	};
-
 	const getActiveCanvas = () => {
 		const maybeCanvasView = app.workspace.getActiveViewOfType(
 			ItemView
@@ -399,7 +381,7 @@ export function noteGenerator(
 
 				if (canCountTokens) {
 					const encoding = encodingForModel(modelName as any);
-					let nodeTokens = encoding.encode(nodeText);
+					const nodeTokens = encoding.encode(nodeText);
 					let keptNodeTokens: number;
 
 					if (tokenCount + nodeTokens.length > inputLimit) {
@@ -1003,7 +985,7 @@ export function noteGenerator(
 							if (body?.error?.message) {
 								errorDetail = body.error.message;
 							}
-						} catch {}
+						} catch { /* the card is already gone */ }
 					}
 					// Gemini specific error format
 					if (error.data?.error?.message) {

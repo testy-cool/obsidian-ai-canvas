@@ -2,6 +2,7 @@
 export const desktopFetch: typeof fetch = async (input, init) => {
 	// Explicitly select the Node entry; the package's browser entry delegates to window.fetch.
 	// Keep it lazy so mobile never loads the Node transport.
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
 	const nodeFetch: typeof import("node-fetch") = require("node-fetch/lib/index.js");
 	const request = new Request(input, init);
 	const headers: Record<string, string> = {};

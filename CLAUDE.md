@@ -11,7 +11,7 @@ Always use `pnpm` (pinned via `packageManager` in `package.json`).
 - `pnpm run deploy` — build and copy `main.js`, `manifest.json`, `styles.css` into the local vault at `/home/testycool/Obsidian-New/.obsidian/plugins/obsidian-ai-canvas` (path is hardcoded in `deploy.mjs`). Reload the plugin in Obsidian afterwards.
 - `pnpm test` — run the Vitest suite once (27 files, 344 tests, about 2s). `pnpm run test:watch` for watch mode.
 - Single test file: `pnpm exec vitest run test/mcp.test.ts`. Single test by name: `pnpm exec vitest run -t "name"`.
-- Lint (no script defined): `pnpm exec eslint src --ext .ts`. The tree does not pass it today, mostly pre-existing `no-unused-vars` errors, so read only the files you touched and do not treat a red run as your own regression.
+- `pnpm run lint` — eslint over `src`. The tree passes it, so any problem it reports is yours. `no-explicit-any` and `no-non-null-assertion` are off on purpose: Obsidian does not expose the Canvas API, so the internals are untyped by necessity and flagging every one buried the real problems.
 
 ### Tests
 

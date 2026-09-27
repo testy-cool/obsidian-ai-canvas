@@ -48,11 +48,11 @@ Drop screenshots, handwriting, infographics, diagrams, or photos onto your canva
 Turn hours of video lectures, podcasts, or tutorials into searchable canvas knowledge.
 * Place a YouTube card on the canvas or reference a video link.
 * Ask questions, request executive summaries, or extract key timestamps.
-* Supports native Google Gemini video context as well as command palette transcript fetching (`Obsidian AI Canvas: Fetch YouTube Video Captions`).
+* Supports native Google Gemini video context.
 
 ### 🌐 Ingest Live Websites & Web Pages
 Bring articles, documentation, or news stories straight onto your canvas.
-* Pull clean markdown text from any web page using built-in webpage extraction (`Obsidian AI Canvas: Fetch Website Content`) or native URL context.
+* Pull clean markdown text from any web page using native URL context.
 * Compare two competing articles side-by-side on the canvas and ask the AI to synthesize the commonalities and differences.
 
 ### ⚡ Real-Time Streaming with Instant Stop

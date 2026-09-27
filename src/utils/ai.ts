@@ -348,7 +348,7 @@ export const buildTools = (
 
 const enrichHttpError = (error: any, fallback: string): string => {
 	let body = error?.responseBody;
-	try { body = typeof body === "string" ? JSON.parse(body) : body; } catch {}
+	try { body = typeof body === "string" ? JSON.parse(body) : body; } catch { /* not json, use it as text */ }
 	const message = error?.statusCode && body?.error?.message
 		? `HTTP ${error.statusCode}: ${body.error.message}`
 		: error?.message ?? fallback;

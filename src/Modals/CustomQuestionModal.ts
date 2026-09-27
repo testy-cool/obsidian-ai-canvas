@@ -9,10 +9,10 @@ export class CustomQuestionModal extends Modal {
 	}
 
 	onOpen() {
-		let { contentEl } = this;
+		const { contentEl } = this;
 		contentEl.className = "augmented-canvas-modal-container";
 
-		let textareaEl = contentEl.createEl("textarea");
+		const textareaEl = contentEl.createEl("textarea");
 		textareaEl.className = "augmented-canvas-modal-textarea";
 		textareaEl.placeholder = "Write your question here";
 
@@ -33,7 +33,7 @@ export class CustomQuestionModal extends Modal {
 		actions.createEl("button", { text: "Cancel" }).onClickEvent(() => this.close());
 
 		// Create and append a submit button
-		let submitBtn = actions.createEl("button", { text: "Ask AI" });
+		const submitBtn = actions.createEl("button", { text: "Ask AI" });
 		submitBtn.onClickEvent(() => {
 			this.onSubmit(textareaEl.value);
 			this.close();
@@ -42,7 +42,7 @@ export class CustomQuestionModal extends Modal {
 	}
 
 	onClose() {
-		let { contentEl } = this;
+		const { contentEl } = this;
 		contentEl.empty();
 	}
 }

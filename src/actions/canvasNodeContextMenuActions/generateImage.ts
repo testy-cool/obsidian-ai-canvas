@@ -1,4 +1,4 @@
-import { App, ItemView, Notice, TFile, TFolder } from "obsidian";
+import { App, ItemView, Notice, TFile } from "obsidian";
 import { AugmentedCanvasSettings, LLMProvider } from "src/settings/AugmentedCanvasSettings";
 import { createAzureImage, createAzureImageEdit, createGeminiImage, createImage, createVertexImage } from "src/utils/llm";
 import { observeImage } from "src/utils/llmObservability";
@@ -250,22 +250,22 @@ export async function handleGenerateImage(
 						model: model,
 						quality: settings.azureImageQuality || "medium",
 						images: azureReferenceImages,
-				  })
+				})
 				: await createAzureImage(imageProvider!, nodeContent, {
 						model: model,
 						quality: settings.azureImageQuality || "medium",
-				  })
+				})
 			: isVertex
 			? await createVertexImage(imageProvider!, nodeContent, {
 					model: model,
 					parts: options?.parts,
-			  })
+			})
 			: isGeminiProvider(imageProvider)
 			? await createGeminiImage(apiKey, nodeContent, {
 					model: model,
 					baseUrl: imageProvider?.baseUrl,
 					parts: options?.parts,
-			  })
+			})
 			: await createImage(
 					apiKey,
 					nodeContent,
@@ -275,7 +275,7 @@ export async function handleGenerateImage(
 						baseUrl: baseUrl,
 						headers: headers,
 					}
-			  ));
+			));
 
 		const elapsedMs = Date.now() - startedAt;
 		const elapsedSecs = Math.round(elapsedMs / 1000);

@@ -1,14 +1,12 @@
 import { logDebug } from "src/logDebug";
 import {
 	App,
-	TAbstractFile,
 	TFile,
 	TFolder,
 	loadPdfJs,
 	resolveSubpath,
 } from "obsidian";
 import { Canvas, CanvasNode, CreateNodeOptions } from "./canvas-internal";
-import { AugmentedCanvasSettings } from "src/settings/AugmentedCanvasSettings";
 
 const IMAGE_MIME_TYPES: Record<string, string> = {
 	png: "image/png",
@@ -151,7 +149,7 @@ const pdfToMarkdown = async (app: App, file: TFile) => {
 		const page = await pdf.getPage(pageNum);
 		const textContent = await page.getTextContent();
 
-		let pageText = textContent.items
+		const pageText = textContent.items
 			.map((item: { str: string }) => item.str)
 			.join(" ");
 
@@ -174,9 +172,10 @@ const epubToMarkdown = async (app: App, file: TFile) => {
 const readDifferentExtensionFileContent = async (app: App, file: TFile) => {
 	// logDebug({ file });
 	switch (file.extension) {
-		case "md":
+		case "md": {
 			const body = await app.vault.cachedRead(file);
 			return `## ${file.basename}\n${body}`;
+		}
 
 		case "pdf":
 			return pdfToMarkdown(app, file);
@@ -195,7 +194,7 @@ export async function readNodeContent(node: CanvasNode) {
 	switch (nodeData.type) {
 		case "text":
 			return nodeData.text;
-		case "file":
+		case "file": {
 			const file = app.vault.getAbstractFileByPath(nodeData.file);
 			if (file instanceof TFile) {
 				if (node.subpath) {
@@ -206,6 +205,7 @@ export async function readNodeContent(node: CanvasNode) {
 			} else {
 				console.debug("Cannot read from file type", file);
 			}
+		}
 	}
 }
 
@@ -247,7 +247,7 @@ export type NodeMediaData =
 			filename?: string;
 			size: number;
 			limit: number;
-	  };
+	};
 
 export async function readNodeMediaData(
 	node: CanvasNode
@@ -320,7 +320,7 @@ export const updateNodeAndSave = async (
 	await canvas.requestSave();
 };
 
-export const generateFileName = (prefix: string = "file"): string => {
+export const generateFileName = (prefix = "file"): string => {
 	const now = new Date();
 	const year = now.getUTCFullYear();
 	const month = (now.getUTCMonth() + 1).toString().padStart(2, "0");

@@ -1,7 +1,7 @@
-import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextAreaComponent, TextComponent, ToggleComponent, DropdownComponent, Modal, requestUrl, setIcon, debounce } from "obsidian";
+import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextComponent, ToggleComponent, DropdownComponent, Modal, requestUrl, setIcon, debounce } from "obsidian";
 import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
 import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
-import { LLMModel, LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
+import { LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
 import { testMCPServer } from "src/utils/mcpClient";
 import { buildManualMCPServer, parseMCPServersConfig, serializeMCPServers } from "src/utils/mcpConfig";
 import { getParamsForModel, detectProviderLabel } from "src/utils/providerParams";

@@ -27,7 +27,6 @@ export const getResponse = async (
 	return observeLLM(provider, messages, options, observed => getResponseFromAI(provider, messages, observed));
 };
 
-let count = 0;
 export type ImageGenerationResult = {
 	base64: string;
 	mimeType: string;
@@ -388,7 +387,6 @@ export const createImage = async (
 		defaultHeaders: headers,
 	});
 
-	count++;
 	const response = await openai.images.generate({
 		model: model || "dall-e-3",
 		prompt,

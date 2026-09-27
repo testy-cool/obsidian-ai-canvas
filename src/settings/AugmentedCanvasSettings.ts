@@ -1,12 +1,5 @@
 import type { ProviderCapabilityReport } from "../utils/providerCapabilities";
 
-let FuseIndex: any;
-
-// Dynamically import fuse.js
-import("fuse.js").then(module => {
-    FuseIndex = module.FuseIndex;
-});
-
 
 export interface SystemPrompt {
 	id: number;

@@ -1,4 +1,4 @@
-import { App, FuzzySuggestModal, TFile, TFolder } from "obsidian";
+import { App, FuzzySuggestModal, TFolder } from "obsidian";
 
 export default class FolderSuggestModal extends FuzzySuggestModal<TFolder> {
 	onChoose: (systemPrompt: TFolder) => void;

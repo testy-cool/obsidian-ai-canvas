@@ -97,34 +97,38 @@ The gaps below are what that probe exposed.
   register prompt. After that `obsidian dev:dom`, `dev:console` and
   `dev:screenshot` work, which is what the 12px rule needs.
 
-- [ ] AIC-011 Write down which providers the gateway key may use		#tooling
+- [x] AIC-011 Write down which providers the gateway key may use		#tooling
   Several probes went into discovering that the virtual key allows vertex but
   not gemini, and that the gateway sends `/v1beta/cachedContents` to gemini
   whatever model name is asked for. That is the fact that closed AIC-008. It
   belongs in the untracked local runbook where the next session reads it in a
   second.
 
-- [ ] AIC-012 Stop rewriting the live-test shim		#testing
+- [x] AIC-012 Stop rewriting the live-test shim		#testing
   The same throwaway was written three times: replace Obsidian's `requestUrl`
   with real fetch, read the provider and observability keys out of the vault's
   `data.json`, run something for real, delete the file. It should be one
   helper with one opt-in test that uses it, skipped by default like the live
   Gemini test, so the next live check is a few lines instead of a hundred.
 
-- [ ] AIC-013 Record how each local agent CLI is driven		#docs
+- [x] AIC-013 Record how each local agent CLI is driven		#docs
   Claude takes the prompt on stdin and prints JSON lines with hook noise first
   and token counts last. Pi wants it as a positional argument, prints plain
   text and puts its version warning on stderr. Hermes carries it in a flag.
   gemini-cli has no working credentials here. All of that was rediscovered by
   hand and is not written anywhere.
 
-- [ ] AIC-014 Make lint mean something again		#tooling
+- [x] AIC-014 Make lint mean something again		#tooling
   288 problems in 40 files, so lint carries no signal. 149 are `no-explicit-any`
   and 47 are non-null assertions, both of which the Canvas internals require on
   purpose. The rest are mechanical. Relax what the codebase deliberately does,
   fix what is really wrong, and add a script so the command exists.
 
-- [ ] AIC-015 Remove the abandoned sdd briefs		#tooling
-  `.superpowers/sdd` holds 656K of step by step briefs from finished plans.
-  Untracked, referenced nowhere, and mdtask read every checkbox in them as an
-  open task until it was scoped away.
+- [x] AIC-015 Remove the abandoned sdd briefs		#tooling
+  Done: 41 files removed. They were untracked and referenced nowhere.
+
+  Three abandoned source stubs went with them: `youtubeCaptions.ts`,
+  `websiteContent.ts` and `websiteContentUtils.ts` were commented-out bodies
+  whose only importer was an unused import. The README advertised two command
+  palette commands from them that the plugin never registered, so those claims
+  are gone too. YouTube and web pages still work through native URL context.

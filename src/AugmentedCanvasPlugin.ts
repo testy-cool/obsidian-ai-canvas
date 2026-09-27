@@ -2,8 +2,6 @@ import {
 	Canvas,
 	CanvasView,
 	ItemView,
-	Menu,
-	MenuItem,
 	Modal,
 	Notice,
 	Plugin,
@@ -32,21 +30,18 @@ import {
 import SettingsTab from "./settings/SettingsTab";
 import { CustomQuestionModal } from "./Modals/CustomQuestionModal";
 import { CanvasNode } from "./obsidian/canvas-internal";
-import { createCanvasGroup, getActiveCanvas, setupCanvasIndicatorPersistence } from "./utils";
+import { getActiveCanvas, setupCanvasIndicatorPersistence } from "./utils";
 import SystemPromptsModal from "./Modals/SystemPromptsModal";
 
-import { getFilesContent } from "./obsidian/fileUtil";
 import { parseCsv } from "./utils/csvUtils";
 import { handleAddRelevantQuestions } from "./actions/commands/relevantQuestions";
 import { handleGenerateImage } from "./actions/canvasNodeContextMenuActions/generateImage";
 import { initLogDebug } from "./logDebug";
 import FolderSuggestModal from "./Modals/FolderSuggestModal";
-import { calcHeight, createNode, findCanvasMenuHost } from "./obsidian/canvas-patches";
+import { findCanvasMenuHost } from "./obsidian/canvas-patches";
 import { insertSystemPrompt } from "./actions/commands/insertSystemPrompt";
 import { runPromptFolder } from "./actions/commands/runPromptFolder";
 import { InputModal } from "./Modals/InputModal";
-import { runYoutubeCaptions } from "./actions/commands/youtubeCaptions";
-import { insertWebsiteContent } from "./actions/commands/websiteContent";
 import { noteGenerator } from "./actions/canvasNodeMenuActions/noteGenerator";
 import { setupHtmlPreviewPersistence } from "./utils/htmlPreview";
 import { ObservabilityClient } from "./utils/observability";
@@ -60,8 +55,8 @@ import { getImageGenerationPrompt } from "./utils/imageGenerationPrompt";
 import promptsCsvText from "./data/prompts.csv.txt";
 
 export default class AugmentedCanvasPlugin extends Plugin {
-	triggerByPlugin: boolean = false;
-	patchSucceed: boolean = false;
+	triggerByPlugin = false;
+	patchSucceed = false;
 	private cleanupIndicatorPersistence?: () => void;
 	private cleanupHtmlPreviewPersistence?: () => void;
 	observabilityClient: ObservabilityClient | null = null;
@@ -329,7 +324,6 @@ export default class AugmentedCanvasPlugin extends Plugin {
 			if (!canvasView) return false;
 
 			const menu = (canvasView as any).canvas.menu;
-			const selection = menu.selection;
 
 			const menuUninstaller = around(menu.constructor.prototype, {
 				render: (next: any) =>
@@ -396,7 +390,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 							buttonEl_AskQuestion.addEventListener(
 								"click",
 								() => {
-									let modal = new CustomQuestionModal(
+									const modal = new CustomQuestionModal(
 										app,
 										(question2: string) => {
 											handleCallAI_Question(
@@ -405,7 +399,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 												<CanvasNode>(
 													Array.from(
 														this.canvas.selection
-													)?.first()!
+													).first()!
 												),
 												question2
 											);

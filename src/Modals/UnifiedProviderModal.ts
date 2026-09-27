@@ -161,6 +161,7 @@ export class UnifiedProviderModal extends Modal {
     }
 
     // --- Provider name ---
+		// eslint-disable-next-line prefer-const -- assigned further down, read in callbacks
 		let geminiNativeSetting: Setting | undefined;
 		const nameSetting = new Setting(contentEl).setName("Provider name");
 		nameSetting.controlEl.addClass("ac-settings-field");
@@ -271,6 +272,7 @@ export class UnifiedProviderModal extends Modal {
     // --- Test connection + Fetch models ---
     const connSetting = new Setting(contentEl).setName("Available models")
 			.setDesc("Fetch the model list with these credentials. Test model capabilities from the Providers tab.");
+    // eslint-disable-next-line prefer-const -- assigned inside addButton below
     let connStatus: HTMLElement;
 
     connSetting.addButton((btn: ButtonComponent) => {

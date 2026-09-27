@@ -1,8 +1,8 @@
-import { App, setIcon, setTooltip, Notice } from "obsidian";
-import { getTokenLimit, noteGenerator } from "./noteGenerator";
+import { App, setIcon, setTooltip } from "obsidian";
+import { noteGenerator } from "./noteGenerator";
 import { AugmentedCanvasSettings } from "../../settings/AugmentedCanvasSettings";
 import { CanvasNode } from "../../obsidian/canvas-internal";
-import { getActiveCanvas, getActiveCanvasNodes } from "src/utils";
+import { getActiveCanvasNodes } from "src/utils";
 import { ModelSelectionModal, ModelSelection } from "../../Modals/ModelSelectionModal";
 import { CustomQuestionModal } from "../../Modals/CustomQuestionModal";
 

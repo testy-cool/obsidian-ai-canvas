@@ -17,7 +17,7 @@ ${systemPrompt.prompt.trim()}
 
 	const NODE_WIDTH = 800;
 	const NODE_HEIGHT = 300;
-	const newNode = createNode(canvas, {
+	createNode(canvas, {
 		pos: {
 			// @ts-expect-error
 			x: canvas.x - NODE_WIDTH / 2,

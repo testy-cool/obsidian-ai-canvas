@@ -199,7 +199,7 @@ export const createNode = (
 				? siblings.reduce(
 						(right, sib) => Math.max(right, sib.x + sib.width),
 						parentNode.x + parentNode.width
-				  )
+				)
 				: parentNode.x + parentNode.width;
 			
 			x = siblingsRight + newNoteMargin;
@@ -212,7 +212,7 @@ export const createNode = (
 				? siblings.reduce(
 						(left, sib) => Math.min(left, sib.x),
 						parentNode.x
-				  )
+				)
 				: parentNode.x;
 			
 			x = siblingsLeft - width - newNoteMargin;
@@ -225,7 +225,7 @@ export const createNode = (
 				? siblings.reduce(
 						(bottom, sib) => Math.max(bottom, sib.y + sib.height),
 						parentNode.y + parentNode.height
-				  )
+				)
 				: parentNode.y + parentNode.height;
 			
 			y = siblingsBottom + (edgeLabel ? newNoteMarginWithLabel : newNoteMargin);
@@ -238,7 +238,7 @@ export const createNode = (
 				? siblings.reduce(
 						(top, sib) => Math.min(top, sib.y),
 						parentNode.y
-				  )
+				)
 				: parentNode.y;
 			
 			y = siblingsTop - height! - (edgeLabel ? newNoteMarginWithLabel : newNoteMargin);
@@ -252,7 +252,7 @@ export const createNode = (
 				? siblings.reduce(
 						(right, sib) => Math.max(right, sib.x + sib.width),
 						farLeft
-				  )
+				)
 				: undefined;
 			const priorSibling = siblings[siblings.length - 1];
 
@@ -267,8 +267,8 @@ export const createNode = (
 				(priorSibling
 					? priorSibling.y
 					: parentNode.y +
-					  parentNode.height +
-					  (edgeLabel ? newNoteMarginWithLabel : newNoteMargin)) +
+					parentNode.height +
+					(edgeLabel ? newNoteMarginWithLabel : newNoteMargin)) +
 				// Using position=left, y value is treated as vertical center
 				height! * 0.5;
 		}
@@ -277,20 +277,20 @@ export const createNode = (
 	const newNode =
 		nodeOptions.type === "file"
 			? //  @ts-expect-error
-			  canvas.createFileNode({
+			canvas.createFileNode({
 					file: nodeOptions.file,
 					pos: { x, y },
 					// // position: "left",
 					// size: { height, width },
 					// focus: false,
-			  })
+			})
 			: canvas.createTextNode({
 					pos: { x, y },
 					position: "left",
 					size: { height, width },
 					text,
 					focus: false,
-			  });
+			});
 
 	if (nodeData) {
 		newNode.setData(nodeData);

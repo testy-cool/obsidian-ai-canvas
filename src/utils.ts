@@ -2,16 +2,12 @@ import { logDebug } from "src/logDebug";
 import { formatCost } from "./utils/cost";
 import {
 	App,
-	Canvas,
-	CanvasCoords,
 	ItemView,
-	Menu,
-	MenuItem,
 	TFile,
 	CanvasGroupNode,
 } from "obsidian";
 import { CanvasView, addEdge, getIncomingEdgeDirection } from "./obsidian/canvas-patches";
-import { readFileContent, readNodeContent } from "./obsidian/fileUtil";
+import { readNodeContent } from "./obsidian/fileUtil";
 import { CanvasNode } from "./obsidian/canvas-internal";
 import { AugmentedCanvasSettings } from "./settings/AugmentedCanvasSettings";
 import { setImageGenerationPrompt } from "./utils/imageGenerationPrompt";
@@ -54,7 +50,7 @@ export const createCanvasGroup = (
 
 	const NOTES_BY_ROW = 3;
 
-	let startPos = {
+	const startPos = {
 		// @ts-expect-error
 		x: canvas.x - ((NOTE_WIDTH + NOTE_GAP) * NOTES_BY_ROW) / 2,
 		// @ts-expect-error
@@ -280,7 +276,7 @@ export function getYouTubeVideoId(url: string): string | null {
 	// - http://youtu.be/VIDEO_ID
 	// The capture group (VIDEO_ID) is the YouTube video ID
 	const pattern =
-		/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+		/(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/i;
 	const match = url.match(pattern);
 	return match ? match[1] : null;
 }

@@ -99,6 +99,7 @@ const openStdioConnection = (server: MCPServer): StdioConnection => {
 		throw new Error(`MCP server "${server.name}" has no command to run.`);
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
 	const { spawn } = require('child_process');
 	const child = spawn(server.command, server.args ?? [], {
 		cwd: server.cwd || undefined,
@@ -179,7 +180,7 @@ const closeStdioConnection = (serverId: string): void => {
 /**
  * Make an MCP JSON-RPC request using Obsidian's requestUrl (bypasses CORS)
  */
-const mcpRequest = async (server: MCPServer, method: string, params: any = {}, id: number = 1) => {
+const mcpRequest = async (server: MCPServer, method: string, params: any = {}, id = 1) => {
 	if (server.transport === 'stdio') {
 		return stdioRequest(server, method, params, id);
 	}

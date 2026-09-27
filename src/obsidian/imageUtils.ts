@@ -1,6 +1,5 @@
 import { logDebug } from "src/logDebug";
 import { App, base64ToArrayBuffer } from "obsidian";
-import { AugmentedCanvasSettings } from "src/settings/AugmentedCanvasSettings";
 
 const writeImageToFile = async (
 	app: App,

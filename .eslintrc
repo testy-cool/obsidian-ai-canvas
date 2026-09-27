@@ -9,15 +9,28 @@
       "eslint:recommended",
       "plugin:@typescript-eslint/eslint-recommended",
       "plugin:@typescript-eslint/recommended"
-    ], 
+    ],
     "parserOptions": {
         "sourceType": "module"
     },
     "rules": {
       "no-unused-vars": "off",
-      "@typescript-eslint/no-unused-vars": ["error", { "args": "none" }],
+      // Unused function arguments are often required by a callback signature.
+      // A rest-sibling omit (`const { label: _label, ...rest } = data`) is a
+      // deliberate pattern, and an underscore marks a binding kept on purpose.
+      "@typescript-eslint/no-unused-vars": ["error", {
+        "args": "none",
+        "ignoreRestSiblings": true,
+        "varsIgnorePattern": "^_",
+        "caughtErrors": "none"
+      }],
+      // Obsidian does not expose the Canvas API, so the internals it is driven
+      // through are untyped by necessity. `any` and non-null assertions are how
+      // this codebase talks to them; flagging every one buries real problems.
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/ban-ts-comment": "off",
       "no-prototype-builtins": "off",
       "@typescript-eslint/no-empty-function": "off"
-    } 
+    }
   }
