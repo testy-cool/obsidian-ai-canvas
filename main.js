@@ -49231,7 +49231,7 @@ var streamResponse = async (provider, messages, {
   onComplete,
   abortSignal
 } = {}, cb) => {
-  var _a20, _b19, _c, _d, _e, _f, _g;
+  var _a20, _b19, _c, _d, _e, _f, _g, _h;
   const throwIfStopped = () => {
     if (abortSignal == null ? void 0 : abortSignal.aborted)
       throw new DOMException("Generation stopped", "AbortError");
@@ -49393,6 +49393,7 @@ var streamResponse = async (provider, messages, {
       onComplete({
         inputTokens: (_f = usage == null ? void 0 : usage.inputTokens) != null ? _f : 0,
         outputTokens: (_g = usage == null ? void 0 : usage.outputTokens) != null ? _g : 0,
+        cachedInputTokens: (_h = usage == null ? void 0 : usage.cachedInputTokens) != null ? _h : 0,
         totalText: finalText != null ? finalText : ""
       });
     }
@@ -49453,7 +49454,7 @@ var getResponse = async (provider, messages, {
   timeoutMs,
   onComplete
 } = {}) => {
-  var _a20, _b19, _c, _d, _e;
+  var _a20, _b19, _c, _d, _e, _f;
   if (provider.type === "Codex") {
     let text3 = "";
     await streamCodexResponse(provider, messages, { model, providerParams, timeoutMs, onComplete }, (chunk) => {
@@ -49582,13 +49583,14 @@ var getResponse = async (provider, messages, {
     onComplete({
       inputTokens: (_a20 = usage == null ? void 0 : usage.inputTokens) != null ? _a20 : 0,
       outputTokens: (_b19 = usage == null ? void 0 : usage.outputTokens) != null ? _b19 : 0,
+      cachedInputTokens: (_c = usage == null ? void 0 : usage.cachedInputTokens) != null ? _c : 0,
       totalText: text2 != null ? text2 : ""
     });
   }
   logDebug("AI response", { text: text2 });
   if (includeMetadata) {
-    const raw = (_c = textResult.response) == null ? void 0 : _c.body;
-    const inputModalities = ((_e = (_d = raw == null ? void 0 : raw.usageMetadata) == null ? void 0 : _d.promptTokensDetails) != null ? _e : []).filter((detail) => detail.tokenCount > 0).map((detail) => detail.modality);
+    const raw = (_d = textResult.response) == null ? void 0 : _d.body;
+    const inputModalities = ((_f = (_e = raw == null ? void 0 : raw.usageMetadata) == null ? void 0 : _e.promptTokensDetails) != null ? _f : []).filter((detail) => detail.tokenCount > 0).map((detail) => detail.modality);
     return { text: text2 != null ? text2 : "", sources: textResult.sources, providerMetadata: textResult.providerMetadata, inputModalities };
   }
   if (isJSON) {
@@ -49606,10 +49608,13 @@ var getResponse = async (provider, messages, {
 // src/utils/observability.ts
 var import_obsidian6 = require("obsidian");
 function createTracePayload(input) {
+  var _a20, _b19;
   const totalTokens = input.inputTokens + input.outputTokens;
+  const cachedTokens = Math.min((_a20 = input.cachedInputTokens) != null ? _a20 : 0, input.inputTokens);
   let cost;
   if (input.inputCostPerMillion != null && input.outputCostPerMillion != null) {
-    const inputCost = input.inputTokens * input.inputCostPerMillion / 1e6;
+    const cachedRate = (_b19 = input.cachedInputCostPerMillion) != null ? _b19 : input.inputCostPerMillion;
+    const inputCost = ((input.inputTokens - cachedTokens) * input.inputCostPerMillion + cachedTokens * cachedRate) / 1e6;
     const outputCost = input.outputTokens * input.outputCostPerMillion / 1e6;
     cost = { input: inputCost, output: outputCost, total: inputCost + outputCost };
   }
@@ -49623,7 +49628,7 @@ function createTracePayload(input) {
     providerParams: input.providerParams,
     startTime: input.startTime,
     endTime: input.endTime,
-    tokens: { input: input.inputTokens, output: input.outputTokens, total: totalTokens },
+    tokens: { input: input.inputTokens, output: input.outputTokens, cachedInput: cachedTokens, total: totalTokens },
     cost,
     metadata: {
       pluginVersion: input.pluginVersion,
@@ -49666,6 +49671,7 @@ function formatLangfuseBatch(payloads) {
               "gen_ai.system": p.provider,
               "gen_ai.request.model": p.model,
               "gen_ai.usage.input_tokens": p.tokens.input,
+              "gen_ai.usage.cached_input_tokens": p.tokens.cachedInput,
               "gen_ai.usage.output_tokens": p.tokens.output,
               "langfuse.observation.cost_details": p.cost ? JSON.stringify(p.cost) : void 0,
               "langfuse.version": p.metadata.pluginVersion,
@@ -49816,6 +49822,7 @@ async function observeLLM(provider, messages, options, run) {
         endTime: new Date().toISOString(),
         inputTokens: completion.inputTokens,
         outputTokens: completion.outputTokens,
+        cachedInputTokens: completion.cachedInputTokens,
         error: completion.error
       }));
     } catch (e) {
@@ -52452,6 +52459,7 @@ var cachedCatalog = null;
 var cacheTimestamp = 0;
 var CACHE_TTL_MS = 24 * 60 * 60 * 1e3;
 function matchModelPricing(modelId, catalog) {
+  var _a20;
   const lower = modelId.toLowerCase();
   let match = catalog.find((m) => m.id.toLowerCase() === lower);
   if (!match) {
@@ -52459,8 +52467,8 @@ function matchModelPricing(modelId, catalog) {
   }
   if (!match) {
     match = catalog.find((m) => {
-      var _a20;
-      const catalogModel = (_a20 = m.id.split("/").pop()) == null ? void 0 : _a20.toLowerCase();
+      var _a21;
+      const catalogModel = (_a21 = m.id.split("/").pop()) == null ? void 0 : _a21.toLowerCase();
       return catalogModel === lower;
     });
   }
@@ -52470,9 +52478,11 @@ function matchModelPricing(modelId, catalog) {
   const completionPerToken = parseFloat(match.pricing.completion);
   if (isNaN(promptPerToken) || isNaN(completionPerToken))
     return null;
+  const cachePerToken = parseFloat((_a20 = match.pricing.input_cache_read) != null ? _a20 : "");
   return {
     inputCostPerMillion: promptPerToken * 1e6,
-    outputCostPerMillion: completionPerToken * 1e6
+    outputCostPerMillion: completionPerToken * 1e6,
+    ...isNaN(cachePerToken) ? {} : { cachedInputCostPerMillion: cachePerToken * 1e6 }
   };
 }
 async function fetchOpenRouterCatalog() {
@@ -52959,7 +52969,7 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
       provider.capabilityReports = void 0;
     }
     const models = [...this.selectedModelIds].map((modelId) => {
-      var _a21, _b20, _c2, _d2, _e2, _f2;
+      var _a21, _b20, _c2, _d2, _e2, _f2, _g;
       const existing = this.existingModels.find((m) => m.model === modelId);
       const price = (_a21 = this.pricingData) == null ? void 0 : _a21.get(modelId);
       const defaultParams = getDefaultProviderParams(modelId, provider.type);
@@ -52972,7 +52982,8 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
         maxRetries: existing == null ? void 0 : existing.maxRetries,
         inputCostPerMillion: (existing == null ? void 0 : existing.costOverridden) ? existing.inputCostPerMillion : (_c2 = price == null ? void 0 : price.inputCostPerMillion) != null ? _c2 : existing == null ? void 0 : existing.inputCostPerMillion,
         outputCostPerMillion: (existing == null ? void 0 : existing.costOverridden) ? existing.outputCostPerMillion : (_d2 = price == null ? void 0 : price.outputCostPerMillion) != null ? _d2 : existing == null ? void 0 : existing.outputCostPerMillion,
-        providerParams: (_f2 = (_e2 = this.modelParams.get(modelId)) != null ? _e2 : existing == null ? void 0 : existing.providerParams) != null ? _f2 : Object.keys(defaultParams).length > 0 ? defaultParams : void 0
+        cachedInputCostPerMillion: (_e2 = price == null ? void 0 : price.cachedInputCostPerMillion) != null ? _e2 : existing == null ? void 0 : existing.cachedInputCostPerMillion,
+        providerParams: (_g = (_f2 = this.modelParams.get(modelId)) != null ? _f2 : existing == null ? void 0 : existing.providerParams) != null ? _g : Object.keys(defaultParams).length > 0 ? defaultParams : void 0
       };
     });
     this.onSave(provider, models);
@@ -54752,7 +54763,8 @@ var AugmentedCanvasPlugin = class extends import_obsidian26.Plugin {
         vaultName: this.app.vault.getName(),
         canvasName: (_a20 = this.app.workspace.getActiveFile()) == null ? void 0 : _a20.name,
         inputCostPerMillion: pricing == null ? void 0 : pricing.inputCostPerMillion,
-        outputCostPerMillion: pricing == null ? void 0 : pricing.outputCostPerMillion
+        outputCostPerMillion: pricing == null ? void 0 : pricing.outputCostPerMillion,
+        cachedInputCostPerMillion: pricing == null ? void 0 : pricing.cachedInputCostPerMillion
       };
     });
     this.addSettingTab(new SettingsTab(this.app, this));
