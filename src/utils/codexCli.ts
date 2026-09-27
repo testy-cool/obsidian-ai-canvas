@@ -68,6 +68,48 @@ export const findCodexBinary = (override?: string): string | null => {
 };
 
 /**
+ * Read the model list from `codex debug models`, keeping the entries Codex
+ * shows in its own picker (`visibility: "list"`). Returns null when the output
+ * is not a catalog, so callers fall back to CODEX_MODELS.
+ */
+export const parseCodexModelCatalog = (raw: string): string[] | null => {
+	let parsed: any;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return null;
+	}
+	if (!Array.isArray(parsed?.models)) return null;
+	const slugs = parsed.models
+		.filter((m: any) => typeof m?.slug === "string" && m.visibility === "list")
+		.map((m: any) => m.slug as string);
+	return slugs.length ? [CODEX_DEFAULT_MODEL, ...slugs] : null;
+};
+
+/** Ask the installed Codex which models this account can use. About 6s. */
+export const listCodexModels = (binary: string, timeoutMs = 30_000): Promise<string[] | null> => {
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
+	const { execFile } = require("child_process");
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
+	const os = require("os");
+	return new Promise((resolve) => {
+		execFile(
+			binary,
+			["debug", "models"],
+			{ cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 },
+			(error: Error | null, stdout: string) => {
+				if (error) {
+					logDebug("[Codex] model list failed", error.message);
+					resolve(null);
+					return;
+				}
+				resolve(parseCodexModelCatalog(stdout));
+			}
+		);
+	});
+};
+
+/**
  * Parse one JSONL event line from `codex exec --json`.
  *
  * Observed against codex-cli 0.144.0 (`codex exec --json --ephemeral

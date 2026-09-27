@@ -47556,6 +47556,32 @@ var findCodexBinary = (override) => {
   }
   return null;
 };
+var parseCodexModelCatalog = (raw) => {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+  if (!Array.isArray(parsed == null ? void 0 : parsed.models))
+    return null;
+  const slugs = parsed.models.filter((m) => typeof (m == null ? void 0 : m.slug) === "string" && m.visibility === "list").map((m) => m.slug);
+  return slugs.length ? [CODEX_DEFAULT_MODEL, ...slugs] : null;
+};
+var listCodexModels = (binary, timeoutMs = 3e4) => {
+  const { execFile } = require("child_process");
+  const os = require("os");
+  return new Promise((resolve2) => {
+    execFile(binary, ["debug", "models"], { cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 }, (error40, stdout) => {
+      if (error40) {
+        logDebug("[Codex] model list failed", error40.message);
+        resolve2(null);
+        return;
+      }
+      resolve2(parseCodexModelCatalog(stdout));
+    });
+  });
+};
 var parseCodexEvent = (line) => {
   var _a20, _b19, _c, _d, _e, _f, _g;
   let event;
@@ -51622,6 +51648,7 @@ function localCliUi(type) {
       placeholder: "/path/to/codex (optional override)",
       models: [...CODEX_MODELS],
       detect: (override) => findCodexBinary(override),
+      listModels: (binary) => listCodexModels(binary),
       hint: "Not found \u2014 install with `npm i -g @openai/codex` or set the path here.",
       takesArgs: false
     };
@@ -51634,6 +51661,7 @@ function localCliUi(type) {
     placeholder: adapter.binary ? `/path/to/${adapter.binary} (optional override)` : "/path/to/command",
     models: [...adapter.models],
     detect: (override) => findCliBinary(adapter, override),
+    listModels: void 0,
     hint: adapter.installHint,
     takesArgs: true
   };
@@ -51830,8 +51858,11 @@ var _UnifiedProviderModal = class extends import_obsidian19.Modal {
           const cliUi = localCliUi((_a21 = this.provider.type) != null ? _a21 : "");
           if (cliUi) {
             const detected = cliUi.detect(this.provider.binaryPath);
-            this.fetchedModelIds = cliUi.models;
-            connStatus == null ? void 0 : connStatus.setText(detected ? `Found ${cliUi.models.length} models` : `Not found. ${cliUi.hint}`);
+            const listed = detected && cliUi.listModels ? await cliUi.listModels(detected) : null;
+            if (fetchVersion !== this.modelFetchVersion)
+              return;
+            this.fetchedModelIds = listed != null ? listed : cliUi.models;
+            connStatus == null ? void 0 : connStatus.setText(!detected ? `Not found. ${cliUi.hint}` : listed ? `Found ${listed.length} models` : cliUi.listModels ? `Could not read the model list, showing ${cliUi.models.length} known models` : `Found ${cliUi.models.length} models`);
             connStatus == null ? void 0 : connStatus.toggleClass("mod-success", !!detected);
             connStatus == null ? void 0 : connStatus.toggleClass("mod-warning", !detected);
             this.renderModelList();

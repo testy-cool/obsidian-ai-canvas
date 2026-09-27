@@ -5,7 +5,7 @@ import { isBifrostProvider } from "../utils/providerCapabilities";
 import { fetchProviderModels } from "../utils/modelFetch";
 import { fetchPricingForModels } from "../utils/pricingFetch";
 import { getDefaultProviderParams, getParamsForModel, detectProviderLabel } from "../utils/providerParams";
-import { findCodexBinary, CODEX_MODELS } from "../utils/codexCli";
+import { findCodexBinary, CODEX_MODELS, listCodexModels } from "../utils/codexCli";
 import { CLI_ADAPTERS, cliAdapterForProviderType, findCliBinary } from "../utils/localCli";
 
 interface ProviderPreset {
@@ -54,6 +54,7 @@ function localCliUi(type: string) {
       placeholder: "/path/to/codex (optional override)",
       models: [...CODEX_MODELS],
       detect: (override?: string) => findCodexBinary(override),
+      listModels: (binary: string) => listCodexModels(binary),
       hint: "Not found — install with `npm i -g @openai/codex` or set the path here.",
       takesArgs: false,
     };
@@ -65,6 +66,7 @@ function localCliUi(type: string) {
     placeholder: adapter.binary ? `/path/to/${adapter.binary} (optional override)` : "/path/to/command",
     models: [...adapter.models],
     detect: (override?: string) => findCliBinary(adapter, override),
+    listModels: undefined as ((binary: string) => Promise<string[] | null>) | undefined,
     hint: adapter.installHint,
     takesArgs: true,
   };
@@ -286,11 +288,17 @@ export class UnifiedProviderModal extends Modal {
           const cliUi = localCliUi(this.provider.type ?? "");
           if (cliUi) {
             const detected = cliUi.detect(this.provider.binaryPath);
-            this.fetchedModelIds = cliUi.models;
+            const listed = detected && cliUi.listModels ? await cliUi.listModels(detected) : null;
+            if (fetchVersion !== this.modelFetchVersion) return;
+            this.fetchedModelIds = listed ?? cliUi.models;
             connStatus?.setText(
-              detected
-                ? `Found ${cliUi.models.length} models`
-                : `Not found. ${cliUi.hint}`
+              !detected
+                ? `Not found. ${cliUi.hint}`
+                : listed
+                  ? `Found ${listed.length} models`
+                  : cliUi.listModels
+                    ? `Could not read the model list, showing ${cliUi.models.length} known models`
+                    : `Found ${cliUi.models.length} models`
             );
             connStatus?.toggleClass("mod-success", !!detected);
             connStatus?.toggleClass("mod-warning", !detected);

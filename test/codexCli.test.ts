@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCodexEvent, buildCodexArgs } from "../src/utils/codexCli";
+import { parseCodexEvent, buildCodexArgs, parseCodexModelCatalog, CODEX_DEFAULT_MODEL } from "../src/utils/codexCli";
 
 // Fixtures below are copied verbatim (modulo JSON.stringify formatting) from
 // real `codex exec --json --ephemeral --skip-git-repo-check -s read-only -C /tmp
@@ -109,5 +109,28 @@ describe("buildCodexArgs", () => {
 
 	it("omits -m for the default model sentinel", () => {
 		expect(buildCodexArgs({ model: "default" }).join(" ")).not.toContain("-m");
+	});
+});
+
+// Shape copied from a real `codex debug models` run against codex-cli 0.157.1,
+// trimmed to the fields the parser reads.
+describe("parseCodexModelCatalog", () => {
+	const catalog = JSON.stringify({
+		models: [
+			{ slug: "gpt-6-astra", display_name: "GPT-6-Astra", visibility: "list", supported_in_api: true },
+			{ slug: "gpt-reserve", display_name: "GPT-Reserve", visibility: "hide", supported_in_api: true },
+			{ slug: "gpt-6-luna", display_name: "GPT-6-Luna", visibility: "list", supported_in_api: true },
+			{ slug: "codex-auto-review", visibility: "hide", supported_in_api: true },
+		],
+	});
+
+	it("lists the models Codex shows in its own picker, after the config default", () => {
+		expect(parseCodexModelCatalog(catalog)).toEqual([CODEX_DEFAULT_MODEL, "gpt-6-astra", "gpt-6-luna"]);
+	});
+
+	it("returns null for output it cannot read, so the caller can fall back", () => {
+		expect(parseCodexModelCatalog("not json")).toBeNull();
+		expect(parseCodexModelCatalog(JSON.stringify({ models: [] }))).toBeNull();
+		expect(parseCodexModelCatalog(JSON.stringify({ other: 1 }))).toBeNull();
 	});
 });
