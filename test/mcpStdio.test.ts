@@ -27,7 +27,7 @@ process.stdin.on("data", (d) => {
 		buf = buf.slice(i + 1);
 		if (!line) continue;
 		const m = JSON.parse(line);
-		fs.appendFileSync(log, "rpc:" + m.method + "\\n");
+		fs.appendFileSync(log, "rpc:" + m.method + (m.params && m.params.protocolVersion ? ":" + m.params.protocolVersion : "") + "\\n");
 		if (m.method === "initialize")
 			send({ jsonrpc: "2.0", id: m.id, result: { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "probe", version: "1" } } });
 		else if (m.method === "tools/list")
@@ -83,7 +83,7 @@ describe("MCP over stdio", () => {
 
 	it("completes the handshake with an initialized notification", async () => {
 		await getMCPTools(stdioServer());
-		expect(logLines()).toEqual(["boot", "rpc:initialize", "rpc:notifications/initialized", "rpc:tools/list"]);
+		expect(logLines()).toEqual(["boot", "rpc:initialize:2025-06-18", "rpc:notifications/initialized", "rpc:tools/list"]);
 	});
 
 	it("reuses one child process across requests", async () => {

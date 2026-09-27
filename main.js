@@ -6219,7 +6219,7 @@ __export(AugmentedCanvasPlugin_exports, {
   default: () => AugmentedCanvasPlugin
 });
 module.exports = __toCommonJS(AugmentedCanvasPlugin_exports);
-var import_obsidian27 = require("obsidian");
+var import_obsidian28 = require("obsidian");
 
 // node_modules/.pnpm/monkey-around@2.3.0/node_modules/monkey-around/mjs/index.js
 function around(obj, factories) {
@@ -48545,15 +48545,18 @@ var mcpRequest = async (server, method, params = {}, id = 1) => {
   }
   return JSON.parse(text2);
 };
+var serverCapabilities = /* @__PURE__ */ new Map();
 var initializeSession = async (server) => {
+  var _a20, _b19;
   const response = await mcpRequest(server, "initialize", {
-    protocolVersion: "2024-11-05",
+    protocolVersion: "2025-06-18",
     capabilities: {},
     clientInfo: { name: "obsidian-ai-canvas", version: "1.0" }
   });
   if (server.transport === "stdio") {
     stdioNotify(server, "notifications/initialized");
   }
+  serverCapabilities.set(server.id, (_b19 = (_a20 = response.result) == null ? void 0 : _a20.capabilities) != null ? _b19 : {});
   return response.result;
 };
 var fetchMCPTools = async (server) => {
@@ -48624,15 +48627,68 @@ var testMCPServer = async (server) => {
     return { success: false, error: error40.message || String(error40) };
   }
 };
+var capabilitiesFor = async (server) => {
+  var _a20;
+  if (!serverCapabilities.has(server.id))
+    await initializeSession(server);
+  return (_a20 = serverCapabilities.get(server.id)) != null ? _a20 : {};
+};
+var listMCPResources = async (server) => {
+  var _a20, _b19;
+  const capabilities = await capabilitiesFor(server);
+  if (!capabilities.resources)
+    return [];
+  const response = await mcpRequest(server, "resources/list", {}, 3);
+  return ((_b19 = (_a20 = response.result) == null ? void 0 : _a20.resources) != null ? _b19 : []).map((resource) => {
+    var _a21;
+    return {
+      uri: resource.uri,
+      name: (_a21 = resource.name) != null ? _a21 : resource.uri,
+      description: resource.description,
+      mimeType: resource.mimeType,
+      serverId: server.id,
+      serverName: server.name
+    };
+  });
+};
+var readMCPResource = async (server, uri) => {
+  var _a20, _b19;
+  const response = await mcpRequest(server, "resources/read", { uri }, 4);
+  return ((_b19 = (_a20 = response.result) == null ? void 0 : _a20.contents) != null ? _b19 : []).map((part) => typeof (part == null ? void 0 : part.text) === "string" ? part.text : "").filter(Boolean).join("\n\n");
+};
+var listMCPPrompts = async (server) => {
+  var _a20, _b19;
+  const capabilities = await capabilitiesFor(server);
+  if (!capabilities.prompts)
+    return [];
+  const response = await mcpRequest(server, "prompts/list", {}, 5);
+  return ((_b19 = (_a20 = response.result) == null ? void 0 : _a20.prompts) != null ? _b19 : []).map((prompt) => ({
+    name: prompt.name,
+    description: prompt.description,
+    arguments: prompt.arguments,
+    serverId: server.id,
+    serverName: server.name
+  }));
+};
+var getMCPPrompt = async (server, name20, args = {}) => {
+  var _a20, _b19;
+  const response = await mcpRequest(server, "prompts/get", { name: name20, arguments: args }, 6);
+  return ((_b19 = (_a20 = response.result) == null ? void 0 : _a20.messages) != null ? _b19 : []).map((message) => {
+    var _a21;
+    return typeof ((_a21 = message == null ? void 0 : message.content) == null ? void 0 : _a21.text) === "string" ? message.content.text : "";
+  }).filter(Boolean).join("\n\n");
+};
 var clearMCPCache = (serverId) => {
   toolsCache.delete(serverId);
   sessionIds.delete(serverId);
+  serverCapabilities.delete(serverId);
 };
 var closeAllMCPClients = async () => {
   for (const serverId of [...stdioConnections.keys()])
     closeStdioConnection(serverId);
   toolsCache.clear();
   sessionIds.clear();
+  serverCapabilities.clear();
 };
 
 // src/utils/providerParams.ts
@@ -54789,18 +54845,18 @@ SYSTEM PROMPT
 
 ${systemPrompt.prompt.trim()}
 `.trim();
-  const NODE_WIDTH = 800;
+  const NODE_WIDTH2 = 800;
   const NODE_HEIGHT = 300;
   const newNode = createNode(canvas, {
     pos: {
-      x: canvas.x - NODE_WIDTH / 2,
+      x: canvas.x - NODE_WIDTH2 / 2,
       y: canvas.y - NODE_HEIGHT / 2
     },
     size: {
       height: calcHeight({
         text: text2
       }),
-      width: NODE_WIDTH
+      width: NODE_WIDTH2
     },
     text: text2,
     focus: false
@@ -54823,19 +54879,19 @@ var runPromptFolder = async (app, settings2, systemPrompt, folder) => {
     new import_obsidian25.Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
     return;
   }
-  const NODE_WIDTH = 800;
+  const NODE_WIDTH2 = 800;
   const NODE_HEIGHT = 300;
   const text2 = "```Calling AI (" + model.model + ")...```";
   const created = createNode(canvas, {
     pos: {
-      x: canvas.x - NODE_WIDTH / 2,
+      x: canvas.x - NODE_WIDTH2 / 2,
       y: canvas.y - NODE_HEIGHT / 2
     },
     size: {
       height: calcHeight({
         text: text2
       }),
-      width: NODE_WIDTH
+      width: NODE_WIDTH2
     },
     text: text2,
     focus: false
@@ -54933,6 +54989,104 @@ var InputModal = class extends import_obsidian26.Modal {
     this.onSubmit(value);
     this.close();
   }
+};
+
+// src/actions/commands/insertMcpContent.ts
+var import_obsidian27 = require("obsidian");
+
+// src/utils/mcpContent.ts
+var gatherMcpContent = async (servers) => {
+  const content = { resources: [], prompts: [], errors: [] };
+  for (const server of servers.filter((candidate) => candidate.enabled)) {
+    try {
+      content.resources.push(...await listMCPResources(server));
+      content.prompts.push(...await listMCPPrompts(server));
+    } catch (error40) {
+      content.errors.push(`${server.name}: ${error40 instanceof Error ? error40.message : String(error40)}`);
+    }
+  }
+  return content;
+};
+
+// src/actions/commands/insertMcpContent.ts
+var NODE_WIDTH = 800;
+var McpContentModal = class extends import_obsidian27.SuggestModal {
+  constructor(app, choices, onPick) {
+    super(app);
+    this.choices = choices;
+    this.onPick = onPick;
+    this.setPlaceholder("Search MCP resources and prompts");
+  }
+  getSuggestions(query) {
+    const needle = query.toLowerCase();
+    return this.choices.filter((choice2) => `${choice2.title} ${choice2.subtitle}`.toLowerCase().includes(needle));
+  }
+  renderSuggestion(choice2, el) {
+    el.createEl("div", { text: choice2.title });
+    el.createEl("small", { text: choice2.subtitle });
+  }
+  onChooseSuggestion(choice2) {
+    this.onPick(choice2);
+  }
+};
+var insertMcpContent = async (app, settings2) => {
+  var _a20;
+  const canvas = getActiveCanvas(app);
+  if (!canvas)
+    return;
+  const servers = (_a20 = settings2.mcpServers) != null ? _a20 : [];
+  if (!servers.some((server) => server.enabled)) {
+    new import_obsidian27.Notice("No MCP server is enabled.");
+    return;
+  }
+  const notice = new import_obsidian27.Notice("Asking MCP servers what they offer\u2026", 0);
+  const { resources, prompts, errors } = await gatherMcpContent(servers);
+  notice.hide();
+  const choices = [
+    ...resources.map((resource) => ({
+      kind: "resource",
+      title: resource.name,
+      subtitle: `Resource \xB7 ${resource.serverName}${resource.mimeType ? ` \xB7 ${resource.mimeType}` : ""}`,
+      serverId: resource.serverId,
+      uri: resource.uri
+    })),
+    ...prompts.map((prompt) => ({
+      kind: "prompt",
+      title: prompt.name,
+      subtitle: `Prompt \xB7 ${prompt.serverName}${prompt.description ? ` \xB7 ${prompt.description}` : ""}`,
+      serverId: prompt.serverId,
+      name: prompt.name
+    }))
+  ];
+  for (const error40 of errors)
+    new import_obsidian27.Notice(error40);
+  if (!choices.length) {
+    new import_obsidian27.Notice("No MCP resources or prompts are available.");
+    return;
+  }
+  new McpContentModal(app, choices, async (choice2) => {
+    const server = servers.find((candidate) => candidate.id === choice2.serverId);
+    if (!server)
+      return;
+    try {
+      const text2 = choice2.kind === "resource" ? await readMCPResource(server, choice2.uri) : await getMCPPrompt(server, choice2.name);
+      if (!text2.trim()) {
+        new import_obsidian27.Notice(`${choice2.title} returned no text.`);
+        return;
+      }
+      createNode(canvas, {
+        pos: {
+          x: canvas.x - NODE_WIDTH / 2,
+          y: canvas.y
+        },
+        size: { height: calcHeight({ text: text2 }), width: NODE_WIDTH },
+        text: text2,
+        focus: false
+      });
+    } catch (error40) {
+      new import_obsidian27.Notice(`Could not read ${choice2.title}: ${error40 instanceof Error ? error40.message : error40}`);
+    }
+  }).open();
 };
 
 // src/data/prompts.csv.txt
@@ -55108,7 +55262,7 @@ var prompts_csv_default = `"act","prompt"
 `;
 
 // src/AugmentedCanvasPlugin.ts
-var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
+var AugmentedCanvasPlugin = class extends import_obsidian28.Plugin {
   constructor() {
     super(...arguments);
     this.triggerByPlugin = false;
@@ -55276,7 +55430,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
         render: (next) => function(...args) {
           var _a20, _b19, _c, _d, _e, _f;
           const result = next.call(this, ...args);
-          const maybeCanvasView = app.workspace.getActiveViewOfType(import_obsidian27.ItemView);
+          const maybeCanvasView = app.workspace.getActiveViewOfType(import_obsidian28.ItemView);
           if (!maybeCanvasView || ((_b19 = (_a20 = maybeCanvasView.canvas) == null ? void 0 : _a20.selection) == null ? void 0 : _b19.size) !== 1)
             return result;
           this.menuEl.querySelectorAll(".ai-menu-item").forEach((el) => el.remove());
@@ -55289,10 +55443,10 @@ var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
             addAskAIButton(app, settings2, this.menuEl);
             addAskAIWithModelButton(app, settings2, this.menuEl);
             const buttonEl_AskQuestion = createEl("button", "clickable-icon ai-menu-item");
-            (0, import_obsidian27.setTooltip)(buttonEl_AskQuestion, "Ask question with AI", {
+            (0, import_obsidian28.setTooltip)(buttonEl_AskQuestion, "Ask question with AI", {
               placement: "top"
             });
-            (0, import_obsidian27.setIcon)(buttonEl_AskQuestion, "lucide-help-circle");
+            (0, import_obsidian28.setIcon)(buttonEl_AskQuestion, "lucide-help-circle");
             this.menuEl.appendChild(buttonEl_AskQuestion);
             buttonEl_AskQuestion.addEventListener("click", () => {
               let modal = new CustomQuestionModal(app, (question2) => {
@@ -55303,15 +55457,15 @@ var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
             });
             addAskQuestionWithModelButton(app, settings2, this.menuEl);
             const buttonEl_GenerateImage = createEl("button", "clickable-icon ai-menu-item");
-            (0, import_obsidian27.setTooltip)(buttonEl_GenerateImage, describeImageTarget(), {
+            (0, import_obsidian28.setTooltip)(buttonEl_GenerateImage, describeImageTarget(), {
               placement: "top"
             });
-            (0, import_obsidian27.setIcon)(buttonEl_GenerateImage, "lucide-image");
+            (0, import_obsidian28.setIcon)(buttonEl_GenerateImage, "lucide-image");
             this.menuEl.appendChild(buttonEl_GenerateImage);
             buttonEl_GenerateImage.addEventListener("click", () => {
               const target = resolveConfiguredImageProvider();
               if (!target) {
-                new import_obsidian27.Notice("No image provider configured. Set one in Image Generation settings.");
+                new import_obsidian28.Notice("No image provider configured. Set one in Image Generation settings.");
                 return;
               }
               const isAzureImageProvider = target.provider.type === "Azure";
@@ -55385,7 +55539,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
       if (imagePrompt) {
         menu.addItem((item) => {
           item.setTitle("View image prompt").setIcon("lucide-file-text").onClick(() => {
-            const modal = new import_obsidian27.Modal(this.app);
+            const modal = new import_obsidian28.Modal(this.app);
             modal.setTitle("Image generation prompt");
             modal.contentEl.addClass("image-generation-prompt-modal");
             modal.contentEl.createEl("p", {
@@ -55411,9 +55565,9 @@ var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
             copyButton.addEventListener("click", async () => {
               try {
                 await navigator.clipboard.writeText(imagePrompt);
-                new import_obsidian27.Notice("Image prompt copied to clipboard");
+                new import_obsidian28.Notice("Image prompt copied to clipboard");
               } catch (e) {
-                new import_obsidian27.Notice("Could not copy the image prompt");
+                new import_obsidian28.Notice("Could not copy the image prompt");
               }
             });
             modal.open();
@@ -55429,7 +55583,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
       menu.addItem((item) => {
         item.setTitle("Copy node ID").setIcon("lucide-copy").onClick(() => {
           navigator.clipboard.writeText(node.id);
-          new import_obsidian27.Notice("Node ID copied to clipboard");
+          new import_obsidian28.Notice("Node ID copied to clipboard");
         });
       });
       menu.addItem((item) => {
@@ -55441,7 +55595,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
         item.setTitle("Generate image (NanoBanana)").setIcon("lucide-image").onClick(() => {
           const geminiProvider = resolveGeminiProvider();
           if (!geminiProvider) {
-            new import_obsidian27.Notice("No Gemini provider configured for NanoBanana.");
+            new import_obsidian28.Notice("No Gemini provider configured for NanoBanana.");
             return;
           }
           const nanoModel = createNanoBananaModel(geminiProvider.id);
@@ -55473,7 +55627,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
         item.setTitle("Generate image").setIcon("lucide-image").onClick(() => {
           const sourceNode = resolveSourceNode(canvas);
           if (!sourceNode) {
-            new import_obsidian27.Notice("Select a card to generate an image from.");
+            new import_obsidian28.Notice("Select a card to generate an image from.");
             return;
           }
           const modal = new InputModal(app, {
@@ -55503,11 +55657,20 @@ var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
           return true;
         }
         new QuickActionModal(app, this.settings, (systemPrompt) => {
-          new import_obsidian27.Notice(`Selected system prompt ${systemPrompt.act}`);
+          new import_obsidian28.Notice(`Selected system prompt ${systemPrompt.act}`);
           new FolderSuggestModal(app, (folder) => {
             runPromptFolder(app, this.settings, systemPrompt, folder);
           }).open();
         }).open();
+      }
+    });
+    this.addCommand({
+      id: "insert-mcp-content",
+      name: "Insert an MCP resource or prompt",
+      checkCallback: (checking) => {
+        if (checking)
+          return !!getActiveCanvas(app);
+        void insertMcpContent(app, this.settings);
       }
     });
     this.addCommand({

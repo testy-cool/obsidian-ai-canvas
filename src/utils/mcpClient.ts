@@ -229,12 +229,15 @@ const mcpRequest = async (server: MCPServer, method: string, params: any = {}, i
 	return JSON.parse(text);
 };
 
+// What each server advertised at initialize, keyed by server id.
+const serverCapabilities = new Map<string, Record<string, unknown>>();
+
 /**
  * Initialize MCP session with server
  */
 const initializeSession = async (server: MCPServer) => {
 	const response = await mcpRequest(server, 'initialize', {
-		protocolVersion: '2024-11-05',
+		protocolVersion: '2025-06-18',
 		capabilities: {},
 		clientInfo: { name: 'obsidian-ai-canvas', version: '1.0' },
 	});
@@ -242,6 +245,7 @@ const initializeSession = async (server: MCPServer) => {
 	if (server.transport === 'stdio') {
 		stdioNotify(server, 'notifications/initialized');
 	}
+	serverCapabilities.set(server.id, response.result?.capabilities ?? {});
 	return response.result;
 };
 
@@ -347,12 +351,90 @@ export const testMCPServer = async (server: MCPServer): Promise<{ success: boole
 	}
 };
 
+export type MCPResourceRef = {
+	uri: string;
+	name: string;
+	description?: string;
+	mimeType?: string;
+	serverId: string;
+	serverName: string;
+};
+
+export type MCPPromptRef = {
+	name: string;
+	description?: string;
+	arguments?: { name: string; required?: boolean }[];
+	serverId: string;
+	serverName: string;
+};
+
+/** Ask a server what it can do, initializing the session if needed. */
+const capabilitiesFor = async (server: MCPServer): Promise<Record<string, unknown>> => {
+	if (!serverCapabilities.has(server.id)) await initializeSession(server);
+	return serverCapabilities.get(server.id) ?? {};
+};
+
+/**
+ * Resources a server offers. Empty when the server never advertised resources,
+ * so a tools-only server is not sent a call it would reject.
+ */
+export const listMCPResources = async (server: MCPServer): Promise<MCPResourceRef[]> => {
+	const capabilities = await capabilitiesFor(server);
+	if (!capabilities.resources) return [];
+	const response = await mcpRequest(server, 'resources/list', {}, 3);
+	return (response.result?.resources ?? []).map((resource: any) => ({
+		uri: resource.uri,
+		name: resource.name ?? resource.uri,
+		description: resource.description,
+		mimeType: resource.mimeType,
+		serverId: server.id,
+		serverName: server.name,
+	}));
+};
+
+/** Read one resource, joining its text parts. Binary parts are left out. */
+export const readMCPResource = async (server: MCPServer, uri: string): Promise<string> => {
+	const response = await mcpRequest(server, 'resources/read', { uri }, 4);
+	return (response.result?.contents ?? [])
+		.map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+		.filter(Boolean)
+		.join('\n\n');
+};
+
+/** Prompts a server offers, or none when it does not advertise prompts. */
+export const listMCPPrompts = async (server: MCPServer): Promise<MCPPromptRef[]> => {
+	const capabilities = await capabilitiesFor(server);
+	if (!capabilities.prompts) return [];
+	const response = await mcpRequest(server, 'prompts/list', {}, 5);
+	return (response.result?.prompts ?? []).map((prompt: any) => ({
+		name: prompt.name,
+		description: prompt.description,
+		arguments: prompt.arguments,
+		serverId: server.id,
+		serverName: server.name,
+	}));
+};
+
+/** Fill in a server-side prompt and return its text. */
+export const getMCPPrompt = async (
+	server: MCPServer,
+	name: string,
+	args: Record<string, string> = {}
+): Promise<string> => {
+	const response = await mcpRequest(server, 'prompts/get', { name, arguments: args }, 6);
+	return (response.result?.messages ?? [])
+		.map((message: any) => (typeof message?.content?.text === 'string' ? message.content.text : ''))
+		.filter(Boolean)
+		.join('\n\n');
+};
+
 /**
  * Clear MCP cache for a server
  */
 export const clearMCPCache = (serverId: string): void => {
 	toolsCache.delete(serverId);
 	sessionIds.delete(serverId);
+	serverCapabilities.delete(serverId);
 };
 
 /**
@@ -362,6 +444,7 @@ export const closeAllMCPClients = async (): Promise<void> => {
 	for (const serverId of [...stdioConnections.keys()]) closeStdioConnection(serverId);
 	toolsCache.clear();
 	sessionIds.clear();
+	serverCapabilities.clear();
 };
 
 /**

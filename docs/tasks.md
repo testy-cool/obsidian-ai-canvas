@@ -19,10 +19,19 @@ The gaps below are what that probe exposed.
   is nothing to restore. Local servers cover this now (AIC-001). The stale
   entry can stay switched off in settings.
 
-- [ ] AIC-003 Use MCP resources and prompts, not only tools		#mcp !low
-  The client reads `tools/list` and nothing else, announces protocol
-  2024-11-05, and authenticates with a static bearer token. Servers that
-  expose resources, prompts or OAuth cannot be used fully.
+- [x] AIC-003 Use MCP resources and prompts, not only tools		#mcp !low
+  The client now reads `resources/list`, `resources/read`, `prompts/list` and
+  `prompts/get`, and a command puts either on the canvas as a card. A server is
+  only asked for what it advertised at initialize, so a tools-only server is
+  never sent a call it would reject. The announced protocol moved to 2025-06-18
+  after checking that the published filesystem server negotiates both versions
+  identically.
+
+- [ ] AIC-009 Authenticate to an MCP server with OAuth		#mcp !low
+  Split out of AIC-003. Remote servers can require OAuth 2.1 with discovery,
+  dynamic client registration, a browser redirect and token refresh. That is a
+  project of its own, not a flag, and half of it would be worse than none. A
+  static bearer token still works for servers that accept one.
 
 ## Providers
 

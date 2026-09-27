@@ -52,6 +52,7 @@ import { setupHtmlPreviewPersistence } from "./utils/htmlPreview";
 import { ObservabilityClient } from "./utils/observability";
 import { cancelActiveGenerations } from "./utils/generationStatus";
 import { closeAllMCPClients } from "./utils/mcpClient";
+import { insertMcpContent } from "./actions/commands/insertMcpContent";
 import { configureLLMObservability } from "./utils/llmObservability";
 import { getImageGenerationPrompt } from "./utils/imageGenerationPrompt";
 
@@ -783,6 +784,15 @@ export default class AugmentedCanvasPlugin extends Plugin {
 				).open();
 			},
 			// callback: () => {},
+		});
+
+		this.addCommand({
+			id: "insert-mcp-content",
+			name: "Insert an MCP resource or prompt",
+			checkCallback: (checking: boolean) => {
+				if (checking) return !!getActiveCanvas(app);
+				void insertMcpContent(app, this.settings);
+			},
 		});
 
 		this.addCommand({
