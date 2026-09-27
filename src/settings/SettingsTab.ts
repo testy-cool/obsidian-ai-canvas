@@ -34,6 +34,9 @@ const filterSection = (sectionEl: HTMLElement, query: string): boolean => {
 
 export default class SettingsTab extends PluginSettingTab {
 	private capabilityTests = new Set<string>();
+	// Providers open on this screen. Closed is the default: a configured provider
+	// is a one-line summary until someone asks for its models.
+	private expandedProviders = new Set<string>();
 	private capabilityModels = new Map<string, string>();
 	private capabilityProgress = new Map<string, ProviderCapabilityReport>();
 	private capabilityViews = new Map<string, () => void>();
@@ -293,6 +296,7 @@ export default class SettingsTab extends PluginSettingTab {
             const providerBlock = cardsContainer.createDiv("provider-block");
 
             const headerRow = providerBlock.createDiv("provider-header");
+            const chevron = headerRow.createEl("span", { cls: "provider-chevron" });
             const titleCol = headerRow.createDiv("provider-title");
             titleCol.createEl("div", { text: provider.type, cls: "provider-name" });
 
@@ -403,7 +407,42 @@ export default class SettingsTab extends PluginSettingTab {
                 });
             }
 
-            this.renderProviderModels(provider, providerBlock);
+            const enabledModels = this.plugin.settings.models.filter(model => model.providerId === provider.id);
+            metaRow.createEl("span", {
+                text: `Models: ${enabledModels.filter(model => model.enabled).length}/${enabledModels.length}`,
+            });
+
+            const body = providerBlock.createDiv("provider-body");
+            this.renderProviderModels(provider, body);
+
+            const applyExpanded = (expanded: boolean) => {
+                body.hidden = !expanded;
+                providerBlock.toggleClass("is-expanded", expanded);
+                headerRow.setAttribute("aria-expanded", String(expanded));
+                setIcon(chevron, expanded ? "lucide-chevron-down" : "lucide-chevron-right");
+            };
+
+            headerRow.addClass("is-collapsible");
+            headerRow.setAttribute("role", "button");
+            headerRow.setAttribute("tabindex", "0");
+            headerRow.setAttribute("aria-label", `${provider.type} settings`);
+            applyExpanded(this.expandedProviders.has(provider.id));
+
+            const toggleExpanded = (event?: { target?: unknown }) => {
+                // The switch, Edit and Delete live in the header and act on their own.
+                const target = event?.target as { closest?: (selector: string) => unknown } | undefined;
+                if (target?.closest?.(".provider-controls")) return;
+                const expanded = !this.expandedProviders.has(provider.id);
+                if (expanded) this.expandedProviders.add(provider.id);
+                else this.expandedProviders.delete(provider.id);
+                applyExpanded(expanded);
+            };
+            headerRow.addEventListener("click", toggleExpanded);
+            headerRow.addEventListener("keydown", (event: KeyboardEvent) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                toggleExpanded();
+            });
         });
     }
 

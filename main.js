@@ -52346,6 +52346,7 @@ var SettingsTab = class extends import_obsidian20.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.capabilityTests = /* @__PURE__ */ new Set();
+    this.expandedProviders = /* @__PURE__ */ new Set();
     this.capabilityModels = /* @__PURE__ */ new Map();
     this.capabilityProgress = /* @__PURE__ */ new Map();
     this.capabilityViews = /* @__PURE__ */ new Map();
@@ -52524,6 +52525,7 @@ var SettingsTab = class extends import_obsidian20.PluginSettingTab {
     this.plugin.settings.providers.forEach((provider) => {
       const providerBlock = cardsContainer.createDiv("provider-block");
       const headerRow = providerBlock.createDiv("provider-header");
+      const chevron = headerRow.createEl("span", { cls: "provider-chevron" });
       const titleCol = headerRow.createDiv("provider-title");
       titleCol.createEl("div", { text: provider.type, cls: "provider-name" });
       const controls = headerRow.createDiv("provider-controls");
@@ -52614,7 +52616,42 @@ var SettingsTab = class extends import_obsidian20.PluginSettingTab {
           cls: hasKey ? "" : "mod-warning"
         });
       }
-      this.renderProviderModels(provider, providerBlock);
+      const enabledModels = this.plugin.settings.models.filter((model) => model.providerId === provider.id);
+      metaRow.createEl("span", {
+        text: `Models: ${enabledModels.filter((model) => model.enabled).length}/${enabledModels.length}`
+      });
+      const body = providerBlock.createDiv("provider-body");
+      this.renderProviderModels(provider, body);
+      const applyExpanded = (expanded) => {
+        body.hidden = !expanded;
+        providerBlock.toggleClass("is-expanded", expanded);
+        headerRow.setAttribute("aria-expanded", String(expanded));
+        (0, import_obsidian20.setIcon)(chevron, expanded ? "lucide-chevron-down" : "lucide-chevron-right");
+      };
+      headerRow.addClass("is-collapsible");
+      headerRow.setAttribute("role", "button");
+      headerRow.setAttribute("tabindex", "0");
+      headerRow.setAttribute("aria-label", `${provider.type} settings`);
+      applyExpanded(this.expandedProviders.has(provider.id));
+      const toggleExpanded = (event) => {
+        var _a20;
+        const target = event == null ? void 0 : event.target;
+        if ((_a20 = target == null ? void 0 : target.closest) == null ? void 0 : _a20.call(target, ".provider-controls"))
+          return;
+        const expanded = !this.expandedProviders.has(provider.id);
+        if (expanded)
+          this.expandedProviders.add(provider.id);
+        else
+          this.expandedProviders.delete(provider.id);
+        applyExpanded(expanded);
+      };
+      headerRow.addEventListener("click", toggleExpanded);
+      headerRow.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ")
+          return;
+        event.preventDefault();
+        toggleExpanded();
+      });
     });
   }
   renderProviderModels(provider, container) {

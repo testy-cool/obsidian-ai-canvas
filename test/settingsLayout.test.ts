@@ -55,6 +55,15 @@ class Element {
 	createDiv(options?: string | { cls?: string; text?: string }) { return this.createEl("div", options); }
 	createSpan(options?: string | { cls?: string; text?: string }) { return this.createEl("span", options); }
 	addClass(name: string) { this.className += ` ${name}`; }
+	// Enough of closest() for a class selector, which is how a click decides
+	// whether it landed on a control inside a clickable header.
+	closest(selector: string): Element | null {
+		const name = selector.replace(/^\./, "");
+		for (let node: Element | null = this; node; node = node.parentElement) {
+			if (node.classList.contains(name)) return node;
+		}
+		return null;
+	}
 	removeClass(name: string) { this.classList.toggle(name, false); }
 	toggleClass(name: string, enabled: boolean) { this.classList.toggle(name, enabled); }
 	setText(text: string) { this.text = text; }
@@ -850,5 +859,66 @@ describe("fetching models for a local CLI provider", () => {
 			.find((item: any) => item.querySelector(".setting-item-name")?.textContent === "Available models")!;
 		expect(fetchSetting.querySelector(".provider-fetch-status")!.parentElement!.className)
 			.toContain("provider-fetch-control");
+	});
+});
+
+describe("collapsing configured providers", () => {
+	const setup = () => {
+		const plugin: any = {
+			settings: {
+				...DEFAULT_SETTINGS,
+				providers: [
+					{ id: "gemini", type: "Gemini", baseUrl: "", apiKey: "k", enabled: true },
+					{ id: "bifrost", type: "Bifrost", baseUrl: "https://example.test/v1", apiKey: "k", enabled: true },
+				],
+				models: [{ id: "m1", model: "gemini-3-flash-preview", providerId: "gemini", enabled: true }],
+			},
+			saveSettings: vi.fn().mockResolvedValue(undefined),
+		};
+		const tab: any = new SettingsTab({} as any, plugin);
+		const root = new Element();
+		tab.renderProviders(root);
+		return { tab, plugin, root, blocks: root.querySelectorAll(".provider-block") };
+	};
+
+	const body = (block: any) => block.querySelector(".provider-body")!;
+
+	it("hides each provider's models until it is opened", () => {
+		const { blocks } = setup();
+		expect(blocks).toHaveLength(2);
+		for (const block of blocks) expect(body(block).hidden).toBe(true);
+	});
+
+	it("still shows the name, the switch and what the provider is, while closed", () => {
+		const { blocks } = setup();
+		const header = blocks[0].querySelector(".provider-header")!;
+		expect(header.hidden).toBeFalsy();
+		expect(blocks[0].querySelector(".provider-meta")!.textContent).toContain("ID: gemini");
+		expect(blocks[0].querySelector(".provider-meta")!.textContent).toContain("Models: 1/1");
+	});
+
+	it("opens one provider when its header is clicked, leaving the other closed", async () => {
+		const { blocks } = setup();
+		await blocks[0].querySelector(".provider-header")!.listeners.get("click")!({ target: blocks[0].querySelector(".provider-name") });
+		expect(body(blocks[0]).hidden).toBe(false);
+		expect(body(blocks[1]).hidden).toBe(true);
+		expect(blocks[0].querySelector(".provider-header")!.attributes.get("aria-expanded")).toBe("true");
+	});
+
+	it("does not open a provider when its own buttons are used", async () => {
+		const { blocks } = setup();
+		const editButton = blocks[0].querySelectorAll("button").find((b: any) => b.textContent === "Edit")!;
+		await blocks[0].querySelector(".provider-header")!.listeners.get("click")!({ target: editButton });
+		expect(body(blocks[0]).hidden).toBe(true);
+	});
+
+	it("keeps an opened provider open when the settings redraw", async () => {
+		const { tab, blocks } = setup();
+		await blocks[0].querySelector(".provider-header")!.listeners.get("click")!({ target: blocks[0].querySelector(".provider-name") });
+		const again = new Element();
+		tab.renderProviders(again);
+		const redrawn = again.querySelectorAll(".provider-block");
+		expect(body(redrawn[0]).hidden).toBe(false);
+		expect(body(redrawn[1]).hidden).toBe(true);
 	});
 });

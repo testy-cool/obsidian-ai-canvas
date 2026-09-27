@@ -111,6 +111,31 @@
 	padding-bottom: 6px;
 }
 
+.provider-header.is-collapsible {
+	cursor: pointer;
+}
+
+.provider-header.is-collapsible:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 3px;
+	border-radius: var(--radius-s);
+}
+
+.provider-chevron {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+}
+
+.provider-chevron svg {
+	width: 16px;
+	height: 16px;
+}
+
+.provider-body[hidden] {
+	display: none;
+}
+
 .provider-title {
 	display: flex;
 	flex-direction: column;
