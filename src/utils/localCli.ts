@@ -108,8 +108,6 @@ export const CLI_ADAPTERS: Record<string, CliAdapter> = {
 	},
 };
 
-export const LOCAL_CLI_PROVIDER_TYPES = Object.values(CLI_ADAPTERS).map(a => a.providerType);
-
 export const cliAdapterForProviderType = (type: string): CliAdapter | undefined =>
 	Object.values(CLI_ADAPTERS).find(adapter => adapter.providerType === type);
 

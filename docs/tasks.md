@@ -139,3 +139,9 @@ The gaps below are what that probe exposed.
   whose only importer was an unused import. The README advertised two command
   palette commands from them that the plugin never registered, so those claims
   are gone too. YouTube and web pages still work through native URL context.
+
+- [ ] AIC-016 Decide on the exports nothing imports		#tooling !low
+  `pnpm dlx knip` reports 21 exports and 4 types that are exported but imported
+  nowhere. Each is one judgement, not a sweep: some are internal helpers that
+  only need the `export` keyword dropped, and a few are read by tests. Do them
+  in passing when touching those files rather than in one commit.

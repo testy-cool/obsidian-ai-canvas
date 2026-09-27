@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-ai-canvas",
-	"version": "0.3.21",
+	"version": "0.3.22",
 	"description": "Transform your Canvas into an AI workspace. Chat with notes, generate content, use MCP tools, and connect to any LLM provider.",
 	"main": "main.js",
 	"scripts": {
@@ -38,20 +38,16 @@
 		"eslint": "8",
 		"eslint-plugin-unused-imports": "2",
 		"obsidian": "latest",
-		"ts-node": "^10.9.2",
 		"tslib": "^2.8.1",
 		"typescript": "5.9.3",
 		"vitest": "^4.0.18"
 	},
 	"dependencies": {
 		"@ai-sdk/google": "^3.0.18",
-		"@ai-sdk/mcp": "^1.0.14",
 		"@ai-sdk/openai": "^3.0.86",
 		"@ai-sdk/provider-utils": "^4.0.10",
-		"@google/generative-ai": "^0.24.1",
 		"ai": "^6.0.62",
 		"fuse.js": "^7.0.0",
-		"googleapis": "^148.0.0",
 		"js-tiktoken": "^1.0.8",
 		"monkey-around": "^2.3.0",
 		"node-fetch": "2.7.0",

@@ -47779,7 +47779,6 @@ var CLI_ADAPTERS = {
     baseArgs: []
   }
 };
-var LOCAL_CLI_PROVIDER_TYPES = Object.values(CLI_ADAPTERS).map((a) => a.providerType);
 var cliAdapterForProviderType = (type) => Object.values(CLI_ADAPTERS).find((adapter) => adapter.providerType === type);
 var buildCliInvocation = (adapter, { prompt, model, extraArgs }) => {
   const args = [...adapter.baseArgs];
