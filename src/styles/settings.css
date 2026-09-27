@@ -532,6 +532,11 @@
 	min-width: 0;
 }
 
+.provider-fetch-control {
+	flex-wrap: wrap;
+	justify-content: flex-end;
+}
+
 .provider-fetch-status {
 	flex-basis: 100%;
 	white-space: normal;

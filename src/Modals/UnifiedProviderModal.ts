@@ -289,7 +289,7 @@ export class UnifiedProviderModal extends Modal {
             this.fetchedModelIds = cliUi.models;
             connStatus?.setText(
               detected
-                ? `Detected: ${detected}`
+                ? `Found ${cliUi.models.length} models`
                 : `Not found. ${cliUi.hint}`
             );
             connStatus?.toggleClass("mod-success", !!detected);
@@ -333,6 +333,8 @@ export class UnifiedProviderModal extends Modal {
         }
       });
     });
+    // The status needs a row of its own; the control is a single flex line by default.
+    connSetting.controlEl.addClass("provider-fetch-control");
     connStatus = connSetting.controlEl.createEl("span", {
       cls: "setting-item-description provider-fetch-status",
     });

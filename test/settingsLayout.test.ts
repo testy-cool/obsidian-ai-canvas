@@ -56,6 +56,7 @@ class Element {
 	createSpan(options?: string | { cls?: string; text?: string }) { return this.createEl("span", options); }
 	addClass(name: string) { this.className += ` ${name}`; }
 	removeClass(name: string) { this.classList.toggle(name, false); }
+	toggleClass(name: string, enabled: boolean) { this.classList.toggle(name, enabled); }
 	setText(text: string) { this.text = text; }
 	setAttribute(name: string, value: string) { this.attributes.set(name, value); }
 	empty() { this.children = []; this.text = ""; }
@@ -823,5 +824,31 @@ describe("cached input pricing on a model", () => {
 			expect.objectContaining({ id: provider.id }),
 			[expect.objectContaining({ model: model.model, inputCostPerMillion: 1, cachedInputCostPerMillion: 0.25 })],
 		);
+	});
+});
+
+describe("fetching models for a local CLI provider", () => {
+	it("reports how many models it found, not the path already shown above", async () => {
+		const modal: any = new UnifiedProviderModal({} as any, vi.fn(), {
+			id: "claude-cli", type: "Claude CLI", baseUrl: "", apiKey: "", enabled: true, binaryPath: process.execPath,
+		});
+		modal.onOpen();
+		const fetchSetting = (modal.contentEl as Element).querySelectorAll(".setting-item")
+			.find((item: any) => item.querySelector(".setting-item-name")?.textContent === "Available models")!;
+		await fetchSetting.querySelector("button")!.listeners.get("click")!();
+		const status = fetchSetting.querySelector(".provider-fetch-status")!;
+		expect(status.textContent).toMatch(/^Found \d+ models$/);
+		expect(status.textContent).not.toContain("/");
+	});
+
+	it("puts the status on its own row so a long message cannot be squeezed", () => {
+		const modal: any = new UnifiedProviderModal({} as any, vi.fn(), {
+			id: "codex", type: "Codex", baseUrl: "", apiKey: "", enabled: true,
+		});
+		modal.onOpen();
+		const fetchSetting = (modal.contentEl as Element).querySelectorAll(".setting-item")
+			.find((item: any) => item.querySelector(".setting-item-name")?.textContent === "Available models")!;
+		expect(fetchSetting.querySelector(".provider-fetch-status")!.parentElement!.className)
+			.toContain("provider-fetch-control");
 	});
 });

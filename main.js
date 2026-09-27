@@ -51831,7 +51831,7 @@ var _UnifiedProviderModal = class extends import_obsidian19.Modal {
           if (cliUi) {
             const detected = cliUi.detect(this.provider.binaryPath);
             this.fetchedModelIds = cliUi.models;
-            connStatus == null ? void 0 : connStatus.setText(detected ? `Detected: ${detected}` : `Not found. ${cliUi.hint}`);
+            connStatus == null ? void 0 : connStatus.setText(detected ? `Found ${cliUi.models.length} models` : `Not found. ${cliUi.hint}`);
             connStatus == null ? void 0 : connStatus.toggleClass("mod-success", !!detected);
             connStatus == null ? void 0 : connStatus.toggleClass("mod-warning", !detected);
             this.renderModelList();
@@ -51869,6 +51869,7 @@ var _UnifiedProviderModal = class extends import_obsidian19.Modal {
         }
       });
     });
+    connSetting.controlEl.addClass("provider-fetch-control");
     connStatus = connSetting.controlEl.createEl("span", {
       cls: "setting-item-description provider-fetch-status"
     });
