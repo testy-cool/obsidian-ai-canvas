@@ -48372,7 +48372,109 @@ var convertToGeminiSchema = (schema) => {
 var getToolSchema = (toolName) => {
   return toolSchemas.get(toolName);
 };
+var stdioConnections = /* @__PURE__ */ new Map();
+var STDIO_TIMEOUT_MS = 3e4;
+var splitJsonLines = (buffer) => {
+  var _a20;
+  const parts = buffer.split("\n");
+  const rest = (_a20 = parts.pop()) != null ? _a20 : "";
+  return { messages: parts.map((line) => line.trim()).filter(Boolean), rest };
+};
+var openStdioConnection = (server) => {
+  var _a20;
+  const existing = stdioConnections.get(server.id);
+  if (existing)
+    return existing;
+  if (!import_obsidian3.Platform.isDesktopApp) {
+    throw new Error(`MCP server "${server.name}" runs a local command, which only works in the desktop app.`);
+  }
+  if (!server.command) {
+    throw new Error(`MCP server "${server.name}" has no command to run.`);
+  }
+  const { spawn } = require("child_process");
+  const child = spawn(server.command, (_a20 = server.args) != null ? _a20 : [], {
+    cwd: server.cwd || void 0,
+    env: { ...process.env, ...server.env },
+    stdio: ["pipe", "pipe", "pipe"]
+  });
+  const connection = { child, pending: /* @__PURE__ */ new Map(), buffer: "" };
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    const { messages, rest } = splitJsonLines(connection.buffer + chunk);
+    connection.buffer = rest;
+    for (const line of messages) {
+      let message;
+      try {
+        message = JSON.parse(line);
+      } catch (e) {
+        logDebug(`[MCP ${server.name}] ignoring unparseable line`);
+        continue;
+      }
+      const waiting = connection.pending.get(message.id);
+      if (!waiting)
+        continue;
+      connection.pending.delete(message.id);
+      if (message.error)
+        waiting.reject(new Error(message.error.message || "MCP request failed"));
+      else
+        waiting.resolve(message);
+    }
+  });
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => logDebug(`[MCP ${server.name}] ${chunk.trim()}`));
+  const abandon = (error40) => {
+    stdioConnections.delete(server.id);
+    toolsCache.delete(server.id);
+    for (const waiting of connection.pending.values())
+      waiting.reject(error40);
+    connection.pending.clear();
+  };
+  child.on("error", (error40) => abandon(new Error(`Could not start MCP server "${server.name}": ${error40.message}`)));
+  child.on("exit", (code) => abandon(new Error(`MCP server "${server.name}" stopped (exit code ${code != null ? code : "unknown"}).`)));
+  stdioConnections.set(server.id, connection);
+  return connection;
+};
+var stdioRequest = (server, method, params, id) => {
+  const connection = openStdioConnection(server);
+  return new Promise((resolve2, reject) => {
+    const timer = setTimeout(() => {
+      if (connection.pending.delete(id)) {
+        reject(new Error(`MCP server "${server.name}" did not answer ${method} within ${STDIO_TIMEOUT_MS / 1e3}s.`));
+      }
+    }, STDIO_TIMEOUT_MS);
+    connection.pending.set(id, {
+      resolve: (value) => {
+        clearTimeout(timer);
+        resolve2(value);
+      },
+      reject: (error40) => {
+        clearTimeout(timer);
+        reject(error40);
+      }
+    });
+    connection.child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}
+`);
+  });
+};
+var stdioNotify = (server, method) => {
+  const connection = openStdioConnection(server);
+  connection.child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method })}
+`);
+};
+var closeStdioConnection = (serverId) => {
+  const connection = stdioConnections.get(serverId);
+  if (!connection)
+    return;
+  stdioConnections.delete(serverId);
+  for (const waiting of connection.pending.values())
+    waiting.reject(new Error("MCP connection closed"));
+  connection.pending.clear();
+  connection.child.kill();
+};
 var mcpRequest = async (server, method, params = {}, id = 1) => {
+  if (server.transport === "stdio") {
+    return stdioRequest(server, method, params, id);
+  }
   const headers = {
     "Content-Type": "application/json",
     "Accept": "application/json, text/event-stream",
@@ -48414,6 +48516,9 @@ var initializeSession = async (server) => {
     capabilities: {},
     clientInfo: { name: "obsidian-ai-canvas", version: "1.0" }
   });
+  if (server.transport === "stdio") {
+    stdioNotify(server, "notifications/initialized");
+  }
   return response.result;
 };
 var fetchMCPTools = async (server) => {
@@ -48487,6 +48592,12 @@ var testMCPServer = async (server) => {
 var clearMCPCache = (serverId) => {
   toolsCache.delete(serverId);
   sessionIds.delete(serverId);
+};
+var closeAllMCPClients = async () => {
+  for (const serverId of [...stdioConnections.keys()])
+    closeStdioConnection(serverId);
+  toolsCache.clear();
+  sessionIds.clear();
 };
 
 // src/utils/providerParams.ts
@@ -52874,6 +52985,113 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
 var UnifiedProviderModal = _UnifiedProviderModal;
 UnifiedProviderModal.MODEL_PAGE_SIZE = 50;
 
+// src/utils/mcpConfig.ts
+var BEARER = "Bearer ";
+var normalizeTransport = (type) => type === "sse" ? "sse" : "http";
+var parseMCPServersConfig = (json3) => {
+  var _a20, _b19;
+  let parsed;
+  try {
+    parsed = JSON.parse(json3);
+  } catch (error40) {
+    return { error: `Invalid JSON: ${error40.message}` };
+  }
+  const entries = (_b19 = (_a20 = parsed == null ? void 0 : parsed.mcpServers) != null ? _a20 : parsed == null ? void 0 : parsed.servers) != null ? _b19 : parsed;
+  if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+    return { error: "Expected { mcpServers: { ... } } format" };
+  }
+  const servers = [];
+  for (const [id, raw] of Object.entries(entries)) {
+    const config2 = raw;
+    if (!config2 || typeof config2 !== "object" || Array.isArray(config2)) {
+      return { error: `Server "${id}" is not a configuration object.` };
+    }
+    if (config2.command) {
+      servers.push({
+        id,
+        name: id,
+        url: "",
+        transport: "stdio",
+        command: config2.command,
+        args: config2.args,
+        env: config2.env,
+        cwd: config2.cwd,
+        enabled: true
+      });
+      continue;
+    }
+    if (!config2.url) {
+      return { error: `Server "${id}" needs either a url or a command.` };
+    }
+    const headers = config2.headers ? { ...config2.headers } : void 0;
+    let apiKey;
+    if (typeof (headers == null ? void 0 : headers.Authorization) === "string" && headers.Authorization.startsWith(BEARER)) {
+      apiKey = headers.Authorization.slice(BEARER.length);
+      delete headers.Authorization;
+    }
+    servers.push({
+      id,
+      name: id,
+      url: config2.url,
+      transport: normalizeTransport(config2.type),
+      apiKey,
+      headers: Object.keys(headers || {}).length ? headers : void 0,
+      enabled: true
+    });
+  }
+  if (!servers.length)
+    return { error: "No servers found in that configuration." };
+  return { servers };
+};
+var buildManualMCPServer = (fields) => {
+  var _a20;
+  const { id, name: name20, transport, url: url2, command, apiKey, existing } = fields;
+  const isLocal = transport === "stdio";
+  if (!id || !name20 || (isLocal ? !command.trim() : !url2)) {
+    return { error: isLocal ? "ID, Name, and Command are required" : "ID, Name, and URL are required" };
+  }
+  const [binary, ...args] = command.trim().split(/\s+/);
+  return {
+    server: {
+      id: (existing == null ? void 0 : existing.id) || id,
+      name: name20,
+      url: isLocal ? "" : url2,
+      transport,
+      ...isLocal ? {
+        command: binary,
+        args: args.length ? args : void 0,
+        env: existing == null ? void 0 : existing.env,
+        cwd: existing == null ? void 0 : existing.cwd
+      } : {},
+      apiKey: apiKey || void 0,
+      enabled: (_a20 = existing == null ? void 0 : existing.enabled) != null ? _a20 : true,
+      toolCount: existing == null ? void 0 : existing.toolCount
+    }
+  };
+};
+var serializeMCPServers = (servers) => {
+  var _a20;
+  const mcpServers = {};
+  for (const server of servers) {
+    if (server.transport === "stdio") {
+      mcpServers[server.id] = {
+        command: server.command,
+        ...((_a20 = server.args) == null ? void 0 : _a20.length) ? { args: server.args } : {},
+        ...server.env ? { env: server.env } : {},
+        ...server.cwd ? { cwd: server.cwd } : {}
+      };
+      continue;
+    }
+    const config2 = { type: server.transport, url: server.url };
+    if (server.apiKey)
+      config2.headers = { Authorization: `${BEARER}${server.apiKey}` };
+    if (server.headers)
+      config2.headers = { ...config2.headers, ...server.headers };
+    mcpServers[server.id] = config2;
+  }
+  return { mcpServers };
+};
+
 // src/data/capabilityVideo.ts
 var CAPABILITY_PROBE_VIDEO = "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAPAbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAF3AAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAup0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAF3AAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAKAAAAB4AAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAABdwAABAAAABAAAAAAJibWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAABgABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAACDW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAc1zdGJsAAAAwXN0c2QAAAAAAAAAAQAAALFhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAKAAeABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAAN2F2Y0MBZAAK/+EAGmdkAAqs2UKEflwEQAAAAwBAAAADAQPEiWWAAQAGaOvjyyLA/fj4AAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAAAUVAAAFFQAAABhzdHRzAAAAAAAAAAEAAAAMAAAgAAAAABhzdHNzAAAAAAAAAAIAAAABAAAACQAAAGBjdHRzAAAAAAAAAAoAAAABAABAAAAAAAEAAKAAAAAAAQAAQAAAAAABAAAAAAAAAAEAACAAAAAAAQAAgAAAAAACAAAgAAAAAAEAAEAAAAAAAQAAgAAAAAACAAAgAAAAABxzdHNjAAAAAAAAAAEAAAABAAAADAAAAAEAAABEc3RzegAAAAAAAAAAAAAADAAAAu0AAAAcAAAAEQAAAA0AAAARAAAAFgAAAA8AAAANAAAAPAAAABAAAAANAAAADQAAABRzdGNvAAAAAAAAAAEAAAPwAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY2MC4xNi4xMDAAAAAIZnJlZQAAA9htZGF0AAACrQYF//+p3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzEwOCAzMWUxOWY5IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyMyAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTQgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0zIGJfcHlyYW1pZD0yIGJfYWRhcHQ9MSBiX2JpYXM9MCBkaXJlY3Q9MSB3ZWlnaHRiPTEgb3Blbl9nb3A9MCB3ZWlnaHRwPTIga2V5aW50PTI1MCBrZXlpbnRfbWluPTIgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD00MCByYz1jcmYgbWJ0cmVlPTEgY3JmPTIzLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjAwAIAAAAA4ZYiEABb//u5U/gU2u0ldMEDAW+Ci3XjqwvJTxtRV/pvULlpw2ik41BgBrs+UwrUFKAATsE7ZHAMAAAAYQZokY54H4BBQPwEcCsA/0Ff//talUAIGAAAADUGeQniCn9rX/d72CmkAAAAJAZ5hdEEvAAfMAAAADQGeY2pBL+YkPY9aPKEAAAASQZpnSahBaJlMCCX//rUqgA+5AAAAC0GehUURLBL/AAfNAAAACQGepmpBLwAHzQAAADhliIIABf/+7oK+BTdfxA/DPPH60CFc+OqC9NDfFdX+m9QuWnDeqTjUGAGu0BJL1gWIABrwZeKJVgAAAAxBmiNsQS/+tSqAD7gAAAAJQZ5BeIJ/AAVVAAAACQGeYmpBLwAHzA==";
 
@@ -53525,21 +53743,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
       modal.open();
     }));
     actions.addButton((button) => button.setButtonText("Export JSON").onClick(() => {
-      const mcpServers = {};
-      for (const server of this.plugin.settings.mcpServers) {
-        const config2 = {
-          type: server.transport,
-          url: server.url
-        };
-        if (server.apiKey) {
-          config2.headers = { Authorization: `Bearer ${server.apiKey}` };
-        }
-        if (server.headers) {
-          config2.headers = { ...config2.headers, ...server.headers };
-        }
-        mcpServers[server.id] = config2;
-      }
-      const json3 = JSON.stringify({ mcpServers }, null, 2);
+      const json3 = JSON.stringify(serializeMCPServers(this.plugin.settings.mcpServers), null, 2);
       navigator.clipboard.writeText(json3);
       new import_obsidian19.Notice("MCP servers copied to clipboard");
     }));
@@ -53557,6 +53761,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
       return;
     }
     this.plugin.settings.mcpServers.forEach((server) => {
+      var _a20;
       const serverBlock = serversContainer.createDiv("mcp-server-block");
       const headerRow = serverBlock.createDiv("mcp-server-header");
       const titleCol = headerRow.createDiv("mcp-server-title");
@@ -53614,7 +53819,9 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
       const metaRow = serverBlock.createDiv("mcp-server-meta");
       metaRow.createEl("span", { text: `ID: ${server.id}` });
       metaRow.createEl("span", { text: `Transport: ${server.transport.toUpperCase()}` });
-      metaRow.createEl("span", { text: `URL: ${server.url}` });
+      metaRow.createEl("span", {
+        text: server.transport === "stdio" ? `Command: ${[server.command, ...(_a20 = server.args) != null ? _a20 : []].filter(Boolean).join(" ")}` : `URL: ${server.url}`
+      });
       const hasKey = server.apiKey && server.apiKey.trim().length > 0;
       metaRow.createEl("span", { text: hasKey ? "Auth: set" : "Auth: none" });
       if (server.toolCount !== void 0) {
@@ -53964,19 +54171,34 @@ var MCPServerModal = class extends import_obsidian19.Modal {
       this.nameInput = text2;
       text2.setValue(((_a20 = this.server) == null ? void 0 : _a20.name) || "").setPlaceholder("My MCP Server");
     });
-    new import_obsidian19.Setting(contentEl).setName("Server URL").setDesc("MCP server endpoint URL").addText((text2) => {
+    const transportSetting = new import_obsidian19.Setting(contentEl).setName("Transport").setDesc("How to reach the server. STDIO runs a command on this computer, desktop only.");
+    this.transportSelect = transportSetting.controlEl.createEl("select");
+    ["http", "sse", "stdio"].forEach((t) => {
+      var _a20;
+      const opt = this.transportSelect.createEl("option", {
+        value: t,
+        text: t === "stdio" ? "STDIO (local command)" : t.toUpperCase()
+      });
+      if (((_a20 = this.server) == null ? void 0 : _a20.transport) === t)
+        opt.selected = true;
+    });
+    const urlSetting = new import_obsidian19.Setting(contentEl).setName("Server URL").setDesc("MCP server endpoint URL").addText((text2) => {
       var _a20;
       this.urlInput = text2;
       text2.setValue(((_a20 = this.server) == null ? void 0 : _a20.url) || "").setPlaceholder("https://mcp.example.com/mcp");
     });
-    const transportSetting = new import_obsidian19.Setting(contentEl).setName("Transport").setDesc("Connection type (HTTP recommended)");
-    this.transportSelect = transportSetting.controlEl.createEl("select");
-    ["http", "sse"].forEach((t) => {
-      var _a20;
-      const opt = this.transportSelect.createEl("option", { value: t, text: t.toUpperCase() });
-      if (((_a20 = this.server) == null ? void 0 : _a20.transport) === t)
-        opt.selected = true;
+    const commandSetting = new import_obsidian19.Setting(contentEl).setName("Command").setDesc("Command to run, with its arguments").addText((text2) => {
+      var _a20, _b19, _c;
+      this.commandInput = text2;
+      text2.setValue([(_a20 = this.server) == null ? void 0 : _a20.command, ...(_c = (_b19 = this.server) == null ? void 0 : _b19.args) != null ? _c : []].filter(Boolean).join(" ")).setPlaceholder("npx -y @modelcontextprotocol/server-filesystem /path/to/notes");
     });
+    const syncTransportFields = () => {
+      const isLocal = this.transportSelect.value === "stdio";
+      urlSetting.settingEl.style.display = isLocal ? "none" : "";
+      commandSetting.settingEl.style.display = isLocal ? "" : "none";
+    };
+    this.transportSelect.addEventListener("change", syncTransportFields);
+    syncTransportFields();
     new import_obsidian19.Setting(contentEl).setName("API Key").setDesc("Optional authentication key").addText((text2) => {
       var _a20;
       this.apiKeyInput = text2;
@@ -53987,26 +54209,20 @@ var MCPServerModal = class extends import_obsidian19.Modal {
     cancelBtn.setButtonText("Cancel").onClick(() => this.close());
     const saveBtn = new import_obsidian19.ButtonComponent(buttonRow);
     saveBtn.setButtonText("Save").setCta().onClick(() => {
-      var _a20, _b19, _c, _d;
-      const id = this.idInput.getValue().trim().toLowerCase().replace(/\s+/g, "-");
-      const name20 = this.nameInput.getValue().trim();
-      const url2 = this.urlInput.getValue().trim();
-      const transport = this.transportSelect.value;
-      const apiKey = this.apiKeyInput.getValue().trim();
-      if (!id || !name20 || !url2) {
-        new import_obsidian19.Notice("ID, Name, and URL are required");
+      const built = buildManualMCPServer({
+        id: this.idInput.getValue().trim().toLowerCase().replace(/\s+/g, "-"),
+        name: this.nameInput.getValue().trim(),
+        transport: this.transportSelect.value,
+        url: this.urlInput.getValue().trim(),
+        command: this.commandInput.getValue().trim(),
+        apiKey: this.apiKeyInput.getValue().trim(),
+        existing: this.server
+      });
+      if ("error" in built) {
+        new import_obsidian19.Notice(built.error);
         return;
       }
-      const server = {
-        id: ((_a20 = this.server) == null ? void 0 : _a20.id) || id,
-        name: name20,
-        url: url2,
-        transport,
-        apiKey: apiKey || void 0,
-        enabled: (_c = (_b19 = this.server) == null ? void 0 : _b19.enabled) != null ? _c : true,
-        toolCount: (_d = this.server) == null ? void 0 : _d.toolCount
-      };
-      this.onSave(server);
+      this.onSave(built.server);
       this.close();
     });
   }
@@ -54036,6 +54252,10 @@ var MCPImportModal = class extends import_obsidian19.Modal {
       "headers": {
         "Authorization": "Bearer token"
       }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/notes"]
     }
   }
 }`;
@@ -54053,51 +54273,13 @@ var MCPImportModal = class extends import_obsidian19.Modal {
         new import_obsidian19.Notice("Please paste JSON configuration");
         return;
       }
-      try {
-        const parsed = JSON.parse(json3);
-        const servers = [];
-        const mcpServers = parsed.mcpServers || parsed.servers || parsed;
-        if (typeof mcpServers !== "object" || Array.isArray(mcpServers)) {
-          new import_obsidian19.Notice("Expected { mcpServers: { ... } } format");
-          return;
-        }
-        for (const [id, config2] of Object.entries(mcpServers)) {
-          const cfg = config2;
-          if (cfg.command && !cfg.url) {
-            continue;
-          }
-          if (!cfg.url) {
-            new import_obsidian19.Notice(`Server "${id}" missing url`);
-            return;
-          }
-          let apiKey;
-          const headers = cfg.headers ? { ...cfg.headers } : void 0;
-          if (headers == null ? void 0 : headers.Authorization) {
-            const auth = headers.Authorization;
-            if (auth.startsWith("Bearer ")) {
-              apiKey = auth.slice(7);
-              delete headers.Authorization;
-            }
-          }
-          servers.push({
-            id,
-            name: id,
-            url: cfg.url,
-            transport: cfg.type || "http",
-            apiKey,
-            headers: Object.keys(headers || {}).length ? headers : void 0,
-            enabled: true
-          });
-        }
-        if (!servers.length) {
-          new import_obsidian19.Notice("No HTTP/SSE servers found (stdio not supported)");
-          return;
-        }
-        this.onImport(servers);
-        this.close();
-      } catch (e) {
-        new import_obsidian19.Notice(`Invalid JSON: ${e.message}`);
+      const parsed = parseMCPServersConfig(json3);
+      if ("error" in parsed) {
+        new import_obsidian19.Notice(parsed.error);
+        return;
       }
+      this.onImport(parsed.servers);
+      this.close();
     });
   }
   onClose() {
@@ -54593,6 +54775,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian26.Plugin {
   onunload() {
     var _a20;
     cancelActiveGenerations();
+    void closeAllMCPClients();
     if (this.cleanupIndicatorPersistence) {
       this.cleanupIndicatorPersistence();
     }

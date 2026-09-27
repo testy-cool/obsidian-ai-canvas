@@ -6,7 +6,7 @@ The gaps below are what that probe exposed.
 
 ## MCP
 
-- [ ] AIC-001 Reach local MCP servers over stdio		#mcp !high
+- [x] AIC-001 Reach local MCP servers over stdio		#mcp !high
   Nearly every local MCP server is launched as a command over stdio, and the
   client can only POST JSON-RPC to a URL, so none of them can be used.
   `@ai-sdk/mcp` is already a dependency and never imported.
