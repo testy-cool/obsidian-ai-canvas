@@ -3,6 +3,7 @@ import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
 import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
 import { LLMModel, LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
 import { testMCPServer } from "src/utils/mcpClient";
+import { buildManualMCPServer, parseMCPServersConfig, serializeMCPServers } from "src/utils/mcpConfig";
 import { getParamsForModel, detectProviderLabel } from "src/utils/providerParams";
 import { getCapabilityReportKey, getModelCapabilityReport, isGoogleProvider, getProviderCapabilities, providerCapabilityKeys, type ProviderCapability, type ProviderCapabilityReport } from "src/utils/providerCapabilities";
 import { probeProviderCapabilities } from "src/utils/capabilityProbe";
@@ -693,22 +694,7 @@ export default class SettingsTab extends PluginSettingTab {
 		actions.addButton(button => button
             .setButtonText("Export JSON")
             .onClick(() => {
-                // Convert to standard mcpServers format
-                const mcpServers: Record<string, any> = {};
-                for (const server of this.plugin.settings.mcpServers) {
-                    const config: any = {
-                        type: server.transport,
-                        url: server.url,
-                    };
-                    if (server.apiKey) {
-                        config.headers = { Authorization: `Bearer ${server.apiKey}` };
-                    }
-                    if (server.headers) {
-                        config.headers = { ...config.headers, ...server.headers };
-                    }
-                    mcpServers[server.id] = config;
-                }
-                const json = JSON.stringify({ mcpServers }, null, 2);
+                const json = JSON.stringify(serializeMCPServers(this.plugin.settings.mcpServers), null, 2);
                 navigator.clipboard.writeText(json);
                 new Notice("MCP servers copied to clipboard");
             }));
@@ -804,7 +790,11 @@ export default class SettingsTab extends PluginSettingTab {
             const metaRow = serverBlock.createDiv("mcp-server-meta");
             metaRow.createEl("span", { text: `ID: ${server.id}` });
             metaRow.createEl("span", { text: `Transport: ${server.transport.toUpperCase()}` });
-            metaRow.createEl("span", { text: `URL: ${server.url}` });
+            metaRow.createEl("span", {
+                text: server.transport === "stdio"
+                    ? `Command: ${[server.command, ...(server.args ?? [])].filter(Boolean).join(" ")}`
+                    : `URL: ${server.url}`,
+            });
             const hasKey = server.apiKey && server.apiKey.trim().length > 0;
             metaRow.createEl("span", { text: hasKey ? "Auth: set" : "Auth: none" });
             if (server.toolCount !== undefined) {
@@ -1326,6 +1316,7 @@ class MCPServerModal extends Modal {
     private nameInput: TextComponent;
     private urlInput: TextComponent;
     private transportSelect: HTMLSelectElement;
+    private commandInput: TextComponent;
     private apiKeyInput: TextComponent;
 
     constructor(app: App, server: MCPServer | null, onSave: (server: MCPServer) => void) {
@@ -1360,7 +1351,20 @@ class MCPServerModal extends Modal {
                     .setPlaceholder("My MCP Server");
             });
 
-        new Setting(contentEl)
+        const transportSetting = new Setting(contentEl)
+            .setName("Transport")
+            .setDesc("How to reach the server. STDIO runs a command on this computer, desktop only.");
+
+        this.transportSelect = transportSetting.controlEl.createEl("select");
+        (["http", "sse", "stdio"] as MCPTransportType[]).forEach(t => {
+            const opt = this.transportSelect.createEl("option", {
+                value: t,
+                text: t === "stdio" ? "STDIO (local command)" : t.toUpperCase(),
+            });
+            if (this.server?.transport === t) opt.selected = true;
+        });
+
+        const urlSetting = new Setting(contentEl)
             .setName("Server URL")
             .setDesc("MCP server endpoint URL")
             .addText(text => {
@@ -1369,15 +1373,23 @@ class MCPServerModal extends Modal {
                     .setPlaceholder("https://mcp.example.com/mcp");
             });
 
-        const transportSetting = new Setting(contentEl)
-            .setName("Transport")
-            .setDesc("Connection type (HTTP recommended)");
+        const commandSetting = new Setting(contentEl)
+            .setName("Command")
+            .setDesc("Command to run, with its arguments")
+            .addText(text => {
+                this.commandInput = text;
+                text.setValue([this.server?.command, ...(this.server?.args ?? [])].filter(Boolean).join(" "))
+                    .setPlaceholder("npx -y @modelcontextprotocol/server-filesystem /path/to/notes");
+            });
 
-        this.transportSelect = transportSetting.controlEl.createEl("select");
-        ["http", "sse"].forEach(t => {
-            const opt = this.transportSelect.createEl("option", { value: t, text: t.toUpperCase() });
-            if (this.server?.transport === t) opt.selected = true;
-        });
+        // Only the field that applies to the chosen transport stays on screen.
+        const syncTransportFields = () => {
+            const isLocal = this.transportSelect.value === "stdio";
+            urlSetting.settingEl.style.display = isLocal ? "none" : "";
+            commandSetting.settingEl.style.display = isLocal ? "" : "none";
+        };
+        this.transportSelect.addEventListener("change", syncTransportFields);
+        syncTransportFields();
 
         new Setting(contentEl)
             .setName("API Key")
@@ -1395,28 +1407,22 @@ class MCPServerModal extends Modal {
 
         const saveBtn = new ButtonComponent(buttonRow);
         saveBtn.setButtonText("Save").setCta().onClick(() => {
-            const id = this.idInput.getValue().trim().toLowerCase().replace(/\s+/g, "-");
-            const name = this.nameInput.getValue().trim();
-            const url = this.urlInput.getValue().trim();
-            const transport = this.transportSelect.value as MCPTransportType;
-            const apiKey = this.apiKeyInput.getValue().trim();
+            const built = buildManualMCPServer({
+                id: this.idInput.getValue().trim().toLowerCase().replace(/\s+/g, "-"),
+                name: this.nameInput.getValue().trim(),
+                transport: this.transportSelect.value as MCPTransportType,
+                url: this.urlInput.getValue().trim(),
+                command: this.commandInput.getValue().trim(),
+                apiKey: this.apiKeyInput.getValue().trim(),
+                existing: this.server,
+            });
 
-            if (!id || !name || !url) {
-                new Notice("ID, Name, and URL are required");
+            if ("error" in built) {
+                new Notice(built.error);
                 return;
             }
 
-            const server: MCPServer = {
-                id: this.server?.id || id,
-                name,
-                url,
-                transport,
-                apiKey: apiKey || undefined,
-                enabled: this.server?.enabled ?? true,
-                toolCount: this.server?.toolCount,
-            };
-
-            this.onSave(server);
+            this.onSave(built.server);
             this.close();
         });
     }
@@ -1453,6 +1459,10 @@ class MCPImportModal extends Modal {
       "headers": {
         "Authorization": "Bearer token"
       }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/notes"]
     }
   }
 }`;
@@ -1474,61 +1484,14 @@ class MCPImportModal extends Modal {
                 return;
             }
 
-            try {
-                const parsed = JSON.parse(json);
-                const servers: MCPServer[] = [];
-
-                // Standard format: { mcpServers: { "name": { type, url, headers } } }
-                const mcpServers = parsed.mcpServers || parsed.servers || parsed;
-
-                if (typeof mcpServers !== 'object' || Array.isArray(mcpServers)) {
-                    new Notice("Expected { mcpServers: { ... } } format");
-                    return;
-                }
-
-                for (const [id, config] of Object.entries(mcpServers)) {
-                    const cfg = config as any;
-                    // Skip stdio servers (they have command instead of url)
-                    if (cfg.command && !cfg.url) {
-                        continue;
-                    }
-                    if (!cfg.url) {
-                        new Notice(`Server "${id}" missing url`);
-                        return;
-                    }
-
-                    // Extract API key from Authorization header if present
-                    let apiKey: string | undefined;
-                    const headers = cfg.headers ? { ...cfg.headers } : undefined;
-                    if (headers?.Authorization) {
-                        const auth = headers.Authorization;
-                        if (auth.startsWith("Bearer ")) {
-                            apiKey = auth.slice(7);
-                            delete headers.Authorization;
-                        }
-                    }
-
-                    servers.push({
-                        id,
-                        name: id,
-                        url: cfg.url,
-                        transport: cfg.type || "http",
-                        apiKey,
-                        headers: Object.keys(headers || {}).length ? headers : undefined,
-                        enabled: true,
-                    });
-                }
-
-                if (!servers.length) {
-                    new Notice("No HTTP/SSE servers found (stdio not supported)");
-                    return;
-                }
-
-                this.onImport(servers);
-                this.close();
-            } catch (e) {
-                new Notice(`Invalid JSON: ${(e as Error).message}`);
+            const parsed = parseMCPServersConfig(json);
+            if ("error" in parsed) {
+                new Notice(parsed.error);
+                return;
             }
+
+            this.onImport(parsed.servers);
+            this.close();
         });
     }
 
