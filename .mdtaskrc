@@ -1,0 +1,6 @@
+{
+  "path": "docs",
+  "files": {
+    "include": ["tasks.md"]
+  }
+}
