@@ -97,6 +97,13 @@ The gaps below are what that probe exposed.
   register prompt. After that `obsidian dev:dom`, `dev:console` and
   `dev:screenshot` work, which is what the 12px rule needs.
 
+  Checked on 2026-09-27 whether an agent can do it instead, and it cannot. The
+  flag is in none of the files under `~/.config/obsidian`, none of which even
+  mention it, and `obsidian --help` is itself gated behind the setting. The only
+  other route is clicking through the running app's settings window, which sends
+  keystrokes into a session that may be in use. Not worth the risk for a setting
+  that takes twenty seconds by hand.
+
 - [x] AIC-011 Write down which providers the gateway key may use		#tooling
   Several probes went into discovering that the virtual key allows vertex but
   not gemini, and that the gateway sends `/v1beta/cachedContents` to gemini
