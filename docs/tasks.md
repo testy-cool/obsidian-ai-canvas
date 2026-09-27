@@ -35,9 +35,18 @@ The gaps below are what that probe exposed.
 
 ## Cost
 
-- [ ] AIC-005 Stop paying full input price for long card chains		#cost
-  There is no prompt caching anywhere in `src`, and each ask resends the whole
-  ancestor chain, so a long branch pays for every earlier card every turn.
+- [x] AIC-005 Stop paying full input price for long card chains		#cost
+  Measured first, and the premise was half wrong: providers cache the repeated
+  prefix by themselves, no `cache_control` needed. An identical 6036-token
+  prefix reported 5841 cached tokens on one run out of four. What was actually
+  broken was the accounting, which charged full price for cached tokens, so
+  that is what got fixed.
+
+- [ ] AIC-008 Make prefix caching reliable instead of occasional		#cost !low
+  Implicit caching hit once in four identical runs. An explicit cache, Gemini
+  `cachedContent` or Anthropic `cache_control` breakpoints, would make the
+  saving dependable on a long chain. Worth it only if the traces show chains
+  long enough to matter.
 
 - [ ] AIC-006 Show what a card cost, on the card		#cost !low
   Prices are already fetched and per-trace cost is already computed for
