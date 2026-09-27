@@ -9,6 +9,7 @@ import { desktopFetch } from "./desktopFetch";
 import { getToolSchema, convertToGeminiSchema } from "./mcpClient";
 import { applyOpenAICompatParams } from "./providerParams";
 import { streamCodexResponse } from "./codexCli";
+import { cliAdapterForProviderType, streamLocalCliResponse } from "./localCli";
 import { getProviderCapabilities, isBifrostProvider, isGoogleProvider, supportsGoogleTools } from "./providerCapabilities";
 
 // Cache for access tokens: serviceAccountEmail -> { token, expiresAt }
@@ -396,6 +397,9 @@ export const streamResponse = async (
 		if (abortSignal?.aborted) throw new DOMException("Generation stopped", "AbortError");
 	};
 	throwIfStopped();
+	if (cliAdapterForProviderType(provider.type)) {
+		return streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, abortSignal }, cb);
+	}
 	if (provider.type === "Codex") {
 		return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete, abortSignal }, cb);
 	}
@@ -645,11 +649,13 @@ export const getResponse = async (
 		onComplete?: (result: { inputTokens: number; outputTokens: number; cachedInputTokens?: number; totalText: string; error?: string }) => void;
 	} = {}
 ): Promise<any> => {
-	if (provider.type === "Codex") {
+	const localCli = cliAdapterForProviderType(provider.type);
+	if (localCli || provider.type === "Codex") {
 		let text = "";
-		await streamCodexResponse(provider, messages, { model, providerParams, timeoutMs, onComplete }, (chunk) => {
-			if (chunk) text += chunk;
-		});
+		const run = localCli
+			? streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete }, (chunk) => { if (chunk) text += chunk; })
+			: streamCodexResponse(provider, messages, { model, providerParams, timeoutMs, onComplete }, (chunk) => { if (chunk) text += chunk; });
+		await run;
 		if (includeMetadata) return { text, sources: [], providerMetadata: undefined };
 		return isJSON ? (() => { try { return JSON.parse(stripJsonFence(text)); } catch { return {}; } })() : text;
 	}

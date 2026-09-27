@@ -6,6 +6,7 @@ import { fetchProviderModels } from "../utils/modelFetch";
 import { fetchPricingForModels } from "../utils/pricingFetch";
 import { getDefaultProviderParams, getParamsForModel, detectProviderLabel } from "../utils/providerParams";
 import { findCodexBinary, CODEX_MODELS } from "../utils/codexCli";
+import { CLI_ADAPTERS, cliAdapterForProviderType, findCliBinary } from "../utils/localCli";
 
 interface ProviderPreset {
   id: string;
@@ -23,6 +24,10 @@ const PRESETS: ProviderPreset[] = [
   { id: "vertex", type: "Vertex", baseUrl: "" },
   { id: "ollama", type: "Ollama", baseUrl: "http://localhost:11434/v1" },
   { id: "codex", type: "Codex", baseUrl: "" },
+  { id: "claude-cli", type: CLI_ADAPTERS.claude.providerType, baseUrl: "" },
+  { id: "pi-cli", type: CLI_ADAPTERS.pi.providerType, baseUrl: "" },
+  { id: "hermes-cli", type: CLI_ADAPTERS.hermes.providerType, baseUrl: "" },
+  { id: "local-command", type: CLI_ADAPTERS.custom.providerType, baseUrl: "" },
   { id: "custom", type: "Custom", baseUrl: "" },
 ];
 
@@ -36,6 +41,33 @@ function isVertexType(type: string): boolean {
 
 function isCodexType(type: string): boolean {
   return type === "Codex";
+}
+
+/**
+ * Everything a provider that runs a local command needs from the UI. Codex keeps
+ * its own runner, so it is described here rather than in the adapter registry.
+ */
+function localCliUi(type: string) {
+  if (isCodexType(type)) {
+    return {
+      label: "Codex binary",
+      placeholder: "/path/to/codex (optional override)",
+      models: [...CODEX_MODELS],
+      detect: (override?: string) => findCodexBinary(override),
+      hint: "Not found — install with `npm i -g @openai/codex` or set the path here.",
+      takesArgs: false,
+    };
+  }
+  const adapter = cliAdapterForProviderType(type);
+  if (!adapter) return null;
+  return {
+    label: adapter.binary ? `${adapter.providerType} binary` : "Command to run",
+    placeholder: adapter.binary ? `/path/to/${adapter.binary} (optional override)` : "/path/to/command",
+    models: [...adapter.models],
+    detect: (override?: string) => findCliBinary(adapter, override),
+    hint: adapter.installHint,
+    takesArgs: true,
+  };
 }
 
 export class UnifiedProviderModal extends Modal {
@@ -53,6 +85,7 @@ export class UnifiedProviderModal extends Modal {
   private modelListEl: HTMLElement | null = null;
   private editing: boolean;
 	private initialProvider?: LLMProvider;
+  private binaryInput: HTMLInputElement | undefined;
   private pricingData: Map<string, { inputCostPerMillion: number; outputCostPerMillion: number; cachedInputCostPerMillion?: number }> | undefined;
   private modelParams = new Map<string, Record<string, unknown>>();
   private expandedParams = new Set<string>();
@@ -188,16 +221,27 @@ export class UnifiedProviderModal extends Modal {
 		});
 
 		const codexSetting = new Setting(contentEl).setName("Codex binary").addText(text => {
+			this.binaryInput = text.inputEl;
 			text.setPlaceholder("/path/to/codex (optional override)")
 				.setValue(this.provider.binaryPath ?? "")
 				.onChange(val => { this.provider.binaryPath = val || undefined; });
 		});
 
+		const cliArgsSetting = new Setting(contentEl)
+			.setName("Extra arguments")
+			.setDesc("Added to every call, separated by spaces. Quoted arguments are not supported.")
+			.addText(text => {
+				text.setPlaceholder("--provider openrouter")
+					.setValue(this.provider.cliArgs ?? "")
+					.onChange(val => { this.provider.cliArgs = val || undefined; });
+			});
+
 		const updateProviderFields = () => {
 			const type = this.provider.type ?? "";
 			const gemini = isGeminiType(type);
 			const vertex = isVertexType(type);
-			const codex = isCodexType(type);
+			const cli = localCliUi(type);
+			const codex = !!cli;
 			const azure = type === "Azure";
 			this.nameField!.input.value = type;
 			this.baseUrlField!.input.value = this.provider.baseUrl ?? "";
@@ -212,12 +256,13 @@ export class UnifiedProviderModal extends Modal {
 			for (const setting of [projectSetting, locationSetting, serviceAccountSetting]) {
 				setting.settingEl.style.display = vertex ? "" : "none";
 			}
-			codexSetting.settingEl.style.display = codex ? "" : "none";
-			if (codex) {
-				const detected = findCodexBinary(this.provider.binaryPath);
-				codexSetting.setDesc(detected
-					? `Detected: ${detected}`
-					: "Not found — install with `npm i -g @openai/codex` or set the path below.");
+			codexSetting.settingEl.style.display = cli ? "" : "none";
+			cliArgsSetting.settingEl.style.display = cli?.takesArgs ? "" : "none";
+			if (cli) {
+				codexSetting.setName(cli.label);
+				if (this.binaryInput) this.binaryInput.placeholder = cli.placeholder;
+				const detected = cli.detect(this.provider.binaryPath);
+				codexSetting.setDesc(detected ? `Detected: ${detected}` : cli.hint);
 			}
 			geminiNativeSetting!.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
 		};
@@ -236,13 +281,14 @@ export class UnifiedProviderModal extends Modal {
         btn.setButtonText("Fetching…");
         connStatus?.setText("");
         try {
-          if (isCodexType(this.provider.type ?? "")) {
-            const detected = findCodexBinary(this.provider.binaryPath);
-            this.fetchedModelIds = [...CODEX_MODELS];
+          const cliUi = localCliUi(this.provider.type ?? "");
+          if (cliUi) {
+            const detected = cliUi.detect(this.provider.binaryPath);
+            this.fetchedModelIds = cliUi.models;
             connStatus?.setText(
               detected
-                ? `Codex detected: ${detected}`
-                : "Codex CLI not found — install it or set the binary path above."
+                ? `Detected: ${detected}`
+                : `Not found. ${cliUi.hint}`
             );
             connStatus?.toggleClass("mod-success", !!detected);
             connStatus?.toggleClass("mod-warning", !detected);
@@ -491,6 +537,7 @@ export class UnifiedProviderModal extends Modal {
       !isGeminiType(p.type) &&
       !isVertexType(p.type) &&
       !isCodexType(p.type) &&
+      !cliAdapterForProviderType(p.type) &&
       !p.baseUrl?.trim()
     ) {
       new Notice("Base URL is required.");

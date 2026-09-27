@@ -189,6 +189,9 @@ export interface LLMProvider {
 	 * Path to a local CLI binary (for Codex provider)
 	 */
 	binaryPath?: string;
+
+	/** Extra arguments passed to a local CLI provider's command. */
+	cliArgs?: string;
 }
 
 export interface ObservabilitySettings {

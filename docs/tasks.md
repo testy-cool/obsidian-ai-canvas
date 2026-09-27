@@ -26,12 +26,15 @@ The gaps below are what that probe exposed.
 
 ## Providers
 
-- [ ] AIC-004 Send prompts to any local agent CLI, not only Codex		#providers
-  `codexCli.ts` hardcodes the `codex` binary and its JSONL shape. Claude, Pi,
-  Hermes and gemini-cli all take a non-interactive prompt and print events,
-  so one provider with a command, an args template and a small output adapter
-  would cover them. Tool parts are dropped on this path, so MCP tools never
-  reach the CLI providers.
+- [x] AIC-004 Send prompts to any local agent CLI, not only Codex		#providers
+  Four new provider types: Claude CLI, Pi CLI, Hermes CLI and Local command.
+  Each output shape was read from the real CLI before writing an adapter, and
+  all three installed CLIs were then driven through the plugin's own runner.
+  The Claude CLI reports token counts including cache reads; Pi and Hermes
+  print plain text. gemini-cli has no working auth on this machine, so it is
+  covered by Local command rather than a preset that was never verified.
+  Tool parts are still dropped on this path, so MCP tools do not reach a CLI
+  provider.
 
 ## Cost
 
