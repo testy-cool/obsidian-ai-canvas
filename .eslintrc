@@ -3,7 +3,8 @@
     "parser": "@typescript-eslint/parser",
     "env": { "node": true },
     "plugins": [
-      "@typescript-eslint"
+      "@typescript-eslint",
+      "unused-imports"
     ],
     "extends": [
       "eslint:recommended",
@@ -15,6 +16,10 @@
     },
     "rules": {
       "no-unused-vars": "off",
+      // An unused import is always safe to delete, and this rule's fix does it,
+      // which the base no-unused-vars rule cannot. Keep both: this one for
+      // imports, the other for variables a person has to look at.
+      "unused-imports/no-unused-imports": "error",
       // Unused function arguments are often required by a callback signature.
       // A rest-sibling omit (`const { label: _label, ...rest } = data`) is a
       // deliberate pattern, and an underscore marks a binding kept on purpose.
