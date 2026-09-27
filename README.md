@@ -36,7 +36,7 @@ Traditional AI chat sidebars trap your thinking in a narrow, linear scroll. Ques
 ### 🎨 Generate Images on Canvas
 Turn prompts and ideas into striking illustrations and diagrams directly on your canvas.
 * Right-click any note or prompt card → **Generate image**.
-* AI generates the visual (via Google Imagen 3, OpenAI DALL-E, Azure, or Vertex AI) and attaches the file directly into your vault attachments.
+* AI generates the visual (Nano Banana Pro on Gemini, GPT image models on OpenAI or Azure, Imagen on Vertex AI, or any OpenAI-compatible image endpoint) and attaches the file directly into your vault attachments.
 * Connect notes to the image to critique, remix, or brainstorm from the visual output.
 
 ### 👁️ Multimodal Vision (Text & Insights from Images)
