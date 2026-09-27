@@ -1,6 +1,7 @@
 import { App, ItemView, Notice, TFile, TFolder } from "obsidian";
 import { AugmentedCanvasSettings, LLMProvider } from "src/settings/AugmentedCanvasSettings";
 import { createAzureImage, createAzureImageEdit, createGeminiImage, createImage, createVertexImage } from "src/utils/llm";
+import { observeImage } from "src/utils/llmObservability";
 import { Canvas, CanvasNode } from "src/obsidian/canvas-internal";
 import { addEdge, getIncomingEdgeDirection } from "src/obsidian/canvas-patches";
 import { addImageNode, randomHexString } from "src/utils";
@@ -243,7 +244,7 @@ export async function handleGenerateImage(
 			);
 		}
 
-		const imageOutput = isAzure
+		const imageOutput = await observeImage({ provider: imageProvider, model, prompt: nodeContent }, async () => isAzure
 			? azureReferenceImages.length
 				? await createAzureImageEdit(imageProvider!, nodeContent, {
 						model: model,
@@ -274,7 +275,7 @@ export async function handleGenerateImage(
 						baseUrl: baseUrl,
 						headers: headers,
 					}
-			  );
+			  ));
 
 		const elapsedMs = Date.now() - startedAt;
 		const elapsedSecs = Math.round(elapsedMs / 1000);

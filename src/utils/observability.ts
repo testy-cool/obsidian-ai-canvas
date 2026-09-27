@@ -1,4 +1,5 @@
 import { requestUrl } from "obsidian";
+import { computeGenerationCost } from "./cost";
 
 export interface ObservabilitySettings {
 	provider: "none" | "langfuse" | "laminar" | "custom";
@@ -56,12 +57,10 @@ export function createTracePayload(input: TraceInput): TracePayload {
   const cachedTokens = Math.min(input.cachedInputTokens ?? 0, input.inputTokens);
   let cost: TracePayload["cost"];
 
-  if (input.inputCostPerMillion != null && input.outputCostPerMillion != null) {
-    const cachedRate = input.cachedInputCostPerMillion ?? input.inputCostPerMillion;
-    const inputCost = ((input.inputTokens - cachedTokens) * input.inputCostPerMillion
-      + cachedTokens * cachedRate) / 1_000_000;
+  const total = computeGenerationCost(input, input);
+  if (total != null && input.inputCostPerMillion != null && input.outputCostPerMillion != null) {
     const outputCost = (input.outputTokens * input.outputCostPerMillion) / 1_000_000;
-    cost = { input: inputCost, output: outputCost, total: inputCost + outputCost };
+    cost = { input: total - outputCost, output: outputCost, total };
   }
 
   return {

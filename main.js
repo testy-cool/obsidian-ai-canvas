@@ -6272,6 +6272,30 @@ var logDebug = (...params) => {
 // src/actions/canvasNodeMenuActions/noteGenerator.ts
 var import_obsidian13 = require("obsidian");
 
+// src/utils/cost.ts
+var computeGenerationCost = (usage, { inputCostPerMillion, outputCostPerMillion, cachedInputCostPerMillion }) => {
+  var _a20;
+  if (inputCostPerMillion == null || outputCostPerMillion == null)
+    return void 0;
+  const cached2 = Math.min(Math.max((_a20 = usage.cachedInputTokens) != null ? _a20 : 0, 0), usage.inputTokens);
+  const cachedRate = cachedInputCostPerMillion != null ? cachedInputCostPerMillion : inputCostPerMillion;
+  const input = (usage.inputTokens - cached2) * inputCostPerMillion + cached2 * cachedRate;
+  return (input + usage.outputTokens * outputCostPerMillion) / 1e6;
+};
+var formatCost = (usd) => {
+  if (usd === 0)
+    return "$0";
+  if (usd < 1e-4)
+    return "<$0.0001";
+  if (usd < 1)
+    return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
+};
+var costForModel = (models, providerId, model, usage) => {
+  const entry = models.find((candidate) => candidate.providerId === providerId && candidate.model === model);
+  return entry ? computeGenerationCost(usage, entry) : void 0;
+};
+
 // src/utils.ts
 var import_obsidian2 = require("obsidian");
 
@@ -6720,6 +6744,12 @@ var modelIndicatorHost = (node) => {
   var _a20;
   return (_a20 = node.nodeEl) != null ? _a20 : node.contentEl;
 };
+var buildIndicatorText = ({ provider, model, contextCount, cost, generating }) => {
+  const context2 = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} \u2022 ` : "";
+  const price = typeof cost === "number" ? ` \u2022 ${formatCost(cost)}` : "";
+  const finished = `${context2}${provider} \u2022 ${model}${price}`;
+  return { label: generating ? `${context2}generating` : finished, sizing: finished };
+};
 var setModelIndicatorText = (node, provider, model, generating = false) => {
   if (generating)
     generatingNodes.add(node);
@@ -6731,14 +6761,19 @@ var setModelIndicatorText = (node, provider, model, generating = false) => {
     return;
   if (indicator.parentElement !== modelIndicatorHost(node))
     modelIndicatorHost(node).appendChild(indicator);
-  const contextCount = node.getData().ai_context_count;
-  const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} \u2022 ` : "";
-  const text2 = `${contextLabel}${generating ? "generating" : `${provider} \u2022 ${model}`}`;
-  const finalText = `${contextLabel}${provider} \u2022 ${model}`;
+  const data = node.getData();
+  const contextCount = data.ai_context_count;
+  const { label: text2, sizing: finalText } = buildIndicatorText({
+    provider,
+    model,
+    contextCount,
+    cost: typeof data.ai_cost === "number" ? data.ai_cost : void 0,
+    generating
+  });
   const sizing = indicator.querySelector(".ai-model-indicator-size");
   if (sizing.textContent !== finalText)
     sizing.textContent = finalText;
-  indicator.querySelector(".ai-model-indicator-loading-size").textContent = `${contextLabel}generating`;
+  indicator.querySelector(".ai-model-indicator-loading-size").textContent = buildIndicatorText({ provider, model, contextCount, generating: true }).label;
   const label = indicator.querySelector(".ai-model-indicator-label");
   if (label.textContent !== text2)
     label.textContent = text2;
@@ -49847,15 +49882,14 @@ var getResponse = async (provider, messages, {
 // src/utils/observability.ts
 var import_obsidian7 = require("obsidian");
 function createTracePayload(input) {
-  var _a20, _b19;
+  var _a20;
   const totalTokens = input.inputTokens + input.outputTokens;
   const cachedTokens = Math.min((_a20 = input.cachedInputTokens) != null ? _a20 : 0, input.inputTokens);
   let cost;
-  if (input.inputCostPerMillion != null && input.outputCostPerMillion != null) {
-    const cachedRate = (_b19 = input.cachedInputCostPerMillion) != null ? _b19 : input.inputCostPerMillion;
-    const inputCost = ((input.inputTokens - cachedTokens) * input.inputCostPerMillion + cachedTokens * cachedRate) / 1e6;
+  const total = computeGenerationCost(input, input);
+  if (total != null && input.inputCostPerMillion != null && input.outputCostPerMillion != null) {
     const outputCost = input.outputTokens * input.outputCostPerMillion / 1e6;
-    cost = { input: inputCost, output: outputCost, total: inputCost + outputCost };
+    cost = { input: total - outputCost, output: outputCost, total };
   }
   return {
     traceId: crypto.randomUUID(),
@@ -50063,6 +50097,50 @@ async function observeLLM(provider, messages, options, run) {
         outputTokens: completion.outputTokens,
         cachedInputTokens: completion.cachedInputTokens,
         error: completion.error
+      }));
+    } catch (e) {
+    }
+  }
+}
+async function observeImage({ provider, model, prompt }, run) {
+  var _a20, _b19;
+  const current = configured;
+  if (!(current == null ? void 0 : current.client.enabled))
+    return run();
+  let context2;
+  try {
+    context2 = current.context(provider, model);
+  } catch (e) {
+    return run();
+  }
+  const startTime = new Date().toISOString();
+  let output = "no image returned";
+  let error40;
+  try {
+    const result = await run();
+    const mimeType = (_a20 = result == null ? void 0 : result.image) == null ? void 0 : _a20.mimeType;
+    if (typeof mimeType === "string" && mimeType)
+      output = mimeType;
+    return result;
+  } catch (failure) {
+    error40 = failure instanceof Error ? failure.message : "Image generation failed";
+    throw failure;
+  } finally {
+    try {
+      current.client.track(createTracePayload({
+        ...context2,
+        inputCostPerMillion: void 0,
+        outputCostPerMillion: void 0,
+        name: "AI Canvas image",
+        model: model != null ? model : "provider default",
+        provider: (_b19 = provider == null ? void 0 : provider.type) != null ? _b19 : "unknown",
+        input: prompt,
+        output,
+        startTime,
+        endTime: new Date().toISOString(),
+        inputTokens: 0,
+        outputTokens: 0,
+        error: error40
       }));
     } catch (e) {
     }
@@ -50515,7 +50593,7 @@ async function handleGenerateImage(app, settings2, node, options) {
     if (isAzure) {
       new import_obsidian9.Notice(azureReferenceImages.length ? `Sending ${azureReferenceImages.length} reference image(s) to Azure (edits, high fidelity)` : "No reference images found \u2014 plain Azure generation");
     }
-    const imageOutput = isAzure ? azureReferenceImages.length ? await createAzureImageEdit(imageProvider, nodeContent, {
+    const imageOutput = await observeImage({ provider: imageProvider, model, prompt: nodeContent }, async () => isAzure ? azureReferenceImages.length ? await createAzureImageEdit(imageProvider, nodeContent, {
       model,
       quality: settings2.azureImageQuality || "medium",
       images: azureReferenceImages
@@ -50534,7 +50612,7 @@ async function handleGenerateImage(app, settings2, node, options) {
       model,
       baseUrl,
       headers
-    });
+    }));
     const elapsedMs = Date.now() - startedAt;
     const elapsedSecs = Math.round(elapsedMs / 1e3);
     settings2.lastImageGenDurations = {
@@ -52056,7 +52134,13 @@ ${nodeText}`);
           maxSteps: settings2.mcpMaxSteps || 5,
           providerParams: model.providerParams,
           timeoutMs: model.timeoutMs,
-          abortSignal: controller.signal
+          abortSignal: controller.signal,
+          onComplete: (usage) => {
+            const cost = costForModel(settings2.models, provider.id, model.model, usage);
+            if (cost == null)
+              return;
+            created.setData({ ...created.getData(), ai_cost: cost });
+          }
         }, (delta, final, tool3, reasoningDelta) => {
           var _a21, _b20, _c2, _d2, _e2, _f2, _g2, _h, _i;
           if (controller.signal.aborted)

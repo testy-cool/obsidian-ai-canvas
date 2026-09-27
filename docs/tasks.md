@@ -51,11 +51,17 @@ The gaps below are what that probe exposed.
   saving dependable on a long chain. Worth it only if the traces show chains
   long enough to matter.
 
-- [ ] AIC-006 Show what a card cost, on the card		#cost !low
-  Prices are already fetched and per-trace cost is already computed for
-  Langfuse. The number never reaches the canvas.
+- [x] AIC-006 Show what a card cost, on the card		#cost !low
+  The badge beside the model now carries the cost, for example
+  `Bifrost • flash • $0.0004`. One cost calculation is shared with the
+  Langfuse trace, so the card and the trace cannot disagree. The badge
+  reserves the finished width while generating, so nothing shifts, and it
+  stays quiet when the model has no published prices.
 
 ## Observability
 
-- [ ] AIC-007 Trace image generation too		#observability !low
-  `observeLLM` wraps text only, so image runs leave no trace and no cost.
+- [x] AIC-007 Trace image generation too		#observability !low
+  `observeImage` wraps every image path, recording the prompt, model, provider
+  and what came back, or the error. Image APIs bill per image rather than per
+  token, so no cost is guessed. Covered by unit tests; not yet watched against
+  a live image run.

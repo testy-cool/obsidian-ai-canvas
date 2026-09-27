@@ -30,6 +30,7 @@ import { getResponse, streamResponse, ToolEvent } from "../../utils/llm";
 import { addModelIndicator, setModelIndicatorText, getYouTubeVideoId } from "../../utils";
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { createGenerationStatus } from "../../utils/generationStatus";
+import { costForModel } from "../../utils/cost";
 import { getAllMCPTools } from "../../utils/mcpClient";
 import { getProviderCapabilities, supportsGoogleTools } from "../../utils/providerCapabilities";
 import { extractHtmlCodeBlocks, addHtmlPreviewToNode } from "../../utils/htmlPreview";
@@ -799,6 +800,13 @@ export function noteGenerator(
 						providerParams: model.providerParams,
 						timeoutMs: model.timeoutMs,
 						abortSignal: controller.signal,
+						onComplete: usage => {
+							// Show what the card cost next to the model it used. Undefined
+							// when the model has no prices, so the badge stays quiet.
+							const cost = costForModel(settings.models, provider.id, model.model, usage);
+							if (cost == null) return;
+							created.setData({ ...created.getData(), ai_cost: cost });
+						},
 					},
 					(delta: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => {
 						if (controller.signal.aborted) return;

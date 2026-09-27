@@ -1,4 +1,5 @@
 import { logDebug } from "src/logDebug";
+import { formatCost } from "./utils/cost";
 import {
 	App,
 	Canvas,
@@ -289,6 +290,23 @@ const modelIndicators = new WeakMap<object, HTMLElement>();
 const modelIndicatorHost = (node: any): HTMLElement => node.nodeEl ?? node.contentEl;
 
 /**
+ * Compose the badge text. `sizing` always describes the finished state so the
+ * card reserves its final width and nothing moves when generation ends.
+ */
+export const buildIndicatorText = ({ provider, model, contextCount, cost, generating }: {
+	provider: string;
+	model: string;
+	contextCount?: number;
+	cost?: number;
+	generating?: boolean;
+}): { label: string; sizing: string } => {
+	const context = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} • ` : "";
+	const price = typeof cost === "number" ? ` • ${formatCost(cost)}` : "";
+	const finished = `${context}${provider} • ${model}${price}`;
+	return { label: generating ? `${context}generating` : finished, sizing: finished };
+};
+
+/**
  * Add a persistent context and model indicator to a canvas node
  */
 export const setModelIndicatorText = (node: any, provider: string, model: string, generating = false) => {
@@ -298,13 +316,19 @@ export const setModelIndicatorText = (node: any, provider: string, model: string
 	const indicator = existing ?? modelIndicators.get(node);
 	if (!indicator) return;
 	if (indicator.parentElement !== modelIndicatorHost(node)) modelIndicatorHost(node).appendChild(indicator);
-	const contextCount = node.getData().ai_context_count;
-	const contextLabel = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} • ` : "";
-	const text = `${contextLabel}${generating ? "generating" : `${provider} • ${model}`}`;
-	const finalText = `${contextLabel}${provider} • ${model}`;
+	const data = node.getData();
+	const contextCount = data.ai_context_count;
+	const { label: text, sizing: finalText } = buildIndicatorText({
+		provider,
+		model,
+		contextCount,
+		cost: typeof data.ai_cost === "number" ? data.ai_cost : undefined,
+		generating,
+	});
 	const sizing = indicator.querySelector(".ai-model-indicator-size")!;
 	if (sizing.textContent !== finalText) sizing.textContent = finalText;
-	indicator.querySelector(".ai-model-indicator-loading-size")!.textContent = `${contextLabel}generating`;
+	indicator.querySelector(".ai-model-indicator-loading-size")!.textContent =
+		buildIndicatorText({ provider, model, contextCount, generating: true }).label;
 	const label = indicator.querySelector(".ai-model-indicator-label")!;
 	if (label.textContent !== text) label.textContent = text;
 	indicator.setAttribute("data-state", generating ? "generating" : "complete");
