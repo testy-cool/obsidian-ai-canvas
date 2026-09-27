@@ -51,6 +51,7 @@ import { noteGenerator } from "./actions/canvasNodeMenuActions/noteGenerator";
 import { setupHtmlPreviewPersistence } from "./utils/htmlPreview";
 import { ObservabilityClient } from "./utils/observability";
 import { cancelActiveGenerations } from "./utils/generationStatus";
+import { closeAllMCPClients } from "./utils/mcpClient";
 import { configureLLMObservability } from "./utils/llmObservability";
 import { getImageGenerationPrompt } from "./utils/imageGenerationPrompt";
 
@@ -146,6 +147,8 @@ export default class AugmentedCanvasPlugin extends Plugin {
 
 	onunload() {
 		cancelActiveGenerations();
+		// Local MCP servers are child processes; a reload must not leave them behind.
+		void closeAllMCPClients();
 		// Clean up event listeners
 		if (this.cleanupIndicatorPersistence) {
 			this.cleanupIndicatorPersistence();
