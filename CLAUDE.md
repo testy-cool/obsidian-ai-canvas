@@ -9,6 +9,7 @@ Always use `pnpm` (pinned via `packageManager` in `package.json`).
 - `pnpm run dev` — esbuild watch build with inline sourcemaps, output `main.js`.
 - `pnpm run build` — `tsc -noEmit` type check, then esbuild production build.
 - `pnpm run deploy` — build and copy `main.js`, `manifest.json`, `styles.css` into the local vault at `/home/testycool/Obsidian-New/.obsidian/plugins/obsidian-ai-canvas` (path is hardcoded in `deploy.mjs`). Reload the plugin in Obsidian afterwards.
+- `pnpm run build:diff` — build, then diff the shipped `main.js` against the one that was there before. Use it to prove a cleanup changed nothing in the build. Tree-shaken code never reaches the bundle, so an unused export shows as no change.
 - `pnpm test` — run the Vitest suite once (27 files, 344 tests, about 2s). `pnpm run test:watch` for watch mode.
 - Single test file: `pnpm exec vitest run test/mcp.test.ts`. Single test by name: `pnpm exec vitest run -t "name"`.
 - `pnpm run lint` — eslint over `src`. Unused imports are auto-fixable, so `pnpm exec eslint src --ext .ts --fix` clears them.

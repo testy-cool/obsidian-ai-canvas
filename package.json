@@ -7,6 +7,7 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"deploy": "pnpm run build && node deploy.mjs",
+		"build:diff": "node scripts/build-diff.mjs",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "eslint src --ext .ts",
 		"test": "vitest run",
