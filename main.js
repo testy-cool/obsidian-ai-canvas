@@ -49942,6 +49942,19 @@ function cancelActiveGenerations() {
     cancel();
 }
 
+// src/utils/modelKind.ts
+var guessImageModel = (providerType, modelId) => {
+  const normalizedType = providerType.toLowerCase();
+  const normalizedModel = modelId.toLowerCase();
+  if (normalizedType === "azure") {
+    return normalizedModel.includes("gpt-image") || normalizedModel.includes("dall-e");
+  }
+  if (normalizedType !== "gemini" && normalizedType !== "google")
+    return false;
+  return normalizedModel.includes("nano-banana") || normalizedModel.includes("imagen") || normalizedModel.includes("image");
+};
+var isImageModel = (providerType, model) => model.kind ? model.kind === "image" : guessImageModel(providerType, model.model);
+
 // src/utils/htmlPreview.ts
 var import_obsidian11 = require("obsidian");
 
@@ -50459,16 +50472,6 @@ var extractYouTubeUrls = (text2) => {
   }
   return Array.from(urls);
 };
-var isImageModel = (providerType, modelId) => {
-  const normalizedType = providerType.toLowerCase();
-  const normalizedModel = modelId.toLowerCase();
-  if (normalizedType === "azure") {
-    return normalizedModel.includes("gpt-image") || normalizedModel.includes("dall-e");
-  }
-  if (normalizedType !== "gemini" && normalizedType !== "google")
-    return false;
-  return normalizedModel.includes("nano-banana") || normalizedModel.includes("imagen") || normalizedModel.includes("image");
-};
 var extractTextFromContent = (content) => {
   if (typeof content === "string")
     return content;
@@ -50828,7 +50831,7 @@ ${nodeText}`);
         prompt: question,
         selectedNodeIds
       });
-      if (isImageModel(provider.type, model.model)) {
+      if (isImageModel(provider.type, model)) {
         const promptOverride = buildImagePromptFromMessages(messages);
         const parts = buildGeminiImagePartsFromMessages(messages);
         await handleGenerateImage(app, settings2, node, {

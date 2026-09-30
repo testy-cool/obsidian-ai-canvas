@@ -1,4 +1,5 @@
 import type { ProviderCapabilityReport } from "../utils/providerCapabilities";
+import type { ModelKind } from "../utils/modelKind";
 
 
 export interface SystemPrompt {
@@ -27,6 +28,11 @@ export interface LLMModel {
 	 * Whether this model is enabled
 	 */
 	enabled: boolean;
+
+	/**
+	 * What the model makes. Unset means Auto: guessed from the model name.
+	 */
+	kind?: ModelKind;
 
 	/**
 	 * Request timeout in milliseconds

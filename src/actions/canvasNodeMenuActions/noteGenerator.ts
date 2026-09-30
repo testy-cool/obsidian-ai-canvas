@@ -28,6 +28,7 @@ import { addModelIndicator, setModelIndicatorText, getYouTubeVideoId } from "../
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { createGenerationStatus } from "../../utils/generationStatus";
 import { costForModel } from "../../utils/cost";
+import { isImageModel } from "../../utils/modelKind";
 import { getAllMCPTools } from "../../utils/mcpClient";
 import { getProviderCapabilities, supportsGoogleTools } from "../../utils/providerCapabilities";
 import { extractHtmlCodeBlocks, addHtmlPreviewToNode } from "../../utils/htmlPreview";
@@ -110,23 +111,6 @@ const extractYouTubeUrls = (text: string) => {
 		if (urls.size >= MAX_YOUTUBE_URLS) break;
 	}
 	return Array.from(urls);
-};
-
-const isImageModel = (providerType: string, modelId: string) => {
-	const normalizedType = providerType.toLowerCase();
-	const normalizedModel = modelId.toLowerCase();
-	if (normalizedType === "azure") {
-		return (
-			normalizedModel.includes("gpt-image") ||
-			normalizedModel.includes("dall-e")
-		);
-	}
-	if (normalizedType !== "gemini" && normalizedType !== "google") return false;
-	return (
-		normalizedModel.includes("nano-banana") ||
-		normalizedModel.includes("imagen") ||
-		normalizedModel.includes("image")
-	);
 };
 
 const extractTextFromContent = (content: any) => {
@@ -620,7 +604,7 @@ export function noteGenerator(
 				selectedNodeIds,
 			});
 
-			if (isImageModel(provider.type, model.model)) {
+			if (isImageModel(provider.type, model)) {
 				const promptOverride = buildImagePromptFromMessages(messages);
 				const parts = buildGeminiImagePartsFromMessages(messages);
 				await handleGenerateImage(app, settings, node, {
