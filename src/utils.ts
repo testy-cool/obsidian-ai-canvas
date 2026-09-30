@@ -289,16 +289,27 @@ const modelIndicatorHost = (node: any): HTMLElement => node.nodeEl ?? node.conte
  * Compose the badge text. `sizing` always describes the finished state so the
  * card reserves its final width and nothing moves when generation ends.
  */
-export const buildIndicatorText = ({ provider, model, contextCount, cost, generating }: {
+export type CardUsage = { inputTokens: number; outputTokens: number; cachedInputTokens?: number };
+
+/** Share of the prompt read from the provider's cache, or 0 when none was. */
+const cachedPercent = (usage?: CardUsage): number => {
+	if (!usage || !(usage.inputTokens > 0) || !(usage.cachedInputTokens! > 0)) return 0;
+	return Math.min(100, Math.round((usage.cachedInputTokens! / usage.inputTokens) * 100));
+};
+
+export const buildIndicatorText = ({ provider, model, contextCount, cost, usage, generating }: {
 	provider: string;
 	model: string;
 	contextCount?: number;
 	cost?: number;
+	usage?: CardUsage;
 	generating?: boolean;
 }): { label: string; sizing: string } => {
 	const context = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} • ` : "";
 	const price = typeof cost === "number" ? ` • ${formatCost(cost)}` : "";
-	const finished = `${context}${provider} • ${model}${price}`;
+	const percent = cachedPercent(usage);
+	const cache = percent > 0 ? ` • cache ${percent}%` : "";
+	const finished = `${context}${provider} • ${model}${price}${cache}`;
 	return { label: generating ? `${context}generating` : finished, sizing: finished };
 };
 
@@ -319,6 +330,7 @@ export const setModelIndicatorText = (node: any, provider: string, model: string
 		model,
 		contextCount,
 		cost: typeof data.ai_cost === "number" ? data.ai_cost : undefined,
+		usage: data.ai_usage,
 		generating,
 	});
 	const sizing = indicator.querySelector(".ai-model-indicator-size")!;

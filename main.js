@@ -5454,10 +5454,17 @@ var modelIndicatorHost = (node) => {
   var _a20;
   return (_a20 = node.nodeEl) != null ? _a20 : node.contentEl;
 };
-var buildIndicatorText = ({ provider, model, contextCount, cost, generating }) => {
+var cachedPercent = (usage) => {
+  if (!usage || !(usage.inputTokens > 0) || !(usage.cachedInputTokens > 0))
+    return 0;
+  return Math.min(100, Math.round(usage.cachedInputTokens / usage.inputTokens * 100));
+};
+var buildIndicatorText = ({ provider, model, contextCount, cost, usage, generating }) => {
   const context2 = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} \u2022 ` : "";
   const price = typeof cost === "number" ? ` \u2022 ${formatCost(cost)}` : "";
-  const finished = `${context2}${provider} \u2022 ${model}${price}`;
+  const percent = cachedPercent(usage);
+  const cache = percent > 0 ? ` \u2022 cache ${percent}%` : "";
+  const finished = `${context2}${provider} \u2022 ${model}${price}${cache}`;
   return { label: generating ? `${context2}generating` : finished, sizing: finished };
 };
 var setModelIndicatorText = (node, provider, model, generating = false) => {
@@ -5478,6 +5485,7 @@ var setModelIndicatorText = (node, provider, model, generating = false) => {
     model,
     contextCount,
     cost: typeof data.ai_cost === "number" ? data.ai_cost : void 0,
+    usage: data.ai_usage,
     generating
   });
   const sizing = indicator.querySelector(".ai-model-indicator-size");
@@ -47583,7 +47591,7 @@ var listCodexModels = (binary, timeoutMs = 3e4) => {
   });
 };
 var parseCodexEvent = (line) => {
-  var _a20, _b19, _c, _d, _e, _f, _g;
+  var _a20, _b19, _c, _d, _e, _f, _g, _h, _i, _j;
   let event;
   try {
     event = JSON.parse(line);
@@ -47598,9 +47606,18 @@ var parseCodexEvent = (line) => {
   if (event.type === "turn.failed") {
     return { error: (_c = (_b19 = event.error) == null ? void 0 : _b19.message) != null ? _c : "Codex turn failed" };
   }
-  const itemType = (_f = (_d = event.item) == null ? void 0 : _d.type) != null ? _f : (_e = event.item) == null ? void 0 : _e.item_type;
+  if (event.type === "turn.completed" && event.usage) {
+    return {
+      usage: {
+        inputTokens: (_d = event.usage.input_tokens) != null ? _d : 0,
+        outputTokens: (_e = event.usage.output_tokens) != null ? _e : 0,
+        cachedInputTokens: (_f = event.usage.cached_input_tokens) != null ? _f : 0
+      }
+    };
+  }
+  const itemType = (_i = (_g = event.item) == null ? void 0 : _g.type) != null ? _i : (_h = event.item) == null ? void 0 : _h.item_type;
   if (itemType === "agent_message") {
-    if (event.type === "item.completed" && typeof ((_g = event.item) == null ? void 0 : _g.text) === "string") {
+    if (event.type === "item.completed" && typeof ((_j = event.item) == null ? void 0 : _j.text) === "string") {
       return { finalText: event.item.text };
     }
     if (typeof event.delta === "string") {
@@ -47653,6 +47670,7 @@ var streamCodexResponse = async (provider, messages, { model, providerParams, ti
     const timeout = timeoutMs != null ? timeoutMs : 3e5;
     let finalText = "";
     let streamedText = "";
+    let usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
     let stderrTail = "";
     let settled = false;
     const timer = setTimeout(() => {
@@ -47674,7 +47692,7 @@ var streamCodexResponse = async (provider, messages, { model, providerParams, ti
       if (finalText && !streamedText)
         cb(finalText, null, null, null);
       cb(null, { text: text2 }, null, null);
-      onComplete == null ? void 0 : onComplete({ inputTokens: 0, outputTokens: 0, totalText: text2 });
+      onComplete == null ? void 0 : onComplete({ ...usage, totalText: text2 });
       resolve2();
     };
     const onAbort = () => {
@@ -47708,6 +47726,8 @@ var streamCodexResponse = async (provider, messages, { model, providerParams, ti
         if (parsed.finalText) {
           finalText = parsed.finalText;
         }
+        if (parsed.usage)
+          usage = parsed.usage;
       }
     });
     child.stderr.on("data", (chunk) => {
@@ -47737,7 +47757,7 @@ var streamCodexResponse = async (provider, messages, { model, providerParams, ti
 var import_obsidian5 = require("obsidian");
 var CLI_DEFAULT_MODEL = "default";
 var parseClaudeCliEvent = (line) => {
-  var _a20, _b19, _c, _d, _e;
+  var _a20, _b19, _c, _d, _e, _f, _g;
   let event;
   try {
     event = JSON.parse(line);
@@ -47754,8 +47774,8 @@ var parseClaudeCliEvent = (line) => {
     const usage = (_c = event.usage) != null ? _c : {};
     return {
       usage: {
-        inputTokens: (_d = usage.input_tokens) != null ? _d : 0,
-        outputTokens: (_e = usage.output_tokens) != null ? _e : 0,
+        inputTokens: ((_d = usage.input_tokens) != null ? _d : 0) + ((_e = usage.cache_read_input_tokens) != null ? _e : 0) + ((_f = usage.cache_creation_input_tokens) != null ? _f : 0),
+        outputTokens: (_g = usage.output_tokens) != null ? _g : 0,
         ...usage.cache_read_input_tokens ? { cachedInputTokens: usage.cache_read_input_tokens } : {}
       }
     };
@@ -50827,7 +50847,9 @@ ${nodeText}`);
           ai_model: model.model,
           ai_provider: provider.type,
           ai_context_count: contextCount,
-          ai_notes: notes
+          ai_notes: notes,
+          ai_cost: void 0,
+          ai_usage: void 0
         });
         const initialDimensions = calculateNoteDimensions(initialText, 300, 500);
         created.moveAndResize({
@@ -50918,9 +50940,12 @@ ${nodeText}`);
           abortSignal: controller.signal,
           onComplete: (usage) => {
             const cost = costForModel(settings2.models, provider.id, model.model, usage);
-            if (cost == null)
-              return;
-            created.setData({ ...created.getData(), ai_cost: cost });
+            const { inputTokens, outputTokens, cachedInputTokens } = usage;
+            created.setData({
+              ...created.getData(),
+              ai_usage: { inputTokens, outputTokens, cachedInputTokens: cachedInputTokens != null ? cachedInputTokens : 0 },
+              ...cost == null ? {} : { ai_cost: cost }
+            });
           }
         }, (delta, final, tool3, reasoningDelta) => {
           var _a21, _b20, _c2, _d2, _e2, _f2, _g2, _h, _i;

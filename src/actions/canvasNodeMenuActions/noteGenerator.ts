@@ -680,6 +680,9 @@ export function noteGenerator(
 					ai_provider: provider.type,
 					ai_context_count: contextCount,
 					ai_notes: notes,
+					// The previous run's numbers, until this run reports its own.
+					ai_cost: undefined,
+					ai_usage: undefined,
 				});
 				
 				// Resize existing node to proper initial dimensions
@@ -783,11 +786,16 @@ export function noteGenerator(
 						timeoutMs: model.timeoutMs,
 						abortSignal: controller.signal,
 						onComplete: usage => {
-							// Show what the card cost next to the model it used. Undefined
-							// when the model has no prices, so the badge stays quiet.
+							// Show what the card cost and how much came from the cache next
+							// to the model it used. Cost is undefined when the model has no
+							// prices, so the badge leaves it out.
 							const cost = costForModel(settings.models, provider.id, model.model, usage);
-							if (cost == null) return;
-							created.setData({ ...created.getData(), ai_cost: cost });
+							const { inputTokens, outputTokens, cachedInputTokens } = usage;
+							created.setData({
+								...created.getData(),
+								ai_usage: { inputTokens, outputTokens, cachedInputTokens: cachedInputTokens ?? 0 },
+								...(cost == null ? {} : { ai_cost: cost }),
+							});
 						},
 					},
 					(delta: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => {
