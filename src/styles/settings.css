@@ -312,8 +312,19 @@
 	align-items: center;
 	gap: 8px;
 	padding: 2px 0;
-	font-size: var(--font-ui-small);
+	font-size: max(12px, var(--font-ui-small));
 	color: var(--text-normal);
+}
+
+.provider-model-name {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.provider-model-kind {
+	flex-shrink: 0;
+	font-size: max(12px, var(--font-ui-small));
 }
 
 .model-fetch-actions {

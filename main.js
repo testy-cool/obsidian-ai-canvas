@@ -52939,6 +52939,7 @@ var SettingsTab = class extends import_obsidian20.PluginSettingTab {
         return;
       }
       filteredModels.forEach((model) => {
+        var _a21;
         const row = listContainer.createDiv("provider-model-row");
         const checkbox = row.createEl("input", { type: "checkbox" });
         checkbox.checked = model.enabled;
@@ -52950,7 +52951,22 @@ var SettingsTab = class extends import_obsidian20.PluginSettingTab {
           renderModelList();
         });
         const label = model.model === model.id ? model.model : `${model.model} (${model.id})`;
-        row.createEl("span", { text: label });
+        row.createEl("span", { text: label, cls: "provider-model-name" });
+        const kind2 = row.createEl("select", { cls: "dropdown provider-model-kind" });
+        kind2.setAttribute("aria-label", `What ${model.model} makes`);
+        const guess = guessImageModel(provider.type, model.model) ? "image" : "text";
+        for (const [value, text2] of [["auto", `Auto (${guess})`], ["text", "Text"], ["image", "Image"]]) {
+          const option = kind2.createEl("option", { text: text2 });
+          option.value = value;
+        }
+        kind2.value = (_a21 = model.kind) != null ? _a21 : "auto";
+        kind2.addEventListener("change", async () => {
+          if (kind2.value === "text" || kind2.value === "image")
+            model.kind = kind2.value;
+          else
+            delete model.kind;
+          await this.plugin.saveSettings();
+        });
       });
     };
     renderModelList();

@@ -1,4 +1,5 @@
 import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextComponent, ToggleComponent, DropdownComponent, Modal, requestUrl, setIcon, debounce } from "obsidian";
+import { guessImageModel } from "../utils/modelKind";
 import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
 import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
 import { LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
@@ -672,7 +673,22 @@ export default class SettingsTab extends PluginSettingTab {
                 const label = model.model === model.id
                     ? model.model
                     : `${model.model} (${model.id})`;
-                row.createEl("span", { text: label });
+                row.createEl("span", { text: label, cls: "provider-model-name" });
+
+                // Auto guesses from the name; a new model family needs Image set by hand.
+                const kind = row.createEl("select", { cls: "dropdown provider-model-kind" });
+                kind.setAttribute("aria-label", `What ${model.model} makes`);
+                const guess = guessImageModel(provider.type, model.model) ? "image" : "text";
+                for (const [value, text] of [["auto", `Auto (${guess})`], ["text", "Text"], ["image", "Image"]]) {
+                    const option = kind.createEl("option", { text });
+                    option.value = value;
+                }
+                kind.value = model.kind ?? "auto";
+                kind.addEventListener("change", async () => {
+                    if (kind.value === "text" || kind.value === "image") model.kind = kind.value;
+                    else delete model.kind;
+                    await this.plugin.saveSettings();
+                });
             });
         };
 

@@ -394,6 +394,22 @@ describe("provider capability settings", () => {
 		expect(select.children.some(option => option.value === "disabled")).toBe(true);
 	});
 
+	it("lets each model be set to make text or images, with Auto showing its guess", async () => {
+		const { root, plugin } = setup();
+		const row = root.querySelectorAll(".provider-model-row").find(row => row.textContent.includes("test-model"))!;
+		const kind = row.querySelector(".provider-model-kind")!;
+		expect(kind.value).toBe("auto");
+		expect(kind.children.map(option => option.text)).toEqual(["Auto (text)", "Text", "Image"]);
+
+		kind.value = "image"; await kind.listeners.get("change")!();
+		const model = plugin.settings.models.find((m: any) => m.id === "selected");
+		expect(model.kind).toBe("image");
+		expect(plugin.saveSettings).toHaveBeenCalled();
+
+		kind.value = "auto"; await kind.listeners.get("change")!();
+		expect("kind" in model).toBe(false);
+	});
+
 	it("shows access errors openly and ignores old gateway-wide failures", () => {
 		const {tab, plugin, provider} = setup();
 		provider.capabilityReport = {...report,image:"no"};
