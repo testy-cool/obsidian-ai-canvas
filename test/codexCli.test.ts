@@ -79,15 +79,16 @@ describe("parseCodexEvent", () => {
 	it("ignores unrelated lifecycle events and junk", () => {
 		expect(parseCodexEvent(JSON.stringify({ type: "thread.started", thread_id: "abc" }))).toBeNull();
 		expect(parseCodexEvent(JSON.stringify({ type: "turn.started" }))).toBeNull();
-		expect(
-			parseCodexEvent(
-				JSON.stringify({
-					type: "turn.completed",
-					usage: { input_tokens: 24035, cached_input_tokens: 8960, output_tokens: 5, reasoning_output_tokens: 0 },
-				})
-			)
-		).toBeNull();
 		expect(parseCodexEvent("not json")).toBeNull();
+	});
+
+	it("takes token counts, including cache reads, from turn.completed", () => {
+		// Copied from a real gpt-6-luna run on codex-cli 0.157.1.
+		const line = JSON.stringify({
+			type: "turn.completed",
+			usage: { input_tokens: 27272, cached_input_tokens: 6912, cache_write_input_tokens: 0, output_tokens: 5, reasoning_output_tokens: 0 },
+		});
+		expect(parseCodexEvent(line)).toEqual({ usage: { inputTokens: 27272, outputTokens: 5, cachedInputTokens: 6912 } });
 	});
 });
 

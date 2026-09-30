@@ -134,7 +134,12 @@ export const listCodexModels = (binary: string, timeoutMs = 30_000): Promise<str
  */
 export const parseCodexEvent = (
 	line: string
-): { textDelta?: string; finalText?: string; error?: string } | null => {
+): {
+	textDelta?: string;
+	finalText?: string;
+	error?: string;
+	usage?: { inputTokens: number; outputTokens: number; cachedInputTokens: number };
+} | null => {
 	let event: any;
 	try {
 		event = JSON.parse(line);
@@ -149,6 +154,17 @@ export const parseCodexEvent = (
 	}
 	if (event.type === "turn.failed") {
 		return { error: event.error?.message ?? "Codex turn failed" };
+	}
+
+	// Codex counts cached tokens inside input_tokens, as the AI SDK does.
+	if (event.type === "turn.completed" && event.usage) {
+		return {
+			usage: {
+				inputTokens: event.usage.input_tokens ?? 0,
+				outputTokens: event.usage.output_tokens ?? 0,
+				cachedInputTokens: event.usage.cached_input_tokens ?? 0,
+			},
+		};
 	}
 
 	const itemType = event.item?.type ?? event.item?.item_type;
@@ -234,6 +250,7 @@ export const streamCodexResponse = async (
 		const timeout = timeoutMs ?? 300_000;
 		let finalText = "";
 		let streamedText = "";
+		let usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
 		let stderrTail = "";
 		let settled = false;
 
@@ -256,7 +273,7 @@ export const streamCodexResponse = async (
 			// Emit any final text not already streamed, then the final marker.
 			if (finalText && !streamedText) cb(finalText, null, null, null);
 			cb(null, { text }, null, null);
-			onComplete?.({ inputTokens: 0, outputTokens: 0, totalText: text });
+			onComplete?.({ ...usage, totalText: text });
 			resolve();
 		};
 
@@ -288,6 +305,7 @@ export const streamCodexResponse = async (
 				if (parsed.finalText) {
 					finalText = parsed.finalText;
 				}
+				if (parsed.usage) usage = parsed.usage;
 			}
 		});
 		child.stderr.on("data", (chunk: Buffer) => {
