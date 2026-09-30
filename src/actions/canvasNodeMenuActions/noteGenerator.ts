@@ -683,6 +683,7 @@ export function noteGenerator(
 					// The previous run's numbers, until this run reports its own.
 					ai_cost: undefined,
 					ai_usage: undefined,
+					ai_duration_ms: undefined,
 				});
 				
 				// Resize existing node to proper initial dimensions
@@ -774,6 +775,7 @@ export function noteGenerator(
 					return str.length > maxLen ? str.slice(0, maxLen) + "..." : str;
 				};
 
+				const requestStartedAt = Date.now();
 				await streamResponse(
 					provider,
 					messages,
@@ -794,6 +796,7 @@ export function noteGenerator(
 							created.setData({
 								...created.getData(),
 								ai_usage: { inputTokens, outputTokens, cachedInputTokens: cachedInputTokens ?? 0 },
+								ai_duration_ms: Date.now() - requestStartedAt,
 								...(cost == null ? {} : { ai_cost: cost }),
 							});
 						},

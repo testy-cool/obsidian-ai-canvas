@@ -297,6 +297,22 @@ const cachedPercent = (usage?: CardUsage): number => {
 	return Math.min(100, Math.round((usage.cachedInputTokens! / usage.inputTokens) * 100));
 };
 
+const formatDuration = (ms: number): string => {
+	if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+	const seconds = Math.round(ms / 1000);
+	return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+};
+
+/** The line a selected card shows under its badge: tokens and time taken. */
+export const buildUsageDetail = (usage?: CardUsage, durationMs?: number): string => {
+	if (!usage || !(usage.inputTokens > 0 || usage.outputTokens > 0)) return "";
+	const count = (n: number) => n.toLocaleString("en-US");
+	const cached = usage.cachedInputTokens! > 0 ? ` (${count(usage.cachedInputTokens!)} cached)` : "";
+	const parts = [`${count(usage.inputTokens)} in${cached}`, `${count(usage.outputTokens)} out`];
+	if (typeof durationMs === "number" && durationMs > 0) parts.push(formatDuration(durationMs));
+	return parts.join(" · ");
+};
+
 export const buildIndicatorText = ({ provider, model, contextCount, cost, usage, generating }: {
 	provider: string;
 	model: string;
@@ -339,6 +355,14 @@ export const setModelIndicatorText = (node: any, provider: string, model: string
 		buildIndicatorText({ provider, model, contextCount, generating: true }).label;
 	const label = indicator.querySelector(".ai-model-indicator-label")!;
 	if (label.textContent !== text) label.textContent = text;
+	const detail = generating ? "" : buildUsageDetail(data.ai_usage, data.ai_duration_ms);
+	let detailEl = indicator.querySelector(".ai-card-usage");
+	if (detail) {
+		detailEl ??= indicator.createEl("div", { cls: "ai-card-usage" });
+		if (detailEl.textContent !== detail) detailEl.textContent = detail;
+	} else {
+		detailEl?.remove();
+	}
 	indicator.setAttribute("data-state", generating ? "generating" : "complete");
 };
 

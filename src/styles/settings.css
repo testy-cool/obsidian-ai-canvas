@@ -426,6 +426,23 @@
 	color: var(--text-muted);
 }
 
+/* Token counts and time taken, only on the card you have selected. */
+.ai-card-usage {
+	display: none;
+	grid-area: 3 / 1;
+	contain: inline-size;
+	white-space: normal;
+	margin-top: 2px;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.canvas-node.is-focused .ai-card-usage,
+.canvas-node.is-selected .ai-card-usage {
+	display: block;
+}
+
 /* Show indicator more clearly on hover */
 .canvas-node:hover .ai-model-indicator {
 	opacity: 0.8 !important;

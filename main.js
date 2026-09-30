@@ -5459,6 +5459,22 @@ var cachedPercent = (usage) => {
     return 0;
   return Math.min(100, Math.round(usage.cachedInputTokens / usage.inputTokens * 100));
 };
+var formatDuration = (ms) => {
+  if (ms < 6e4)
+    return `${(ms / 1e3).toFixed(1)}s`;
+  const seconds = Math.round(ms / 1e3);
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+};
+var buildUsageDetail = (usage, durationMs) => {
+  if (!usage || !(usage.inputTokens > 0 || usage.outputTokens > 0))
+    return "";
+  const count = (n) => n.toLocaleString("en-US");
+  const cached2 = usage.cachedInputTokens > 0 ? ` (${count(usage.cachedInputTokens)} cached)` : "";
+  const parts = [`${count(usage.inputTokens)} in${cached2}`, `${count(usage.outputTokens)} out`];
+  if (typeof durationMs === "number" && durationMs > 0)
+    parts.push(formatDuration(durationMs));
+  return parts.join(" \xB7 ");
+};
 var buildIndicatorText = ({ provider, model, contextCount, cost, usage, generating }) => {
   const context2 = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} \u2022 ` : "";
   const price = typeof cost === "number" ? ` \u2022 ${formatCost(cost)}` : "";
@@ -5495,6 +5511,15 @@ var setModelIndicatorText = (node, provider, model, generating = false) => {
   const label = indicator.querySelector(".ai-model-indicator-label");
   if (label.textContent !== text2)
     label.textContent = text2;
+  const detail = generating ? "" : buildUsageDetail(data.ai_usage, data.ai_duration_ms);
+  let detailEl = indicator.querySelector(".ai-card-usage");
+  if (detail) {
+    detailEl != null ? detailEl : detailEl = indicator.createEl("div", { cls: "ai-card-usage" });
+    if (detailEl.textContent !== detail)
+      detailEl.textContent = detail;
+  } else {
+    detailEl == null ? void 0 : detailEl.remove();
+  }
   indicator.setAttribute("data-state", generating ? "generating" : "complete");
 };
 var addModelIndicator = (node, provider, model, generating = false) => {
@@ -50849,7 +50874,8 @@ ${nodeText}`);
           ai_context_count: contextCount,
           ai_notes: notes,
           ai_cost: void 0,
-          ai_usage: void 0
+          ai_usage: void 0,
+          ai_duration_ms: void 0
         });
         const initialDimensions = calculateNoteDimensions(initialText, 300, 500);
         created.moveAndResize({
@@ -50930,6 +50956,7 @@ ${nodeText}`);
           const str2 = typeof text2 === "string" ? text2 : JSON.stringify(text2);
           return str2.length > maxLen ? str2.slice(0, maxLen) + "..." : str2;
         };
+        const requestStartedAt = Date.now();
         await streamResponse2(provider, messages, {
           model: model.model,
           max_tokens: settings2.maxResponseTokens || void 0,
@@ -50944,6 +50971,7 @@ ${nodeText}`);
             created.setData({
               ...created.getData(),
               ai_usage: { inputTokens, outputTokens, cachedInputTokens: cachedInputTokens != null ? cachedInputTokens : 0 },
+              ai_duration_ms: Date.now() - requestStartedAt,
               ...cost == null ? {} : { ai_cost: cost }
             });
           }

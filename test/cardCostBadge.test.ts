@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildIndicatorText } from "../src/utils";
+import { buildIndicatorText, buildUsageDetail } from "../src/utils";
 
 describe("the card badge", () => {
 	it("shows provider and model when nothing was costed", () => {
@@ -53,5 +53,30 @@ describe("the card badge", () => {
 			provider: "Bifrost", model: "flash",
 			usage: { inputTokens: 100, outputTokens: 1, cachedInputTokens: 500 },
 		}).label).toBe("Bifrost • flash • cache 100%");
+	});
+});
+
+describe("the detail line shown on a selected card", () => {
+	it("gives the token counts and how long the answer took", () => {
+		expect(buildUsageDetail({ inputTokens: 1842, outputTokens: 96, cachedInputTokens: 1440 }, 6400))
+			.toBe("1,842 in (1,440 cached) · 96 out · 6.4s");
+	});
+
+	it("leaves out the cached part when nothing was cached", () => {
+		expect(buildUsageDetail({ inputTokens: 1842, outputTokens: 96, cachedInputTokens: 0 }, 6400))
+			.toBe("1,842 in · 96 out · 6.4s");
+	});
+
+	it("writes long runs in minutes and seconds", () => {
+		expect(buildUsageDetail({ inputTokens: 10, outputTokens: 5 }, 125_000)).toBe("10 in · 5 out · 2m 5s");
+	});
+
+	it("shows nothing for a run that reported no tokens", () => {
+		expect(buildUsageDetail({ inputTokens: 0, outputTokens: 0 }, 3000)).toBe("");
+		expect(buildUsageDetail(undefined, 3000)).toBe("");
+	});
+
+	it("drops the time when it was not recorded", () => {
+		expect(buildUsageDetail({ inputTokens: 10, outputTokens: 5 })).toBe("10 in · 5 out");
 	});
 });

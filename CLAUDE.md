@@ -44,7 +44,7 @@ Two persistence hooks re-attach UI on `active-leaf-change` / `layout-change` bec
 4. `streamResponse` from `src/utils/llm.ts` streams into the card, periodically resizing it to a 3:5 aspect ratio. Reasoning deltas render as `<details>` blocks, MCP tool calls render as live status pills, and the status phase follows the stream (`Connecting tools…`, `Thinking…`, `Using <tool>…`).
 5. On completion the card's `unknownData` gets `ai_model` and `ai_provider`, the model badge is drawn, auto-titling runs if enabled, and any ```html fence is mounted as a preview.
 
-Metadata the plugin stores on canvas nodes (`unknownData`): `ai_provider`, `ai_model`, `ai_cost` (dollars, drawn in the badge), `ai_usage` (input, output and cached tokens; the badge shows the cached share), `ai_context_count`, `ai_notes`, `isGenerated`, `imagePrompt`, `questions`.
+Metadata the plugin stores on canvas nodes (`unknownData`): `ai_provider`, `ai_model`, `ai_cost` (dollars, drawn in the badge), `ai_usage` (input, output and cached tokens; the badge shows the cached share), `ai_duration_ms` (shown with the tokens when the card is selected), `ai_context_count`, `ai_notes`, `isGenerated`, `imagePrompt`, `questions`.
 
 Cancellation: `abortSignal` threads from `noteGenerator.ts` through `llm.ts` and `ai.ts` into `codexCli.ts`, `cancelActiveGenerations()` stops every running card on plugin unload, and an aborted run must not fall through to the flex/retry fallback in `ai.ts`. `test/codexCancellation.test.ts` and `test/flexFallback.test.ts` guard that.
 
