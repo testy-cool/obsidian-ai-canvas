@@ -59,12 +59,15 @@ describe("reading Claude CLI events", () => {
 		expect(event).toEqual({ textDelta: "ok" });
 	});
 
-	it("takes token counts, including cache reads, from the result event", () => {
+	// Claude reports cache reads and cache writes apart from input_tokens, so a
+	// real run said 10 input tokens for a 51,418 token prompt. The plugin counts
+	// cached tokens as part of the input, like the AI SDK does.
+	it("counts cache reads and cache writes as part of the input", () => {
 		const event = parseClaudeCliEvent(JSON.stringify({
 			type: "result",
-			usage: { input_tokens: 2, output_tokens: 4, cache_read_input_tokens: 13116 },
+			usage: { input_tokens: 10, output_tokens: 288, cache_read_input_tokens: 13963, cache_creation_input_tokens: 37445 },
 		}));
-		expect(event).toEqual({ usage: { inputTokens: 2, outputTokens: 4, cachedInputTokens: 13116 } });
+		expect(event).toEqual({ usage: { inputTokens: 51418, outputTokens: 288, cachedInputTokens: 13963 } });
 	});
 
 	it("ignores the hook and session noise the CLI prints first", () => {
