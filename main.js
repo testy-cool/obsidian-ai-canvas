@@ -4978,7 +4978,7 @@ var logDebug = (...params) => {
 };
 
 // src/actions/canvasNodeMenuActions/noteGenerator.ts
-var import_obsidian14 = require("obsidian");
+var import_obsidian13 = require("obsidian");
 
 // src/utils/cost.ts
 var computeGenerationCost = (usage, { inputCostPerMillion, outputCostPerMillion, cachedInputCostPerMillion }) => {
@@ -50416,69 +50416,6 @@ var PromptContextModal = class extends import_obsidian12.Modal {
   }
 };
 
-// src/Modals/CustomQuestionModal.ts
-var import_obsidian13 = require("obsidian");
-var CustomQuestionModal = class extends import_obsidian13.Modal {
-  constructor(app, settings2, onSubmit, initialSelection) {
-    super(app);
-    this.initialSelection = initialSelection;
-    this.settings = settings2;
-    this.onSubmit = onSubmit;
-  }
-  onOpen() {
-    var _a20, _b19;
-    const { contentEl } = this;
-    contentEl.className = "augmented-canvas-modal-container";
-    const choices = this.settings.providers.filter((provider) => provider.enabled).flatMap((provider) => this.settings.models.filter((model) => model.providerId === provider.id && model.enabled).map((model) => ({ provider, model })));
-    const preferredProviderId = ((_a20 = this.initialSelection) == null ? void 0 : _a20.provider.id) || this.settings.activeProvider;
-    const preferredModelId = ((_b19 = this.initialSelection) == null ? void 0 : _b19.model.id) || this.settings.apiModel;
-    const exactIndex = choices.findIndex(({ provider, model }) => provider.id === preferredProviderId && model.id === preferredModelId);
-    const defaultIndex = Math.max(0, exactIndex >= 0 ? exactIndex : choices.findIndex(({ provider }) => provider.id === preferredProviderId));
-    const modelLabel = contentEl.createEl("label", {
-      text: "Model",
-      cls: "augmented-canvas-modal-model"
-    });
-    const modelSelect = modelLabel.createEl("select", { cls: "dropdown" });
-    modelSelect.setAttribute("aria-label", "Model");
-    choices.forEach(({ provider, model }, index) => {
-      const option = modelSelect.createEl("option", {
-        text: `${provider.type} \xB7 ${model.model}`
-      });
-      option.value = String(index);
-    });
-    modelSelect.value = String(defaultIndex);
-    modelSelect.disabled = choices.length === 0;
-    const textareaEl = contentEl.createEl("textarea");
-    textareaEl.className = "augmented-canvas-modal-textarea";
-    textareaEl.placeholder = "Write your question here";
-    textareaEl.addEventListener("keydown", (event) => {
-      if (event.ctrlKey && event.key === "Enter") {
-        event.preventDefault();
-        const selection = choices[Number(modelSelect.value)];
-        if (selection)
-          this.onSubmit(textareaEl.value, selection);
-        this.close();
-      }
-    });
-    contentEl.createEl("div", { cls: "augmented-canvas-modal-hint", text: "Ctrl+Enter to send" });
-    const actions = contentEl.createDiv({ cls: "augmented-canvas-modal-actions" });
-    actions.createEl("button", { text: "Cancel" }).onClickEvent(() => this.close());
-    const submitBtn = actions.createEl("button", { text: "Ask AI" });
-    submitBtn.disabled = choices.length === 0;
-    submitBtn.onClickEvent(() => {
-      const selection = choices[Number(modelSelect.value)];
-      if (selection)
-        this.onSubmit(textareaEl.value, selection);
-      this.close();
-    });
-    textareaEl.focus();
-  }
-  onClose() {
-    const { contentEl } = this;
-    contentEl.empty();
-  }
-};
-
 // src/actions/canvasNodeMenuActions/noteGenerator.ts
 var encodingForModel2;
 Promise.resolve().then(() => (init_dist(), dist_exports)).then((module2) => {
@@ -50489,6 +50426,7 @@ var NOTE_MIN_HEIGHT = 400;
 var NOTE_INCR_HEIGHT_STEP = 150;
 var YOUTUBE_URL_PATTERN = /https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtube\.com\/shorts\/|youtu\.be\/)[^\s)]+/gi;
 var MAX_YOUTUBE_URLS = 10;
+var CONTINUE_PROMPT = "Continue.";
 var sleep2 = (ms) => new Promise((resolve2) => setTimeout(resolve2, ms));
 var calculateNoteDimensions = (text2, minWidth2 = 300, maxWidth = 800, padding = 40) => {
   const avgCharWidth = 8;
@@ -50618,7 +50556,7 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
   const resolveModel = (provider) => customModel || settings2.models.find((model) => model.id === settings2.apiModel && model.providerId === (provider == null ? void 0 : provider.id) && model.enabled) || settings2.models.find((model) => model.providerId === (provider == null ? void 0 : provider.id) && model.enabled);
   const canCallAI = () => {
     if (!settings2.apiKey && !getActiveProviderApiKey()) {
-      new import_obsidian14.Notice("Please set your OpenAI API key in the plugin settings");
+      new import_obsidian13.Notice("Please set your OpenAI API key in the plugin settings");
       return false;
     }
     return true;
@@ -50630,7 +50568,7 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
     return settings2.apiKey || activeProvider.apiKey || null;
   };
   const getActiveCanvas2 = () => {
-    const maybeCanvasView = app.workspace.getActiveViewOfType(import_obsidian14.ItemView);
+    const maybeCanvasView = app.workspace.getActiveViewOfType(import_obsidian13.ItemView);
     return maybeCanvasView ? maybeCanvasView["canvas"] : null;
   };
   const isSystemPromptNode = (text2) => text2.trim().startsWith("SYSTEM PROMPT");
@@ -50674,7 +50612,7 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
         return;
       warnedMedia.add(media);
       notes.push(`${media === "YouTube links" ? "YouTube link" : "Video file"} not sent to ${(provider == null ? void 0 : provider.type) || "this provider"}`);
-      new import_obsidian14.Notice(`${(provider == null ? void 0 : provider.type) || "This provider"} cannot take ${media}. Use a Gemini provider for this card.`);
+      new import_obsidian13.Notice(`${(provider == null ? void 0 : provider.type) || "This provider"} cannot take ${media}. Use a Gemini provider for this card.`);
     };
     const canCountTokens = isGpt && typeof encodingForModel2 === "function";
     const modelName = (model == null ? void 0 : model.model) || settings2.apiModel;
@@ -50714,7 +50652,7 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
             const keepTokens = nodeTokens.slice(0, inputLimit - tokenCount - 1);
             const truncateTextTo = encoding.decode(keepTokens).length;
             logDebug(`Truncating node text from ${nodeText.length} to ${truncateTextTo} characters`);
-            new import_obsidian14.Notice(`Truncating node text from ${nodeText.length} to ${truncateTextTo} characters`);
+            new import_obsidian13.Notice(`Truncating node text from ${nodeText.length} to ${truncateTextTo} characters`);
             nodeText = nodeText.slice(0, truncateTextTo);
             keptNodeTokens = keepTokens.length;
           } else {
@@ -50743,7 +50681,7 @@ ${nodeText}`);
         const sizeMb = (nodeMedia.size / (1024 * 1024)).toFixed(1);
         const limitMb = (nodeMedia.limit / (1024 * 1024)).toFixed(1);
         notes.push(`Skipped ${(filePath == null ? void 0 : filePath.split("/").pop()) || nodeMedia.filename || "media"}, ${sizeMb} MB exceeds the ${limitMb} MB limit`);
-        new import_obsidian14.Notice(`Skipping ${nodeMedia.filename || "media"} (${sizeMb} MB). Limit is ${limitMb} MB.`);
+        new import_obsidian13.Notice(`Skipping ${nodeMedia.filename || "media"} (${sizeMb} MB). Limit is ${limitMb} MB.`);
         nodeMedia = null;
       }
       if ((nodeMedia == null ? void 0 : nodeMedia.kind) === "image" && capabilities.image) {
@@ -50852,12 +50790,12 @@ ${nodeText}`);
     var _a20, _b19, _c, _d, _e, _f, _g, _h, _i;
     const provider = resolveProvider();
     if (!provider) {
-      new import_obsidian14.Notice("No active provider found. Please check your settings.");
+      new import_obsidian13.Notice("No active provider found. Please check your settings.");
       return;
     }
     const model = resolveModel(provider);
     if (!model) {
-      new import_obsidian14.Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
+      new import_obsidian13.Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
       return;
     }
     if (!canCallAI())
@@ -50923,15 +50861,7 @@ ${nodeText}`);
         return;
       }
       if (!trimmedQuestion && ((_b19 = messages[messages.length - 1]) == null ? void 0 : _b19.role) === "assistant") {
-        new CustomQuestionModal(app, settings2, (followUp, selection) => {
-          if (!followUp.trim()) {
-            new import_obsidian14.Notice("Type a question to continue from an AI answer.");
-            return;
-          }
-          const next = noteGenerator(app, settings2, node, toNode, selection.provider, selection.model);
-          void next.generateNote(followUp, selectedNodeIds);
-        }, { provider, model }).open();
-        return;
+        messages.push({ role: "user", content: CONTINUE_PROMPT });
       }
       if (!messages.length)
         return;
@@ -50993,7 +50923,7 @@ ${nodeText}`);
         if (isGpt) {
           noticeMessage = `Sending ${messages.length} notes with ${tokenCount} tokens to the AI`;
         }
-        new import_obsidian14.Notice(noticeMessage);
+        new import_obsidian13.Notice(noticeMessage);
         let mcpTools;
         if (settings2.mcpEnabled && settings2.mcpServers.length > 0) {
           try {
@@ -51011,12 +50941,12 @@ ${nodeText}`);
             generationStatus.setPhase("Generating\u2026");
             const toolCount = Object.keys(mcpTools).length;
             if (toolCount > 0) {
-              new import_obsidian14.Notice(`Loaded ${toolCount} MCP tools`);
+              new import_obsidian13.Notice(`Loaded ${toolCount} MCP tools`);
             }
           } catch (error40) {
             if (controller.signal.aborted)
               throw error40;
-            new import_obsidian14.Notice(`Failed to load MCP tools: ${error40}`);
+            new import_obsidian13.Notice(`Failed to load MCP tools: ${error40}`);
           }
         }
         let reasoningEl;
@@ -51232,7 +51162,7 @@ ${nodeText}`);
           if (error40.statusCode && ((_h = error40.message) == null ? void 0 : _h.startsWith(`HTTP ${error40.statusCode}:`))) {
             errorDetail = error40.message;
           }
-          new import_obsidian14.Notice(`Error calling the AI: ${errorDetail}`, 1e4);
+          new import_obsidian13.Notice(`Error calling the AI: ${errorDetail}`, 1e4);
           created.setText(`**Error:** ${errorDetail}`);
           const errorDimensions = calculateNoteDimensions(created.text, 300, 500);
           created.moveAndResize({
@@ -51257,6 +51187,65 @@ function getTokenLimit(settings2) {
   const tokenLimit = settings2.maxInputTokens ? Math.min(settings2.maxInputTokens, 4096) : 4096;
   return tokenLimit;
 }
+
+// src/Modals/CustomQuestionModal.ts
+var import_obsidian14 = require("obsidian");
+var CustomQuestionModal = class extends import_obsidian14.Modal {
+  constructor(app, settings2, onSubmit) {
+    super(app);
+    this.settings = settings2;
+    this.onSubmit = onSubmit;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.className = "augmented-canvas-modal-container";
+    const choices = this.settings.providers.filter((provider) => provider.enabled).flatMap((provider) => this.settings.models.filter((model) => model.providerId === provider.id && model.enabled).map((model) => ({ provider, model })));
+    const exactIndex = choices.findIndex(({ provider, model }) => provider.id === this.settings.activeProvider && model.id === this.settings.apiModel);
+    const defaultIndex = Math.max(0, exactIndex >= 0 ? exactIndex : choices.findIndex(({ provider }) => provider.id === this.settings.activeProvider));
+    const modelLabel = contentEl.createEl("label", {
+      text: "Model",
+      cls: "augmented-canvas-modal-model"
+    });
+    const modelSelect = modelLabel.createEl("select", { cls: "dropdown" });
+    modelSelect.setAttribute("aria-label", "Model");
+    choices.forEach(({ provider, model }, index) => {
+      const option = modelSelect.createEl("option", {
+        text: `${provider.type} \xB7 ${model.model}`
+      });
+      option.value = String(index);
+    });
+    modelSelect.value = String(defaultIndex);
+    modelSelect.disabled = choices.length === 0;
+    const textareaEl = contentEl.createEl("textarea");
+    textareaEl.className = "augmented-canvas-modal-textarea";
+    textareaEl.placeholder = "Write your question here";
+    textareaEl.addEventListener("keydown", (event) => {
+      if (event.ctrlKey && event.key === "Enter") {
+        event.preventDefault();
+        const selection = choices[Number(modelSelect.value)];
+        if (selection)
+          this.onSubmit(textareaEl.value, selection);
+        this.close();
+      }
+    });
+    contentEl.createEl("div", { cls: "augmented-canvas-modal-hint", text: "Ctrl+Enter to send" });
+    const actions = contentEl.createDiv({ cls: "augmented-canvas-modal-actions" });
+    actions.createEl("button", { text: "Cancel" }).onClickEvent(() => this.close());
+    const submitBtn = actions.createEl("button", { text: "Ask AI" });
+    submitBtn.disabled = choices.length === 0;
+    submitBtn.onClickEvent(() => {
+      const selection = choices[Number(modelSelect.value)];
+      if (selection)
+        this.onSubmit(textareaEl.value, selection);
+      this.close();
+    });
+    textareaEl.focus();
+  }
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
+  }
+};
 
 // src/actions/canvasNodeMenuActions/advancedCanvas.ts
 var contextTooltip = (label, node, maxDepth) => {
