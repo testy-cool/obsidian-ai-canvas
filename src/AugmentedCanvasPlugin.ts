@@ -540,14 +540,16 @@ export default class AugmentedCanvasPlugin extends Plugin {
 							.onClick(() => generateCardTitle(this.app, settings, canvasNode, { force: true }));
 					});
 				}
-				menu.addItem((item) => {
-					item.setTitle("Copy node ID")
-						.setIcon("lucide-copy")
-						.onClick(() => {
-							navigator.clipboard.writeText(node.id);
-							new Notice("Node ID copied to clipboard");
-						});
-				});
+				if (settings.debug) {
+					menu.addItem((item) => {
+						item.setTitle("Copy node ID")
+							.setIcon("lucide-copy")
+							.onClick(() => {
+								navigator.clipboard.writeText(node.id);
+								new Notice("Node ID copied to clipboard");
+							});
+					});
+				}
 			})
 		);
 	}

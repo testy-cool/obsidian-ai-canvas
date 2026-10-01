@@ -398,6 +398,32 @@ describe("context picker request paths", () => {
 		expect(streamResponse).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		[true, ["Ask AI with chosen context…", "Copy node ID"]],
+		[false, ["Ask AI with chosen context…"]],
+	] as const)("shows Copy node ID only when debug is %s", (debug, expectedTitles) => {
+		const { app, settings, prompt, events } = fixture(false);
+		settings.debug = debug;
+		settings.enableCardTitleGeneration = false;
+		const plugin: any = new AugmentedCanvasPlugin();
+		Object.assign(plugin, { app, settings, registerEvent: vi.fn() });
+		plugin.patchNoteContextMenu();
+		const titles: string[] = [];
+		const menu = {
+			addSeparator() {},
+			addItem(callback: (item: any) => void) {
+				const item = {
+					setTitle(title: string) { titles.push(title); return this; },
+					setIcon() { return this; },
+					onClick() { return this; },
+				};
+				callback(item);
+			},
+		};
+		events.get("canvas:node-menu")!(menu, prompt);
+		expect(titles).toEqual(expectedTitles);
+	});
+
 	it.each([false, true])("the generated edge menu always opens the picker and updates the existing response (ancestors: %s)", async (ancestors) => {
 		const { app, settings, canvas, prompt } = fixture(ancestors);
 		const response = canvas.makeNode("existing-response", "OLD ANSWER");
