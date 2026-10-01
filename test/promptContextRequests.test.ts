@@ -382,7 +382,7 @@ describe("context picker request paths", () => {
 		expect(PromptContextModal.prototype.open).toHaveBeenCalledOnce();
 		expect(vi.mocked(streamResponse).mock.calls[0][1].map((message: any) => message.content)).toEqual(["SYSTEM", "OLDEST", "CURRENT"]);
 		expect(canvas.nodes.get("response").getData().ai_context_count).toBe(2);
-		expect(badge(canvas.nodes.get("response")).querySelector(".ai-model-indicator-label")!.textContent).toBe("2 cards • Custom • test-model");
+		expect(badge(canvas.nodes.get("response")).querySelector(".ai-model-indicator-label")!.textContent).toBe("2 of 3 cards • Custom • test-model");
 	});
 
 	it("the setting skips the picker for a single card", async () => {

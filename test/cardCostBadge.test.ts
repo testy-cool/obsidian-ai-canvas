@@ -19,6 +19,22 @@ describe("the card badge", () => {
 			.toBe("1 card • Bifrost • flash");
 	});
 
+	it("shows how many reachable cards were left out", () => {
+		expect(buildIndicatorText({
+			provider: "Bifrost",
+			model: "flash",
+			contextCount: 3,
+			contextTotal: 7,
+		}).label).toBe("3 of 7 cards • Bifrost • flash");
+		expect(buildIndicatorText({
+			provider: "Bifrost",
+			model: "flash",
+			contextCount: 3,
+			contextTotal: 7,
+			generating: true,
+		}).label).toBe("3 of 7 cards • generating");
+	});
+
 	it("reserves the finished width while generating, so the card does not shift", () => {
 		const text = buildIndicatorText({ provider: "Bifrost", model: "flash", cost: 0.0004, generating: true });
 		expect(text.label).toBe("generating");

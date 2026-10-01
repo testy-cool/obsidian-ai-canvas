@@ -313,15 +313,21 @@ export const buildUsageDetail = (usage?: CardUsage, durationMs?: number): string
 	return parts.join(" · ");
 };
 
-export const buildIndicatorText = ({ provider, model, contextCount, cost, usage, generating }: {
+export const buildIndicatorText = ({ provider, model, contextCount, contextTotal, cost, usage, generating }: {
 	provider: string;
 	model: string;
 	contextCount?: number;
+	contextTotal?: number;
 	cost?: number;
 	usage?: CardUsage;
 	generating?: boolean;
 }): { label: string; sizing: string } => {
-	const context = typeof contextCount === "number" ? `${contextCount} ${contextCount === 1 ? "card" : "cards"} • ` : "";
+	const contextLabel = typeof contextCount === "number"
+		? typeof contextTotal === "number" && contextTotal > contextCount
+			? `${contextCount} of ${contextTotal} cards`
+			: `${contextCount} ${contextCount === 1 ? "card" : "cards"}`
+		: "";
+	const context = contextLabel ? `${contextLabel} • ` : "";
 	const price = typeof cost === "number" ? ` • ${formatCost(cost)}` : "";
 	const percent = cachedPercent(usage);
 	const cache = percent > 0 ? ` • cache ${percent}%` : "";
@@ -341,10 +347,12 @@ export const setModelIndicatorText = (node: any, provider: string, model: string
 	if (indicator.parentElement !== modelIndicatorHost(node)) modelIndicatorHost(node).appendChild(indicator);
 	const data = node.getData();
 	const contextCount = data.ai_context_count;
+	const contextTotal = data.ai_context_total;
 	const { label: text, sizing: finalText } = buildIndicatorText({
 		provider,
 		model,
 		contextCount,
+		contextTotal,
 		cost: typeof data.ai_cost === "number" ? data.ai_cost : undefined,
 		usage: data.ai_usage,
 		generating,
@@ -352,7 +360,7 @@ export const setModelIndicatorText = (node: any, provider: string, model: string
 	const sizing = indicator.querySelector(".ai-model-indicator-size")!;
 	if (sizing.textContent !== finalText) sizing.textContent = finalText;
 	indicator.querySelector(".ai-model-indicator-loading-size")!.textContent =
-		buildIndicatorText({ provider, model, contextCount, generating: true }).label;
+		buildIndicatorText({ provider, model, contextCount, contextTotal, generating: true }).label;
 	const label = indicator.querySelector(".ai-model-indicator-label")!;
 	if (label.textContent !== text) label.textContent = text;
 	const detail = generating ? "" : buildUsageDetail(data.ai_usage, data.ai_duration_ms);
