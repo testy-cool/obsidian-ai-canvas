@@ -985,6 +985,17 @@ export function noteGenerator(
 					}
 				);
 
+				if (!controller.signal.aborted && !created.text.trim()) {
+					created.setText("The model returned an empty answer.");
+					const emptyAnswerDimensions = calculateNoteDimensions(created.text, 300, 500);
+					created.moveAndResize({
+						height: emptyAnswerDimensions.height,
+						width: emptyAnswerDimensions.width,
+						x: created.x,
+						y: created.y,
+					});
+				}
+
 				await featureUpdate;
 
 				if (isNewNode) {

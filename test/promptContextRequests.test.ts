@@ -868,6 +868,16 @@ describe("provider media input", () => {
 });
 
 describe("in-card generation state", () => {
+	it("writes a clear line when the model returns no answer text", async () => {
+		const { app, canvas, settings } = fixture(false);
+		vi.mocked(streamResponse).mockImplementation(async (_provider, _messages, _options, callback) => {
+			callback(null, null, null, "Reasoning without an answer.");
+			callback(null, { text: "" }, null, null);
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(canvas.nodes.get("response").text).toBe("The model returned an empty answer.");
+	});
+
 	it("shows a quiet status and elapsed time until the first answer", async () => {
 		const { app, canvas, settings } = fixture();
 		vi.mocked(streamResponse).mockImplementation(async (_provider, _messages, _options, callback) => {
@@ -909,6 +919,7 @@ describe("in-card generation state", () => {
 		await run(() => noteGenerator(app, settings).generateNote());
 		const response = canvas.nodes.get("response");
 		expect(response.text).toBe(partial ? "Partial answer" : "Generation stopped.");
+		expect(response.text).not.toBe("The model returned an empty answer.");
 		expect(response.getData().ai_notes).toContain("Generation stopped");
 		expect(response.nodeEl.querySelector(".ai-generation-status")).toBeNull();
 		expect(response.nodeEl.className).not.toContain("ai-generating");
