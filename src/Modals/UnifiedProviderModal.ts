@@ -96,7 +96,8 @@ export class UnifiedProviderModal extends Modal {
     app: App,
     private onSave: (provider: LLMProvider, models: LLMModel[]) => void,
     existingProvider?: LLMProvider,
-    private existingModels: LLMModel[] = []
+    private existingModels: LLMModel[] = [],
+    private otherProviders: LLMProvider[] = []
   ) {
     super(app);
 		this.initialProvider = existingProvider ? { ...existingProvider } : undefined;
@@ -415,6 +416,15 @@ export class UnifiedProviderModal extends Modal {
     return this.provider.name ?? (this.editing ? providerLabel(this.provider as LLMProvider) : "");
   }
 
+  /** The id for a new provider: the slug of its name, numbered if another provider has it. */
+  private freeId(name: string, others: LLMProvider[]): string {
+    const slug = name.toLowerCase().replace(/\s+/g, "-");
+    const taken = new Set(others.map((o) => o.id));
+    let id = slug;
+    for (let n = 2; taken.has(id); n++) id = `${slug}-${n}`;
+    return id;
+  }
+
   private getFilteredModelIds(): string[] {
     return this.fetchedModelIds.filter((id) =>
       this.filterText ? id.toLowerCase().includes(this.filterText) : true
@@ -544,11 +554,17 @@ export class UnifiedProviderModal extends Modal {
   private save(): void {
     const p = this.provider;
     const name = this.displayName().trim();
+    const others = this.otherProviders.filter((o) => o.id !== this.initialProvider?.id);
     // No preset chosen means an OpenAI-compatible endpoint.
     const type = p.type?.trim() || "Custom";
     if (!name) {
       new Notice("Provider name is required.");
 			this.setFieldError(this.nameField, "Provider name is required.", true);
+      return;
+    }
+
+    if (others.some((o) => providerLabel(o).toLowerCase() === name.toLowerCase())) {
+      this.setFieldError(this.nameField, "Another provider already has this name.", true);
       return;
     }
 
@@ -565,7 +581,7 @@ export class UnifiedProviderModal extends Modal {
     }
 
     const provider: LLMProvider = {
-      id: this.initialProvider?.id ?? name.toLowerCase().replace(/\s+/g, "-"),
+      id: this.initialProvider?.id ?? this.freeId(name, others),
       type,
       baseUrl: isGeminiType(type) ? GEMINI_BASE_URL : (p.baseUrl ?? ""),
       apiKey: p.apiKey ?? "",

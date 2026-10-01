@@ -274,10 +274,6 @@ export default class SettingsTab extends PluginSettingTab {
                 new UnifiedProviderModal(
                     this.app,
                     async (provider, models) => {
-                        if (this.plugin.settings.providers.some(p => p.id === provider.id)) {
-                            new Notice("A provider with this ID already exists");
-                            return;
-                        }
                         this.plugin.settings.providers.push(provider);
                         this.plugin.settings.models.push(...models);
                         if (this.plugin.settings.providers.filter(p => p.enabled).length === 1) {
@@ -288,7 +284,10 @@ export default class SettingsTab extends PluginSettingTab {
                         }
                         await this.plugin.saveSettings();
                         this.display();
-                    }
+                    },
+                    undefined,
+                    [],
+                    this.plugin.settings.providers
                 ).open();
             }));
 
@@ -330,7 +329,8 @@ export default class SettingsTab extends PluginSettingTab {
                         this.display();
                     },
                     provider,
-                    this.plugin.settings.models.filter(m => m.providerId === provider.id)
+                    this.plugin.settings.models.filter(m => m.providerId === provider.id),
+                    this.plugin.settings.providers.filter(p => p.id !== provider.id)
                 ).open();
             });
 
@@ -487,7 +487,8 @@ export default class SettingsTab extends PluginSettingTab {
                     new Notice(`Updated models for ${providerLabel(provider)}.`);
                 },
                 provider,
-                this.plugin.settings.models.filter(m => m.providerId === provider.id)
+                this.plugin.settings.models.filter(m => m.providerId === provider.id),
+                this.plugin.settings.providers.filter(p => p.id !== provider.id)
             ).open();
         });
 

@@ -941,9 +941,9 @@ describe("collapsing configured providers", () => {
 
 
 describe("renaming a provider", () => {
-	const saveWith = async (preset: string, name: string) => {
+	const saveWith = async (preset: string, name: string, others: any[] = []) => {
 		const onSave = vi.fn();
-		const modal: any = new UnifiedProviderModal({} as any, onSave);
+		const modal: any = new UnifiedProviderModal({} as any, onSave, undefined, [], others);
 		modal.onOpen();
 		const root = modal.contentEl as Element;
 		const select = settingNamed(root, "Preset").querySelector("select")!;
@@ -998,6 +998,43 @@ describe("renaming a provider", () => {
 		await input.listeners.get("input")!();
 		modal.save();
 		expect(onSave.mock.calls[0][0]).toEqual(expect.objectContaining({ id: "gemini", type: "Gemini", name: "Personal Gemini" }));
+	});
+
+	it("numbers the id when another provider already has it", async () => {
+		const others = [{ id: "azure", type: "Azure", name: "Personal Azure", baseUrl: "https://a.test", apiKey: "k", enabled: true }, { id: "azure-2", type: "Azure", name: "Lab Azure", baseUrl: "https://b.test", apiKey: "k", enabled: true }];
+		const onSave = await saveWith("azure", "Azure", others);
+		expect(onSave.mock.calls[0][0]).toEqual(expect.objectContaining({ id: "azure-3", type: "Azure" }));
+	});
+
+	it("keeps the box open and says so on the field when another provider has the name", async () => {
+		const others = [{ id: "work", type: "Azure", name: "Work Azure", baseUrl: "https://a.test", apiKey: "k", enabled: true }];
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave, undefined, [], others);
+		const close = vi.spyOn(modal, "close");
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		const field = settingNamed(root, "Provider name");
+		const input = field.querySelector("input")!;
+		input.value = "work azure";
+		await input.listeners.get("input")!();
+		modal.save();
+		expect(field.querySelector(".ac-setting-error")!.textContent).toBe("Another provider already has this name.");
+		expect(input.classList.contains("mod-warning")).toBe(true);
+		expect(document.activeElement).toBe(input);
+		expect(onSave).not.toHaveBeenCalled();
+		expect(close).not.toHaveBeenCalled();
+		input.value = "Other Azure";
+		await input.listeners.get("input")!();
+		expect(field.querySelector(".ac-setting-error")!.textContent).toBe("");
+	});
+
+	it("does not count the provider being edited as a clash", () => {
+		const self = { id: "gemini", type: "Gemini", baseUrl: "", apiKey: "k", enabled: true };
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave, self, [], [self, { id: "azure", type: "Azure", baseUrl: "https://a.test", apiKey: "k", enabled: true }]);
+		modal.onOpen();
+		modal.save();
+		expect(onSave).toHaveBeenCalledOnce();
 	});
 
 	it("falls back to the kind for a provider that was never named", () => {
