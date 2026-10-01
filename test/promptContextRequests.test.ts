@@ -371,6 +371,7 @@ describe("context picker request paths", () => {
 
 	it.each([false, true])("the card context menu always opens the picker (ancestors: %s)", async (ancestors) => {
 		const { app, settings, prompt, canvas, events } = fixture(ancestors);
+		settings.enableCardTitleGeneration = true;
 		const plugin: any = new AugmentedCanvasPlugin();
 		Object.assign(plugin, { app, settings, registerEvent: vi.fn() });
 		plugin.patchNoteContextMenu();
@@ -387,6 +388,10 @@ describe("context picker request paths", () => {
 		} };
 		canvas.selection.clear(); // The right-clicked card need not be selected.
 		events.get("canvas:node-menu")!(menu, prompt);
+		expect(items.map(item => item.title).slice(0, 2)).toEqual([
+			"Ask AI with chosen context…",
+			"Generate card title",
+		]);
 		await run(() => items.find(item => item.title === "Ask AI with chosen context…").click());
 		expect(PromptContextModal.prototype.open).toHaveBeenCalledOnce();
 		expect(streamResponse).not.toHaveBeenCalled();

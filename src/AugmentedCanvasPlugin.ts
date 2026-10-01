@@ -36,6 +36,10 @@ import { insertSystemPrompt } from "./actions/commands/insertSystemPrompt";
 import { runPromptFolder } from "./actions/commands/runPromptFolder";
 import { InputModal } from "./Modals/InputModal";
 import { noteGenerator } from "./actions/canvasNodeMenuActions/noteGenerator";
+import {
+	generateCardTitle,
+	generateGroupName,
+} from "./actions/canvasNodeMenuActions/titleGenerator";
 import { setupHtmlPreviewPersistence } from "./utils/htmlPreview";
 import { ObservabilityClient } from "./utils/observability";
 import { cancelActiveGenerations } from "./utils/generationStatus";
@@ -481,9 +485,9 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		// * no event name to add to Canvas context menu ("canvas-menu" does not exist)
 		this.registerEvent(
 			this.app.workspace.on("canvas:node-menu", (menu, node) => {
-				const imagePrompt = getImageGenerationPrompt(
-					(node as unknown as CanvasNode).getData() as Record<string, unknown>
-				);
+				const canvasNode = node as unknown as CanvasNode;
+				const nodeData = canvasNode.getData() as Record<string, unknown>;
+				const imagePrompt = getImageGenerationPrompt(nodeData);
 				menu.addSeparator();
 				if (imagePrompt) {
 					menu.addItem((item) => {
@@ -535,6 +539,19 @@ export default class AugmentedCanvasPlugin extends Plugin {
 							return generateNote(undefined, undefined, true);
 						});
 				});
+				if (nodeData.type === "group" && settings.enableGroupTitleGeneration) {
+					menu.addItem((item) => {
+						item.setTitle("Generate group name")
+							.setIcon("lucide-tag")
+							.onClick(() => generateGroupName(this.app, settings, canvasNode));
+					});
+				} else if (nodeData.type !== "group" && settings.enableCardTitleGeneration) {
+					menu.addItem((item) => {
+						item.setTitle("Generate card title")
+							.setIcon("lucide-type")
+							.onClick(() => generateCardTitle(this.app, settings, canvasNode, { force: true }));
+					});
+				}
 				menu.addItem((item) => {
 					item.setTitle("Copy node ID")
 						.setIcon("lucide-copy")
