@@ -1063,3 +1063,44 @@ describe("renaming a provider", () => {
 		expect(root.querySelector(".provider-header")!.attributes.get("aria-label")).toBe("Work Azure settings");
 	});
 });
+
+
+describe("saving an edited provider", () => {
+	const cliProvider = { id: "pi-cli", type: "Pi CLI", baseUrl: "", apiKey: "", enabled: true, binaryPath: process.execPath, cliArgs: "--provider openrouter" };
+
+	it("keeps a CLI provider's extra arguments when nothing was changed", () => {
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave, cliProvider);
+		modal.onOpen();
+		modal.save();
+		expect(onSave.mock.calls[0][0].cliArgs).toBe("--provider openrouter");
+	});
+
+	it("saves extra arguments the user typed and drops them when cleared", async () => {
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave, cliProvider);
+		modal.onOpen();
+		const input = settingNamed(modal.contentEl, "Extra arguments").querySelector("input")!;
+		input.value = "--model small";
+		await input.listeners.get("input")!();
+		modal.save();
+		input.value = "";
+		await input.listeners.get("input")!();
+		modal.save();
+		expect(onSave.mock.calls.map(call => call[0].cliArgs)).toEqual(["--model small", undefined]);
+	});
+
+	it("keeps provider fields the box does not show and drops a name that went back to the kind", async () => {
+		const onSave = vi.fn();
+		const saved: any = { id: "gemini", type: "Gemini", name: "Work Gemini", baseUrl: "", apiKey: "k", enabled: true, addedLater: "kept" };
+		const modal: any = new UnifiedProviderModal({} as any, onSave, saved);
+		modal.onOpen();
+		modal.save();
+		expect(onSave.mock.calls[0][0]).toEqual(expect.objectContaining({ name: "Work Gemini", addedLater: "kept" }));
+		const input = settingNamed(modal.contentEl, "Provider name").querySelector("input")!;
+		input.value = "Gemini";
+		await input.listeners.get("input")!();
+		modal.save();
+		expect("name" in onSave.mock.calls[1][0]).toBe(false);
+	});
+});

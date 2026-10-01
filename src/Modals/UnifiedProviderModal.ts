@@ -581,6 +581,8 @@ export class UnifiedProviderModal extends Modal {
     }
 
     const provider: LLMProvider = {
+      // Fields this box does not show stay as they were.
+      ...this.initialProvider,
       id: this.initialProvider?.id ?? this.freeId(name, others),
       type,
       baseUrl: isGeminiType(type) ? GEMINI_BASE_URL : (p.baseUrl ?? ""),
@@ -593,9 +595,11 @@ export class UnifiedProviderModal extends Modal {
       location: p.location,
       serviceAccountJson: p.serviceAccountJson,
       binaryPath: p.binaryPath,
+      cliArgs: p.cliArgs,
     };
     // Saved data only carries a name when it differs from the kind.
     if (name !== type) provider.name = name;
+    else delete provider.name;
 
 		if (this.initialProvider && ["apiKey", "baseUrl", "type", "geminiNative", "projectId", "location", "serviceAccountJson"].some(key =>
 			key === "geminiNative" ? !!provider.geminiNative !== !!this.initialProvider!.geminiNative
