@@ -3,6 +3,7 @@ import { App, Notice } from "obsidian";
 import { AugmentedCanvasSettings } from "../../settings/AugmentedCanvasSettings";
 import { getFilesContent } from "../../obsidian/fileUtil";
 import { getResponse } from "../../utils/llm";
+import { providerLabel } from "../../utils/providerCapabilities";
 import { createCanvasGroup } from "../../utils";
 
 const RELEVANT_QUESTION_SYSTEM_PROMPT = `
@@ -45,7 +46,7 @@ export const handleAddRelevantQuestions = async (
 		) || settings.models.find(m => m.providerId === provider.id && m.enabled);
 
 	if (!model) {
-		new Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
+		new Notice(`No enabled models found for ${providerLabel(provider)}. Please check your settings.`);
 		return;
 	}
 

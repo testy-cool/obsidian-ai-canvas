@@ -121,6 +121,21 @@ describe("question and input modal controls", () => {
 		});
 	});
 
+	it("lists each model under the name the user gave its provider", () => {
+		const named = {
+			...settings,
+			providers: [{ id: "work-azure", type: "Azure", name: "Work Azure", enabled: true }, { id: "gemini", type: "Gemini", enabled: true }],
+			models: [
+				{ id: "a", model: "model-a", providerId: "work-azure", enabled: true },
+				{ id: "b", model: "model-b", providerId: "gemini", enabled: true },
+			],
+		};
+		const modal = new CustomQuestionModal({} as any, named, vi.fn());
+		modal.onOpen();
+		const options = (modal.contentEl as any as Element).querySelectorAll("option").map(option => option.textContent);
+		expect(options).toEqual(["Work Azure · model-a", "Gemini · model-b"]);
+	});
+
 	it("uses a muted 12px shortcut hint and readable controls", () => {
 		const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 		const hint = css.split(".augmented-canvas-modal-hint {")[1].split("}")[0];

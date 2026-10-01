@@ -143,9 +143,15 @@ export interface LLMProvider {
 	id: string;
 
 	/**
-	 * Display name for the provider
+	 * Which kind of provider this is (Gemini, Azure, Bifrost, Custom...).
+	 * Routing and model discovery read this, so it never follows the name.
 	 */
 	type: string;
+
+	/**
+	 * Name the user gave the provider. Shown instead of `type` when set.
+	 */
+	name?: string;
 
 	/**
 	 * Base URL for the provider's API

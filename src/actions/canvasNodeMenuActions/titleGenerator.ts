@@ -4,6 +4,7 @@ import { visitNodeAndAncestors } from "../../obsidian/canvasUtil";
 import { readNodeContent } from "../../obsidian/fileUtil";
 import { AugmentedCanvasSettings } from "../../settings/AugmentedCanvasSettings";
 import { getResponse } from "../../utils/llm";
+import { providerLabel } from "../../utils/providerCapabilities";
 
 const CARD_TITLE_SYSTEM_PROMPT_FALLBACK = `
 You are naming a canvas card.
@@ -128,7 +129,7 @@ const resolveNamingModel = (
 	);
 	const model = enabledModels.find(m => m.id === modelId) || enabledModels[0];
 	if (!model) {
-		new Notice(`No enabled models found for ${provider.type}.`);
+		new Notice(`No enabled models found for ${providerLabel(provider)}.`);
 		return null;
 	}
 

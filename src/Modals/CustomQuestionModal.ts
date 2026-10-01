@@ -4,6 +4,7 @@ import {
 	LLMModel,
 	LLMProvider,
 } from "../settings/AugmentedCanvasSettings";
+import { providerLabel } from "../utils/providerCapabilities";
 
 export interface QuestionModelSelection {
 	provider: LLMProvider;
@@ -55,7 +56,7 @@ export class CustomQuestionModal extends Modal {
 		modelSelect.setAttribute("aria-label", "Model");
 		choices.forEach(({ provider, model }, index) => {
 			const option = modelSelect.createEl("option", {
-				text: `${provider.type} · ${model.model}`,
+				text: `${providerLabel(provider)} · ${model.model}`,
 			});
 			option.value = String(index);
 		});

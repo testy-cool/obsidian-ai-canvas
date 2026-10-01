@@ -6,7 +6,7 @@ import { LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSetti
 import { testMCPServer } from "src/utils/mcpClient";
 import { buildManualMCPServer, parseMCPServersConfig, serializeMCPServers } from "src/utils/mcpConfig";
 import { getParamsForModel, detectProviderLabel } from "src/utils/providerParams";
-import { getCapabilityReportKey, getModelCapabilityReport, isGoogleProvider, getProviderCapabilities, providerCapabilityKeys, type ProviderCapability, type ProviderCapabilityReport } from "src/utils/providerCapabilities";
+import { getCapabilityReportKey, getModelCapabilityReport, isGoogleProvider, getProviderCapabilities, providerCapabilityKeys, providerLabel, type ProviderCapability, type ProviderCapabilityReport } from "src/utils/providerCapabilities";
 import { probeProviderCapabilities } from "src/utils/capabilityProbe";
 
 interface SettingsSection {
@@ -161,7 +161,7 @@ export default class SettingsTab extends PluginSettingTab {
             .setDesc("Select the default AI provider for all actions.")
             .addDropdown((dropdown) => {
                 this.plugin.settings.providers.forEach((provider) => {
-                    dropdown.addOption(provider.id, provider.type);
+                    dropdown.addOption(provider.id, providerLabel(provider));
                 });
                 dropdown
                     .setValue(this.plugin.settings.activeProvider)
@@ -299,7 +299,7 @@ export default class SettingsTab extends PluginSettingTab {
             const headerRow = providerBlock.createDiv("provider-header");
             const chevron = headerRow.createEl("span", { cls: "provider-chevron" });
             const titleCol = headerRow.createDiv("provider-title");
-            titleCol.createEl("div", { text: provider.type, cls: "provider-name" });
+            titleCol.createEl("div", { text: providerLabel(provider), cls: "provider-name" });
 
             const controls = headerRow.createDiv("provider-controls");
             const toggleWrap = controls.createDiv("provider-toggle");
@@ -372,7 +372,7 @@ export default class SettingsTab extends PluginSettingTab {
 
                 await this.plugin.saveSettings();
                 this.display();
-				this.showUndoNotice(`Deleted ${provider.type}.`, () => {
+				this.showUndoNotice(`Deleted ${providerLabel(provider)}.`, () => {
 					this.plugin.settings.providers.splice(providerIndex, 0, provider);
 					for (const { model, index } of removedModels) {
 						this.plugin.settings.models.splice(index, 0, model);
@@ -426,7 +426,7 @@ export default class SettingsTab extends PluginSettingTab {
             headerRow.addClass("is-collapsible");
             headerRow.setAttribute("role", "button");
             headerRow.setAttribute("tabindex", "0");
-            headerRow.setAttribute("aria-label", `${provider.type} settings`);
+            headerRow.setAttribute("aria-label", `${providerLabel(provider)} settings`);
             applyExpanded(this.expandedProviders.has(provider.id));
 
             const toggleExpanded = (event?: { target?: unknown }) => {
@@ -484,7 +484,7 @@ export default class SettingsTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                     updateHeader();
                     renderModelList();
-                    new Notice(`Updated models for ${provider.type}.`);
+                    new Notice(`Updated models for ${providerLabel(provider)}.`);
                 },
                 provider,
                 this.plugin.settings.models.filter(m => m.providerId === provider.id)
@@ -559,7 +559,7 @@ export default class SettingsTab extends PluginSettingTab {
 			if (this.capabilityTests.has(provider.id)) return;
 			const model = getProviderModels().find(item => item.enabled && item.id === selectedModel);
 			if (!model) {
-				new Notice(`Enable a model for ${provider.type} before testing capabilities.`);
+				new Notice(`Enable a model for ${providerLabel(provider)} before testing capabilities.`);
 				return;
 			}
 			const current = this.plugin.settings.providers.find(item => item.id === provider.id);
@@ -919,7 +919,7 @@ export default class SettingsTab extends PluginSettingTab {
 		if (activeProvider && !getProviderCapabilities(activeProvider, this.plugin.settings.models.find(model => model.id === this.plugin.settings.apiModel)?.model).search) {
 			containerEl.createDiv({
 				cls: "provider-capability-note",
-				text: `The active provider (${activeProvider.type}) cannot do search grounding. Use a Gemini provider or Bifrost with the Gemini-native API.`,
+				text: `The active provider (${providerLabel(activeProvider)}) cannot do search grounding. Use a Gemini provider or Bifrost with the Gemini-native API.`,
 			});
 		}
 
@@ -999,7 +999,7 @@ export default class SettingsTab extends PluginSettingTab {
 			.addDropdown(dropdown => {
 				dropdown.addOption("", "Default (active provider)");
 				this.plugin.settings.providers.forEach(provider => {
-					dropdown.addOption(provider.id, provider.type);
+					dropdown.addOption(provider.id, providerLabel(provider));
 				});
 				dropdown
 					.setValue(this.plugin.settings.imageProviderId || "")
@@ -1084,7 +1084,7 @@ export default class SettingsTab extends PluginSettingTab {
 			.setDesc("Provider used for AI card titles.")
 			.addDropdown(dropdown => {
 				this.plugin.settings.providers.forEach(provider => {
-					dropdown.addOption(provider.id, provider.type);
+					dropdown.addOption(provider.id, providerLabel(provider));
 				});
 				dropdown
 					.setValue(this.plugin.settings.cardTitleProviderId)
@@ -1158,7 +1158,7 @@ export default class SettingsTab extends PluginSettingTab {
 			.setDesc("Provider used for AI group naming.")
 			.addDropdown(dropdown => {
 				this.plugin.settings.providers.forEach(provider => {
-					dropdown.addOption(provider.id, provider.type);
+					dropdown.addOption(provider.id, providerLabel(provider));
 				});
 				dropdown
 					.setValue(this.plugin.settings.groupTitleProviderId)

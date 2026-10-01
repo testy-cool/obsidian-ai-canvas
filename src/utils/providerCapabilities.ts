@@ -40,7 +40,11 @@ const google: ProviderCapabilities = {
 	urlContext: true,
 };
 
-type ProviderIdentity = Partial<Pick<LLMProvider, "id" | "type" | "baseUrl">> & { name?: string };
+type ProviderIdentity = Partial<Pick<LLMProvider, "id" | "type" | "baseUrl" | "name">>;
+
+/** What a person reads for this provider: the name they gave it, else its kind. */
+export const providerLabel = (provider: Pick<LLMProvider, "type" | "name">): string =>
+	provider.name?.trim() || provider.type;
 
 export const isBifrostProvider = (provider?: ProviderIdentity): boolean => {
 	if (provider?.id?.toLowerCase() === "bifrost" || /bifrost/i.test(provider?.type ?? "") || /bifrost/i.test(provider?.name ?? "")) return true;

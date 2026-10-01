@@ -6,6 +6,7 @@ import {
 } from "src/settings/AugmentedCanvasSettings";
 import { getActiveCanvas } from "src/utils";
 import { Message, streamResponse } from "src/utils/llm";
+import { providerLabel } from "src/utils/providerCapabilities";
 import {
 	NOTE_INCR_HEIGHT_STEP,
 	NOTE_MIN_HEIGHT,
@@ -33,7 +34,7 @@ export const runPromptFolder = async (
 		) || settings.models.find(m => m.providerId === provider.id && m.enabled);
 
 	if (!model) {
-		new Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
+		new Notice(`No enabled models found for ${providerLabel(provider)}. Please check your settings.`);
 		return;
 	}
 

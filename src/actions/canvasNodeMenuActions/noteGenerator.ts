@@ -30,7 +30,7 @@ import { createGenerationStatus } from "../../utils/generationStatus";
 import { costForModel } from "../../utils/cost";
 import { isImageModel } from "../../utils/modelKind";
 import { getAllMCPTools } from "../../utils/mcpClient";
-import { getProviderCapabilities, supportsGoogleTools } from "../../utils/providerCapabilities";
+import { getProviderCapabilities, providerLabel, supportsGoogleTools } from "../../utils/providerCapabilities";
 import { extractHtmlCodeBlocks, addHtmlPreviewToNode } from "../../utils/htmlPreview";
 import {
 	PromptContextModal,
@@ -325,8 +325,8 @@ export function noteGenerator(
 		const warnUnsupportedMedia = (media: "video files" | "YouTube links") => {
 			if (warnedMedia.has(media)) return;
 			warnedMedia.add(media);
-			notes.push(`${media === "YouTube links" ? "YouTube link" : "Video file"} not sent to ${provider?.type || "this provider"}`);
-			new Notice(`${provider?.type || "This provider"} cannot take ${media}. Use a Gemini provider for this card.`);
+			notes.push(`${media === "YouTube links" ? "YouTube link" : "Video file"} not sent to ${provider ? providerLabel(provider) : "this provider"}`);
+			new Notice(`${provider ? providerLabel(provider) : "This provider"} cannot take ${media}. Use a Gemini provider for this card.`);
 		};
 		const canCountTokens = isGpt && typeof encodingForModel === "function";
 		const modelName = model?.model || settings.apiModel;
@@ -554,7 +554,7 @@ export function noteGenerator(
 
 		const model = resolveModel(provider);
 		if (!model) {
-			new Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
+			new Notice(`No enabled models found for ${providerLabel(provider)}. Please check your settings.`);
 			return;
 		}
 
@@ -683,7 +683,7 @@ export function noteGenerator(
 						color: assistantColor,
 						chat_role: "assistant",
 						ai_model: model.model,
-						ai_provider: provider.type,
+						ai_provider: providerLabel(provider),
 						ai_context_count: contextCount,
 						ai_context_total: contextTotal,
 						...(excludedNodeIds.length
@@ -704,7 +704,7 @@ export function noteGenerator(
 				created.setData({
 					...nodeData,
 					ai_model: model.model,
-					ai_provider: provider.type,
+					ai_provider: providerLabel(provider),
 					ai_context_count: contextCount,
 					ai_context_total: contextTotal,
 					ai_context_excluded: excludedNodeIds.length
@@ -733,7 +733,7 @@ export function noteGenerator(
 				// Unfocused cards can lack contentEl until Canvas renders them.
 				// Render this card before attaching UI, without selecting or focusing it.
 				created.render();
-				addModelIndicator(created, provider.type, model.model, true);
+				addModelIndicator(created, providerLabel(provider), model.model, true);
 				generationStatus = createGenerationStatus(created, controller);
 
 				const isGpt = provider?.type === "OpenAI";
@@ -963,7 +963,7 @@ export function noteGenerator(
 						if (reasoningDetails && !created.contentEl.contains(reasoningDetails)) created.contentEl.appendChild(reasoningDetails);
 						if (featuresEl && !created.contentEl.contains(featuresEl)) created.contentEl.appendChild(featuresEl);
 						if (!created.contentEl.contains(toolsContainer)) created.contentEl.appendChild(toolsContainer);
-						setModelIndicatorText(created, provider.type, model.model, !final);
+						setModelIndicatorText(created, providerLabel(provider), model.model, !final);
 					}
 				);
 
@@ -1068,7 +1068,7 @@ export function noteGenerator(
 			} finally {
 				generationStatus?.destroy();
 				created.nodeEl?.removeClass("ai-generating");
-				if (created.contentEl) addModelIndicator(created, provider.type, model.model);
+				if (created.contentEl) addModelIndicator(created, providerLabel(provider), model.model);
 			}
 
 			await canvas.requestSave();

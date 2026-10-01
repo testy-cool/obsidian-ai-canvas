@@ -1,7 +1,7 @@
 import { App, Modal, Setting, Notice, ButtonComponent } from "obsidian";
 import type { LLMProvider, LLMModel } from "../settings/AugmentedCanvasSettings";
 import { GEMINI_BASE_URL } from "../settings/AugmentedCanvasSettings";
-import { isBifrostProvider } from "../utils/providerCapabilities";
+import { isBifrostProvider, providerLabel } from "../utils/providerCapabilities";
 import { fetchProviderModels } from "../utils/modelFetch";
 import { fetchPricingForModels } from "../utils/pricingFetch";
 import { getDefaultProviderParams, getParamsForModel, detectProviderLabel } from "../utils/providerParams";
@@ -135,8 +135,8 @@ export class UnifiedProviderModal extends Modal {
         dd.onChange((val) => {
           const preset = PRESETS.find((p) => p.id === val);
           if (preset) {
-            this.provider.id = preset.id;
             this.provider.type = preset.type;
+            this.provider.name = preset.type;
             this.provider.baseUrl = preset.baseUrl;
 						const scrollTop = contentEl.scrollTop;
 						this.modelFetchVersion++;
@@ -154,7 +154,7 @@ export class UnifiedProviderModal extends Modal {
 						contentEl.scrollTop = scrollTop;
           }
         });
-        if (this.provider.id) {
+        if (this.provider.type) {
           dd.setValue(
             PRESETS.find((p) => p.type === this.provider.type)?.id ?? ""
           );
@@ -172,11 +172,10 @@ export class UnifiedProviderModal extends Modal {
 			this.nameField.error.setAttribute("aria-live", "polite");
       text
         .setPlaceholder("My Provider")
-        .setValue(this.provider.type ?? "")
+        .setValue(this.displayName())
         .onChange((val) => {
-          this.provider.type = val;
+          this.provider.name = val;
 					if (val.trim()) this.setFieldError(this.nameField, "");
-          if (!this.editing) this.provider.id = val.toLowerCase().replace(/\s+/g, "-");
 					if (geminiNativeSetting) geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
         });
     });
@@ -246,7 +245,7 @@ export class UnifiedProviderModal extends Modal {
 			const cli = localCliUi(type);
 			const codex = !!cli;
 			const azure = type === "Azure";
-			this.nameField!.input.value = type;
+			this.nameField!.input.value = this.displayName();
 			this.baseUrlField!.input.value = this.provider.baseUrl ?? "";
 			this.baseUrlField!.input.placeholder = azure
 				? "https://<resource>.services.ai.azure.com" : "https://api.example.com/v1";
@@ -411,6 +410,11 @@ export class UnifiedProviderModal extends Modal {
 		contentEl.querySelector<HTMLInputElement>("input")?.focus();
   }
 
+  /** What the name field shows: the name typed, else the kind of an existing provider. */
+  private displayName(): string {
+    return this.provider.name ?? (this.editing ? providerLabel(this.provider as LLMProvider) : "");
+  }
+
   private getFilteredModelIds(): string[] {
     return this.fetchedModelIds.filter((id) =>
       this.filterText ? id.toLowerCase().includes(this.filterText) : true
@@ -539,17 +543,20 @@ export class UnifiedProviderModal extends Modal {
 
   private save(): void {
     const p = this.provider;
-    if (!p.id || !p.type?.trim()) {
+    const name = this.displayName().trim();
+    // No preset chosen means an OpenAI-compatible endpoint.
+    const type = p.type?.trim() || "Custom";
+    if (!name) {
       new Notice("Provider name is required.");
 			this.setFieldError(this.nameField, "Provider name is required.", true);
       return;
     }
 
     if (
-      !isGeminiType(p.type) &&
-      !isVertexType(p.type) &&
-      !isCodexType(p.type) &&
-      !cliAdapterForProviderType(p.type) &&
+      !isGeminiType(type) &&
+      !isVertexType(type) &&
+      !isCodexType(type) &&
+      !cliAdapterForProviderType(type) &&
       !p.baseUrl?.trim()
     ) {
       new Notice("Base URL is required.");
@@ -558,9 +565,9 @@ export class UnifiedProviderModal extends Modal {
     }
 
     const provider: LLMProvider = {
-      id: p.id!,
-      type: p.type!,
-      baseUrl: isGeminiType(p.type!) ? GEMINI_BASE_URL : (p.baseUrl ?? ""),
+      id: this.initialProvider?.id ?? name.toLowerCase().replace(/\s+/g, "-"),
+      type,
+      baseUrl: isGeminiType(type) ? GEMINI_BASE_URL : (p.baseUrl ?? ""),
       apiKey: p.apiKey ?? "",
       enabled: p.enabled ?? true,
 			geminiNative: isBifrostProvider(p) && (p.geminiNative ?? false),
@@ -571,6 +578,8 @@ export class UnifiedProviderModal extends Modal {
       serviceAccountJson: p.serviceAccountJson,
       binaryPath: p.binaryPath,
     };
+    // Saved data only carries a name when it differs from the kind.
+    if (name !== type) provider.name = name;
 
 		if (this.initialProvider && ["apiKey", "baseUrl", "type", "geminiNative", "projectId", "location", "serviceAccountJson"].some(key =>
 			key === "geminiNative" ? !!provider.geminiNative !== !!this.initialProvider!.geminiNative

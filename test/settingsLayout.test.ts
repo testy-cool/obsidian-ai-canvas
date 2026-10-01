@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import SettingsTab from "../src/settings/SettingsTab";
 import { UnifiedProviderModal } from "../src/Modals/UnifiedProviderModal";
-import { DEFAULT_SETTINGS } from "../src/settings/AugmentedCanvasSettings";
+import { DEFAULT_SETTINGS, GEMINI_BASE_URL } from "../src/settings/AugmentedCanvasSettings";
 import * as obsidian from "obsidian";
 import { probeProviderCapabilities } from "../src/utils/capabilityProbe";
 import { testMCPServer } from "../src/utils/mcpClient";
 import { fetchPricingForModels } from "../src/utils/pricingFetch";
 import { fetchProviderModels } from "../src/utils/modelFetch";
-import { getCapabilityReportKey, getCapabilityRoute, type ProviderCapabilityReport } from "../src/utils/providerCapabilities";
+import { getCapabilityReportKey, getCapabilityRoute, providerLabel, type ProviderCapabilityReport } from "../src/utils/providerCapabilities";
 
 vi.mock("../src/utils/capabilityProbe", () => ({ probeProviderCapabilities: vi.fn() }));
 
@@ -936,5 +936,93 @@ describe("collapsing configured providers", () => {
 		const redrawn = again.querySelectorAll(".provider-block");
 		expect(body(redrawn[0]).hidden).toBe(false);
 		expect(body(redrawn[1]).hidden).toBe(true);
+	});
+});
+
+
+describe("renaming a provider", () => {
+	const saveWith = async (preset: string, name: string) => {
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave);
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		const select = settingNamed(root, "Preset").querySelector("select")!;
+		select.value = preset;
+		await select.listeners.get("change")!();
+		const input = settingNamed(root, "Provider name").querySelector("input")!;
+		input.value = name;
+		await input.listeners.get("input")!();
+		if (preset === "azure") {
+			const url = settingNamed(root, "Base URL").querySelector("input")!;
+			url.value = "https://example.services.ai.azure.com";
+			await url.listeners.get("input")!();
+		}
+		modal.save();
+		return onSave;
+	};
+
+	it("keeps the kind that decides the route and stores the name beside it", async () => {
+		const onSave = await saveWith("gemini", "Work Gemini");
+		expect(onSave).toHaveBeenCalledOnce();
+		const saved = onSave.mock.calls[0][0];
+		expect(saved).toEqual(expect.objectContaining({ id: "work-gemini", type: "Gemini", name: "Work Gemini", baseUrl: GEMINI_BASE_URL }));
+	});
+
+	it("does not store a name that is only the kind, so unrenamed providers save as before", async () => {
+		const onSave = await saveWith("gemini", "Gemini");
+		expect(onSave.mock.calls[0][0]).toEqual(expect.objectContaining({ id: "gemini", type: "Gemini" }));
+		expect("name" in onSave.mock.calls[0][0]).toBe(false);
+	});
+
+	it("treats a provider with no preset as an OpenAI-compatible endpoint", async () => {
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave);
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		for (const [field, value] of [["Provider name", "My gateway"], ["Base URL", "https://example.test/v1"]]) {
+			const input = settingNamed(root, field).querySelector("input")!;
+			input.value = value;
+			await input.listeners.get("input")!();
+		}
+		modal.save();
+		expect(onSave.mock.calls[0][0]).toEqual(expect.objectContaining({ id: "my-gateway", type: "Custom", name: "My gateway" }));
+	});
+
+	it("edits the name of a saved provider without changing its id or kind", async () => {
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave, { id: "gemini", type: "Gemini", baseUrl: "", apiKey: "k", enabled: true });
+		modal.onOpen();
+		const input = settingNamed(modal.contentEl, "Provider name").querySelector("input")!;
+		expect(input.value).toBe("Gemini");
+		input.value = "Personal Gemini";
+		await input.listeners.get("input")!();
+		modal.save();
+		expect(onSave.mock.calls[0][0]).toEqual(expect.objectContaining({ id: "gemini", type: "Gemini", name: "Personal Gemini" }));
+	});
+
+	it("falls back to the kind for a provider that was never named", () => {
+		expect(providerLabel({ type: "Azure" })).toBe("Azure");
+		expect(providerLabel({ type: "Azure", name: "  " })).toBe("Azure");
+		expect(providerLabel({ type: "Azure", name: "Work Azure" })).toBe("Work Azure");
+	});
+
+	it("shows the name in the provider dropdowns and on the card", () => {
+		const providers = [
+			{ id: "work-azure", type: "Azure", name: "Work Azure", baseUrl: "https://example.test", apiKey: "k", enabled: true },
+			{ id: "gemini", type: "Gemini", baseUrl: "", apiKey: "k", enabled: true },
+		];
+		const models = providers.map(p => ({ id: `${p.id}-m`, model: "m", providerId: p.id, enabled: true }));
+		const plugin: any = { settings: { ...DEFAULT_SETTINGS, providers, models, activeProvider: "work-azure" }, saveSettings: vi.fn() };
+		const tab: any = new SettingsTab({} as any, plugin);
+		const root = new Element();
+		tab.renderGeneralSettings(root);
+		tab.renderImageSettings(root);
+		tab.renderProviders(root);
+		const options = root.querySelectorAll("option").map(option => option.text);
+		expect(options).toContain("Work Azure");
+		expect(options).toContain("Gemini");
+		expect(options).not.toContain("Azure");
+		expect(root.querySelectorAll(".provider-name").map(item => item.textContent)).toEqual(["Work Azure", "Gemini"]);
+		expect(root.querySelector(".provider-header")!.attributes.get("aria-label")).toBe("Work Azure settings");
 	});
 });
