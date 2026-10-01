@@ -388,9 +388,10 @@ describe("context picker request paths", () => {
 		} };
 		canvas.selection.clear(); // The right-clicked card need not be selected.
 		events.get("canvas:node-menu")!(menu, prompt);
-		expect(items.map(item => item.title).slice(0, 2)).toEqual([
+		expect(items.map(item => item.title)).toEqual([
 			"Ask AI with chosen context…",
 			"Generate card title",
+			"Copy node ID",
 		]);
 		await run(() => items.find(item => item.title === "Ask AI with chosen context…").click());
 		expect(PromptContextModal.prototype.open).toHaveBeenCalledOnce();

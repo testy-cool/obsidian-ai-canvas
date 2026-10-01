@@ -470,18 +470,6 @@ export default class AugmentedCanvasPlugin extends Plugin {
 
 	patchNoteContextMenu() {
 		const settings = this.settings;
-		const resolveGeminiProvider = () =>
-			settings.providers.find((provider) => {
-				const id = provider.id?.toLowerCase() || "";
-				const type = provider.type?.toLowerCase() || "";
-				return id === "gemini" || id === "google" || type === "gemini" || type === "google";
-			});
-		const createNanoBananaModel = (providerId: string) => ({
-			id: "nano-banana-pro-preview",
-			providerId: providerId,
-			model: "nano-banana-pro-preview",
-			enabled: true,
-		});
 		// * no event name to add to Canvas context menu ("canvas-menu" does not exist)
 		this.registerEvent(
 			this.app.workspace.on("canvas:node-menu", (menu, node) => {
@@ -558,34 +546,6 @@ export default class AugmentedCanvasPlugin extends Plugin {
 						.onClick(() => {
 							navigator.clipboard.writeText(node.id);
 							new Notice("Node ID copied to clipboard");
-						});
-				});
-				menu.addItem((item) => {
-					item.setTitle("Generate image")
-						.setIcon("lucide-image")
-						.onClick(() => {
-							handleGenerateImage(this.app, settings);
-						});
-				});
-				menu.addItem((item) => {
-					item.setTitle("Generate image (NanoBanana)")
-						.setIcon("lucide-image")
-						.onClick(() => {
-							const geminiProvider = resolveGeminiProvider();
-							if (!geminiProvider) {
-								new Notice("No Gemini provider configured for NanoBanana.");
-								return;
-							}
-							const nanoModel = createNanoBananaModel(geminiProvider.id);
-							const { generateNote } = noteGenerator(
-								this.app,
-								settings,
-								undefined,
-								undefined,
-								geminiProvider,
-								nanoModel
-							);
-							void generateNote();
 						});
 				});
 			})
