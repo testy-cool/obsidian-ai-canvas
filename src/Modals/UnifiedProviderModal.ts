@@ -613,7 +613,10 @@ export class UnifiedProviderModal extends Modal {
       const price = this.pricingData?.get(modelId);
       const defaultParams = getDefaultProviderParams(modelId, provider.type);
       return {
-        id: `${provider.id}-${modelId}`,
+        // Keep what the box does not show (kind, manual-price flag) and the id
+        // that settings such as the active model may already point at.
+        ...existing,
+        id: existing?.id ?? `${provider.id}-${modelId}`,
         providerId: provider.id,
         model: modelId,
         enabled: existing?.enabled ?? true,

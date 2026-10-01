@@ -1090,6 +1090,20 @@ describe("saving an edited provider", () => {
 		expect(onSave.mock.calls.map(call => call[0].cliArgs)).toEqual(["--model small", undefined]);
 	});
 
+	it("keeps a model's Text/Image choice, manual prices and id when nothing was changed", () => {
+		const onSave = vi.fn();
+		const provider = { id: "bifrost", type: "Bifrost", baseUrl: "https://example.test/v1", apiKey: "k", enabled: true };
+		const model = {
+			id: "picked-earlier", model: "image-maker", providerId: "bifrost", enabled: true, kind: "image" as const,
+			costOverridden: true, inputCostPerMillion: 7, outputCostPerMillion: 9,
+		};
+		const modal: any = new UnifiedProviderModal({} as any, onSave, provider, [model]);
+		modal.onOpen();
+		modal.pricingData = new Map([[model.model, { inputCostPerMillion: 1, outputCostPerMillion: 2 }]]);
+		modal.save();
+		expect(onSave.mock.calls[0][1]).toEqual([expect.objectContaining(model)]);
+	});
+
 	it("keeps provider fields the box does not show and drops a name that went back to the kind", async () => {
 		const onSave = vi.fn();
 		const saved: any = { id: "gemini", type: "Gemini", name: "Work Gemini", baseUrl: "", apiKey: "k", enabled: true, addedLater: "kept" };
