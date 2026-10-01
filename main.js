@@ -48047,6 +48047,10 @@ var google2 = {
   search: true,
   urlContext: true
 };
+var providerLabel = (provider) => {
+  var _a20;
+  return ((_a20 = provider.name) == null ? void 0 : _a20.trim()) || provider.type;
+};
 var isBifrostProvider = (provider) => {
   var _a20, _b19, _c, _d;
   if (((_a20 = provider == null ? void 0 : provider.id) == null ? void 0 : _a20.toLowerCase()) === "bifrost" || /bifrost/i.test((_b19 = provider == null ? void 0 : provider.type) != null ? _b19 : "") || /bifrost/i.test((_c = provider == null ? void 0 : provider.name) != null ? _c : ""))
@@ -49664,7 +49668,7 @@ var resolveNamingModel = (settings2, target) => {
   const enabledModels = settings2.models.filter((model2) => model2.providerId === provider.id && model2.enabled);
   const model = enabledModels.find((m) => m.id === modelId) || enabledModels[0];
   if (!model) {
-    new import_obsidian10.Notice(`No enabled models found for ${provider.type}.`);
+    new import_obsidian10.Notice(`No enabled models found for ${providerLabel(provider)}.`);
     return null;
   }
   return { provider, model };
@@ -50622,8 +50626,8 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
       if (warnedMedia.has(media))
         return;
       warnedMedia.add(media);
-      notes.push(`${media === "YouTube links" ? "YouTube link" : "Video file"} not sent to ${(provider == null ? void 0 : provider.type) || "this provider"}`);
-      new import_obsidian13.Notice(`${(provider == null ? void 0 : provider.type) || "This provider"} cannot take ${media}. Use a Gemini provider for this card.`);
+      notes.push(`${media === "YouTube links" ? "YouTube link" : "Video file"} not sent to ${provider ? providerLabel(provider) : "this provider"}`);
+      new import_obsidian13.Notice(`${provider ? providerLabel(provider) : "This provider"} cannot take ${media}. Use a Gemini provider for this card.`);
     };
     const canCountTokens = isGpt && typeof encodingForModel2 === "function";
     const modelName = (model == null ? void 0 : model.model) || settings2.apiModel;
@@ -50806,7 +50810,7 @@ ${nodeText}`);
     }
     const model = resolveModel(provider);
     if (!model) {
-      new import_obsidian13.Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
+      new import_obsidian13.Notice(`No enabled models found for ${providerLabel(provider)}. Please check your settings.`);
       return;
     }
     if (!canCallAI())
@@ -50892,7 +50896,7 @@ ${nodeText}`);
           color: assistantColor,
           chat_role: "assistant",
           ai_model: model.model,
-          ai_provider: provider.type,
+          ai_provider: providerLabel(provider),
           ai_context_count: contextCount,
           ai_context_total: contextTotal,
           ...excludedNodeIds.length ? { ai_context_excluded: excludedNodeIds } : {},
@@ -50906,7 +50910,7 @@ ${nodeText}`);
         created.setData({
           ...nodeData,
           ai_model: model.model,
-          ai_provider: provider.type,
+          ai_provider: providerLabel(provider),
           ai_context_count: contextCount,
           ai_context_total: contextTotal,
           ai_context_excluded: excludedNodeIds.length ? excludedNodeIds : void 0,
@@ -50927,7 +50931,7 @@ ${nodeText}`);
       let generationStatus;
       try {
         created.render();
-        addModelIndicator(created, provider.type, model.model, true);
+        addModelIndicator(created, providerLabel(provider), model.model, true);
         generationStatus = createGenerationStatus(created, controller);
         const isGpt = (provider == null ? void 0 : provider.type) === "OpenAI";
         let noticeMessage = `Sending ${messages.length} notes to the AI`;
@@ -51131,7 +51135,7 @@ ${nodeText}`);
             created.contentEl.appendChild(featuresEl);
           if (!created.contentEl.contains(toolsContainer))
             created.contentEl.appendChild(toolsContainer);
-          setModelIndicatorText(created, provider.type, model.model, !final);
+          setModelIndicatorText(created, providerLabel(provider), model.model, !final);
         });
         if (!controller.signal.aborted && !created.text.trim()) {
           created.setText("The model returned an empty answer.");
@@ -51193,7 +51197,7 @@ ${nodeText}`);
         generationStatus == null ? void 0 : generationStatus.destroy();
         (_i = created.nodeEl) == null ? void 0 : _i.removeClass("ai-generating");
         if (created.contentEl)
-          addModelIndicator(created, provider.type, model.model);
+          addModelIndicator(created, providerLabel(provider), model.model);
       }
       await canvas.requestSave();
     }
@@ -51227,7 +51231,7 @@ var CustomQuestionModal = class extends import_obsidian14.Modal {
     modelSelect.setAttribute("aria-label", "Model");
     choices.forEach(({ provider, model }, index) => {
       const option = modelSelect.createEl("option", {
-        text: `${provider.type} \xB7 ${model.model}`
+        text: `${providerLabel(provider)} \xB7 ${model.model}`
       });
       option.value = String(index);
     });
@@ -51636,6 +51640,7 @@ var PRESETS = [
   { id: "local-command", type: CLI_ADAPTERS.custom.providerType, baseUrl: "" },
   { id: "custom", type: "Custom", baseUrl: "" }
 ];
+var NO_MODELS_RETURNED = "No models returned. Type model names below.";
 function isGeminiType(type) {
   return ["Gemini", "Google"].includes(type);
 }
@@ -51671,10 +51676,11 @@ function localCliUi(type) {
   };
 }
 var _UnifiedProviderModal = class extends import_obsidian18.Modal {
-  constructor(app, onSave, existingProvider, existingModels = []) {
+  constructor(app, onSave, existingProvider, existingModels = [], otherProviders = []) {
     super(app);
     this.onSave = onSave;
     this.existingModels = existingModels;
+    this.otherProviders = otherProviders;
     this.selectedModelIds = /* @__PURE__ */ new Set();
     this.fetchedModelIds = [];
     this.modelFetchVersion = 0;
@@ -51689,6 +51695,7 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
     this.provider = existingProvider ? { ...existingProvider } : { enabled: true };
     if (existingProvider) {
       this.selectedModelIds = new Set(existingModels.filter((m) => m.enabled).map((m) => m.model));
+      this.fetchedModelIds = existingModels.map((m) => m.model);
     }
     for (const m of existingModels) {
       if (m.providerParams)
@@ -51696,7 +51703,7 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
     }
   }
   onOpen() {
-    var _a20;
+    var _a20, _b19;
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("unified-provider-modal");
@@ -51705,7 +51712,7 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
     });
     if (!this.editing) {
       new import_obsidian18.Setting(contentEl).setName("Preset").addDropdown((dd) => {
-        var _a21, _b19;
+        var _a21, _b20;
         dd.addOption("", "Choose a preset...");
         for (const p of PRESETS) {
           dd.addOption(p.id, p.type === "Custom" ? "OpenAI-Compatible" : p.type);
@@ -51713,8 +51720,8 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
         dd.onChange((val) => {
           const preset = PRESETS.find((p) => p.id === val);
           if (preset) {
-            this.provider.id = preset.id;
             this.provider.type = preset.type;
+            this.provider.name = preset.type;
             this.provider.baseUrl = preset.baseUrl;
             const scrollTop = contentEl.scrollTop;
             this.modelFetchVersion++;
@@ -51732,8 +51739,8 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
             contentEl.scrollTop = scrollTop;
           }
         });
-        if (this.provider.id) {
-          dd.setValue((_b19 = (_a21 = PRESETS.find((p) => p.type === this.provider.type)) == null ? void 0 : _a21.id) != null ? _b19 : "");
+        if (this.provider.type) {
+          dd.setValue((_b20 = (_a21 = PRESETS.find((p) => p.type === this.provider.type)) == null ? void 0 : _a21.id) != null ? _b20 : "");
         }
       });
     }
@@ -51741,15 +51748,12 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
     const nameSetting = new import_obsidian18.Setting(contentEl).setName("Provider name");
     nameSetting.controlEl.addClass("ac-settings-field");
     nameSetting.addText((text2) => {
-      var _a21;
       this.nameField = { input: text2.inputEl, error: nameSetting.controlEl.createDiv("ac-setting-error") };
       this.nameField.error.setAttribute("aria-live", "polite");
-      text2.setPlaceholder("My Provider").setValue((_a21 = this.provider.type) != null ? _a21 : "").onChange((val) => {
-        this.provider.type = val;
+      text2.setPlaceholder("My Provider").setValue(this.displayName()).onChange((val) => {
+        this.provider.name = val;
         if (val.trim())
           this.setFieldError(this.nameField, "");
-        if (!this.editing)
-          this.provider.id = val.toLowerCase().replace(/\s+/g, "-");
         if (geminiNativeSetting)
           geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
       });
@@ -51818,16 +51822,17 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
         this.provider.cliArgs = val || void 0;
       });
     });
+    let connSetting;
     const updateProviderFields = () => {
-      var _a21, _b19;
+      var _a21, _b20;
       const type = (_a21 = this.provider.type) != null ? _a21 : "";
       const gemini = isGeminiType(type);
       const vertex = isVertexType(type);
       const cli = localCliUi(type);
       const codex = !!cli;
       const azure = type === "Azure";
-      this.nameField.input.value = type;
-      this.baseUrlField.input.value = (_b19 = this.provider.baseUrl) != null ? _b19 : "";
+      this.nameField.input.value = this.displayName();
+      this.baseUrlField.input.value = (_b20 = this.provider.baseUrl) != null ? _b20 : "";
       this.baseUrlField.input.placeholder = azure ? "https://<resource>.services.ai.azure.com" : "https://api.example.com/v1";
       baseUrlSetting.setDesc(azure ? "Azure OpenAI resource endpoint \u2014 no path, no api-version" : isBifrostProvider(this.provider) ? "Bifrost gateway address. Keep /v1 here when Gemini-native API is enabled." : "OpenAI-compatible endpoint.");
       baseUrlSetting.settingEl.style.display = gemini || vertex || codex ? "none" : "";
@@ -51846,9 +51851,12 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
         codexSetting.setDesc(detected ? `Detected: ${detected}` : cli.hint);
       }
       geminiNativeSetting.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
+      if (connSetting)
+        connSetting.settingEl.style.display = vertex ? "none" : "";
     };
     updateProviderFields();
-    const connSetting = new import_obsidian18.Setting(contentEl).setName("Available models").setDesc("Fetch the model list with these credentials. Test model capabilities from the Providers tab.");
+    connSetting = new import_obsidian18.Setting(contentEl).setName("Available models").setDesc("Fetch the model list with these credentials. Test model capabilities from the Providers tab.");
+    connSetting.settingEl.style.display = isVertexType((_a20 = this.provider.type) != null ? _a20 : "") ? "none" : "";
     let connStatus;
     connSetting.addButton((btn) => {
       btn.buttonEl.addClass("provider-fetch-button");
@@ -51865,21 +51873,22 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
             const listed = detected && cliUi.listModels ? await cliUi.listModels(detected) : null;
             if (fetchVersion !== this.modelFetchVersion)
               return;
-            this.fetchedModelIds = listed != null ? listed : cliUi.models;
-            connStatus == null ? void 0 : connStatus.setText(!detected ? `Not found. ${cliUi.hint}` : listed ? `Found ${listed.length} models` : cliUi.listModels ? `Could not read the model list, showing ${cliUi.models.length} known models` : `Found ${cliUi.models.length} models`);
-            connStatus == null ? void 0 : connStatus.toggleClass("mod-success", !!detected);
-            connStatus == null ? void 0 : connStatus.toggleClass("mod-warning", !detected);
+            this.addToModelList(listed != null ? listed : cliUi.models);
+            connStatus == null ? void 0 : connStatus.setText(!detected ? `Not found. ${cliUi.hint}` : (listed == null ? void 0 : listed.length) === 0 ? NO_MODELS_RETURNED : listed ? `Found ${listed.length} models` : cliUi.listModels ? `Could not read the model list, showing ${cliUi.models.length} known models` : `Found ${cliUi.models.length} models`);
+            const empty = !detected || (listed == null ? void 0 : listed.length) === 0;
+            connStatus == null ? void 0 : connStatus.toggleClass("mod-success", !empty);
+            connStatus == null ? void 0 : connStatus.toggleClass("mod-warning", empty);
             this.renderModelList();
             return;
           }
           const models = await fetchProviderModels({ ...this.provider });
           if (fetchVersion !== this.modelFetchVersion)
             return;
-          this.fetchedModelIds = models;
+          this.addToModelList(models);
           this.renderLimit = _UnifiedProviderModal.MODEL_PAGE_SIZE;
-          connStatus == null ? void 0 : connStatus.setText(`Found ${models.length} models`);
-          connStatus == null ? void 0 : connStatus.addClass("mod-success");
-          connStatus == null ? void 0 : connStatus.removeClass("mod-warning");
+          connStatus == null ? void 0 : connStatus.setText(models.length ? `Found ${models.length} models` : NO_MODELS_RETURNED);
+          connStatus == null ? void 0 : connStatus.toggleClass("mod-success", models.length > 0);
+          connStatus == null ? void 0 : connStatus.toggleClass("mod-warning", models.length === 0);
           try {
             const pricing = await fetchPricingForModels(models);
             if (fetchVersion !== this.modelFetchVersion)
@@ -51957,19 +51966,35 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
       cls: "mod-cta"
     });
     saveBtn.addEventListener("click", () => this.save());
-    (_a20 = contentEl.querySelector("input")) == null ? void 0 : _a20.focus();
+    (_b19 = contentEl.querySelector("input")) == null ? void 0 : _b19.focus();
+  }
+  displayName() {
+    var _a20;
+    return (_a20 = this.provider.name) != null ? _a20 : this.editing ? providerLabel(this.provider) : "";
+  }
+  freeId(name20, others) {
+    const slug = name20.toLowerCase().replace(/\s+/g, "-");
+    const taken = new Set(others.map((o) => o.id));
+    let id = slug;
+    for (let n = 2; taken.has(id); n++)
+      id = `${slug}-${n}`;
+    return id;
+  }
+  addToModelList(ids) {
+    this.fetchedModelIds = [.../* @__PURE__ */ new Set([...this.fetchedModelIds, ...ids])];
   }
   getFilteredModelIds() {
     return this.fetchedModelIds.filter((id) => this.filterText ? id.toLowerCase().includes(this.filterText) : true);
   }
   renderModelList() {
+    var _a20;
     if (!this.modelListEl)
       return;
     this.modelListEl.empty();
     const filtered = this.getFilteredModelIds();
     if (filtered.length === 0 && this.fetchedModelIds.length === 0) {
       this.modelListEl.createEl("div", {
-        text: 'Click "Fetch models" to load available models.',
+        text: isVertexType((_a20 = this.provider.type) != null ? _a20 : "") ? "Vertex has no model list. Type model names below." : 'Click "Fetch models" to load available models.',
         cls: "setting-item-description"
       });
       return;
@@ -52088,55 +52113,73 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
       field.input.focus();
   }
   save() {
-    var _a20, _b19, _c, _d, _e, _f;
+    var _a20, _b19, _c, _d, _e, _f, _g, _h;
     const p = this.provider;
-    if (!p.id || !((_a20 = p.type) == null ? void 0 : _a20.trim())) {
+    const name20 = this.displayName().trim();
+    const others = this.otherProviders.filter((o) => {
+      var _a21;
+      return o.id !== ((_a21 = this.initialProvider) == null ? void 0 : _a21.id);
+    });
+    const type = ((_a20 = p.type) == null ? void 0 : _a20.trim()) || "Custom";
+    if (!name20) {
       new import_obsidian18.Notice("Provider name is required.");
       this.setFieldError(this.nameField, "Provider name is required.", true);
       return;
     }
-    if (!isGeminiType(p.type) && !isVertexType(p.type) && !isCodexType(p.type) && !cliAdapterForProviderType(p.type) && !((_b19 = p.baseUrl) == null ? void 0 : _b19.trim())) {
+    if (others.some((o) => providerLabel(o).toLowerCase() === name20.toLowerCase())) {
+      this.setFieldError(this.nameField, "Another provider already has this name.", true);
+      return;
+    }
+    if (!isGeminiType(type) && !isVertexType(type) && !isCodexType(type) && !cliAdapterForProviderType(type) && !((_b19 = p.baseUrl) == null ? void 0 : _b19.trim())) {
       new import_obsidian18.Notice("Base URL is required.");
       this.setFieldError(this.baseUrlField, "Base URL is required.", true);
       return;
     }
     const provider = {
-      id: p.id,
-      type: p.type,
-      baseUrl: isGeminiType(p.type) ? GEMINI_BASE_URL : (_c = p.baseUrl) != null ? _c : "",
-      apiKey: (_d = p.apiKey) != null ? _d : "",
-      enabled: (_e = p.enabled) != null ? _e : true,
-      geminiNative: isBifrostProvider(p) && ((_f = p.geminiNative) != null ? _f : false),
+      ...this.initialProvider,
+      id: (_d = (_c = this.initialProvider) == null ? void 0 : _c.id) != null ? _d : this.freeId(name20, others),
+      type,
+      baseUrl: isGeminiType(type) ? GEMINI_BASE_URL : (_e = p.baseUrl) != null ? _e : "",
+      apiKey: (_f = p.apiKey) != null ? _f : "",
+      enabled: (_g = p.enabled) != null ? _g : true,
+      geminiNative: isBifrostProvider(p) && ((_h = p.geminiNative) != null ? _h : false),
       capabilityReport: p.capabilityReport,
       capabilityReports: p.capabilityReports,
       projectId: p.projectId,
       location: p.location,
       serviceAccountJson: p.serviceAccountJson,
-      binaryPath: p.binaryPath
+      binaryPath: p.binaryPath,
+      cliArgs: p.cliArgs
     };
+    if (name20 !== type)
+      provider.name = name20;
+    else
+      delete provider.name;
     if (this.initialProvider && ["apiKey", "baseUrl", "type", "geminiNative", "projectId", "location", "serviceAccountJson"].some((key) => key === "geminiNative" ? !!provider.geminiNative !== !!this.initialProvider.geminiNative : provider[key] !== this.initialProvider[key])) {
       provider.capabilityReport = void 0;
       provider.capabilityReports = void 0;
     }
-    const models = [...this.selectedModelIds].map((modelId) => {
-      var _a21, _b20, _c2, _d2, _e2, _f2, _g;
+    const ticked = [...this.selectedModelIds].map((modelId) => {
+      var _a21, _b20, _c2, _d2, _e2, _f2, _g2;
       const existing = this.existingModels.find((m) => m.model === modelId);
       const price = (_a21 = this.pricingData) == null ? void 0 : _a21.get(modelId);
       const defaultParams = getDefaultProviderParams(modelId, provider.type);
       return {
-        id: `${provider.id}-${modelId}`,
+        ...existing,
+        id: (_b20 = existing == null ? void 0 : existing.id) != null ? _b20 : `${provider.id}-${modelId}`,
         providerId: provider.id,
         model: modelId,
-        enabled: (_b20 = existing == null ? void 0 : existing.enabled) != null ? _b20 : true,
+        enabled: true,
         timeoutMs: existing == null ? void 0 : existing.timeoutMs,
         maxRetries: existing == null ? void 0 : existing.maxRetries,
         inputCostPerMillion: (existing == null ? void 0 : existing.costOverridden) ? existing.inputCostPerMillion : (_c2 = price == null ? void 0 : price.inputCostPerMillion) != null ? _c2 : existing == null ? void 0 : existing.inputCostPerMillion,
         outputCostPerMillion: (existing == null ? void 0 : existing.costOverridden) ? existing.outputCostPerMillion : (_d2 = price == null ? void 0 : price.outputCostPerMillion) != null ? _d2 : existing == null ? void 0 : existing.outputCostPerMillion,
         cachedInputCostPerMillion: (_e2 = price == null ? void 0 : price.cachedInputCostPerMillion) != null ? _e2 : existing == null ? void 0 : existing.cachedInputCostPerMillion,
-        providerParams: (_g = (_f2 = this.modelParams.get(modelId)) != null ? _f2 : existing == null ? void 0 : existing.providerParams) != null ? _g : Object.keys(defaultParams).length > 0 ? defaultParams : void 0
+        providerParams: (_g2 = (_f2 = this.modelParams.get(modelId)) != null ? _f2 : existing == null ? void 0 : existing.providerParams) != null ? _g2 : Object.keys(defaultParams).length > 0 ? defaultParams : void 0
       };
     });
-    this.onSave(provider, models);
+    const switchedOff = this.existingModels.filter((m) => !this.selectedModelIds.has(m.model)).map((m) => ({ ...m, enabled: false }));
+    this.onSave(provider, [...ticked, ...switchedOff]);
     this.close();
   }
   onClose() {
@@ -52469,7 +52512,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     new import_obsidian19.Setting(containerEl).setHeading().setName("General Settings");
     new import_obsidian19.Setting(containerEl).setName("Default Provider").setDesc("Select the default AI provider for all actions.").addDropdown((dropdown) => {
       this.plugin.settings.providers.forEach((provider) => {
-        dropdown.addOption(provider.id, provider.type);
+        dropdown.addOption(provider.id, providerLabel(provider));
       });
       dropdown.setValue(this.plugin.settings.activeProvider).onChange(async (value) => {
         this.plugin.settings.activeProvider = value;
@@ -52540,10 +52583,6 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     const header = new import_obsidian19.Setting(containerEl).setHeading().setName("Providers");
     header.addButton((button) => button.setButtonText("Add New Provider").setCta().onClick(() => {
       new UnifiedProviderModal(this.app, async (provider, models) => {
-        if (this.plugin.settings.providers.some((p) => p.id === provider.id)) {
-          new import_obsidian19.Notice("A provider with this ID already exists");
-          return;
-        }
         this.plugin.settings.providers.push(provider);
         this.plugin.settings.models.push(...models);
         if (this.plugin.settings.providers.filter((p) => p.enabled).length === 1) {
@@ -52554,7 +52593,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
         }
         await this.plugin.saveSettings();
         this.display();
-      }).open();
+      }, void 0, [], this.plugin.settings.providers).open();
     }));
     const cardsContainer = containerEl.createDiv("provider-list");
     this.plugin.settings.providers.forEach((provider) => {
@@ -52562,7 +52601,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
       const headerRow = providerBlock.createDiv("provider-header");
       const chevron = headerRow.createEl("span", { cls: "provider-chevron" });
       const titleCol = headerRow.createDiv("provider-title");
-      titleCol.createEl("div", { text: provider.type, cls: "provider-name" });
+      titleCol.createEl("div", { text: providerLabel(provider), cls: "provider-name" });
       const controls = headerRow.createDiv("provider-controls");
       const toggleWrap = controls.createDiv("provider-toggle");
       toggleWrap.createEl("span", { text: "Enabled" });
@@ -52585,7 +52624,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
           this.ensureActiveModelForProvider(this.plugin.settings.activeProvider);
           await this.plugin.saveSettings();
           this.display();
-        }, provider, this.plugin.settings.models.filter((m) => m.providerId === provider.id)).open();
+        }, provider, this.plugin.settings.models.filter((m) => m.providerId === provider.id), this.plugin.settings.providers.filter((p) => p.id !== provider.id)).open();
       });
       const isLastProvider = this.plugin.settings.providers.length === 1;
       const deleteBtn = new import_obsidian19.ButtonComponent(controls);
@@ -52617,7 +52656,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
         this.plugin.settings.models = this.plugin.settings.models.filter((m) => m.providerId !== provider.id);
         await this.plugin.saveSettings();
         this.display();
-        this.showUndoNotice(`Deleted ${provider.type}.`, () => {
+        this.showUndoNotice(`Deleted ${providerLabel(provider)}.`, () => {
           this.plugin.settings.providers.splice(providerIndex, 0, provider);
           for (const { model, index } of removedModels) {
             this.plugin.settings.models.splice(index, 0, model);
@@ -52666,7 +52705,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
       headerRow.addClass("is-collapsible");
       headerRow.setAttribute("role", "button");
       headerRow.setAttribute("tabindex", "0");
-      headerRow.setAttribute("aria-label", `${provider.type} settings`);
+      headerRow.setAttribute("aria-label", `${providerLabel(provider)} settings`);
       applyExpanded(this.expandedProviders.has(provider.id));
       const toggleExpanded = (event) => {
         var _a20;
@@ -52696,32 +52735,13 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     const header = modelsWrapper.createDiv("provider-models-header");
     const title = header.createDiv("provider-models-title");
     const titleText = title.createEl("span");
-    title.createEl("span", { text: "Use Add Model to fetch and enable models.", cls: "provider-models-desc" });
-    const actions = header.createDiv("provider-models-actions");
+    title.createEl("span", { text: "Use Edit to fetch and add models.", cls: "provider-models-desc" });
     const updateHeader = () => {
       const providerModels = getProviderModels();
       const enabledCount = providerModels.filter((m) => m.enabled).length;
       titleText.setText(`Models (${enabledCount}/${providerModels.length})`);
       refreshTestModels();
     };
-    const addBtn = new import_obsidian19.ButtonComponent(actions);
-    addBtn.setButtonText("Add Model");
-    addBtn.setCta();
-    addBtn.onClick(() => {
-      new UnifiedProviderModal(this.app, async (updated, models) => {
-        const index = this.plugin.settings.providers.findIndex((p) => p.id === provider.id);
-        if (index > -1) {
-          this.plugin.settings.providers[index] = updated;
-        }
-        this.plugin.settings.models = this.plugin.settings.models.filter((m) => m.providerId !== provider.id);
-        this.plugin.settings.models.push(...models);
-        this.ensureActiveModelForProvider(this.plugin.settings.activeProvider);
-        await this.plugin.saveSettings();
-        updateHeader();
-        renderModelList();
-        new import_obsidian19.Notice(`Updated models for ${provider.type}.`);
-      }, provider, this.plugin.settings.models.filter((m) => m.providerId === provider.id)).open();
-    });
     const reportEl = modelsWrapper.createDiv("provider-capability-report");
     const modelSetting = new import_obsidian19.Setting(reportEl).setName("Test model").setDesc(`${isGoogleProvider(provider) ? "Gemini-native" : "OpenAI-compatible"} API. Results apply to this model only. Runs up to five small requests.`);
     let selectedModel = (_a20 = this.capabilityModels.get(provider.id)) != null ? _a20 : this.plugin.settings.apiModel;
@@ -52792,7 +52812,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
         return;
       const model = getProviderModels().find((item) => item.enabled && item.id === selectedModel);
       if (!model) {
-        new import_obsidian19.Notice(`Enable a model for ${provider.type} before testing capabilities.`);
+        new import_obsidian19.Notice(`Enable a model for ${providerLabel(provider)} before testing capabilities.`);
         return;
       }
       const current = this.plugin.settings.providers.find((item) => item.id === provider.id);
@@ -52879,7 +52899,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
         return label.includes(normalizedFilter);
       }).sort((a, b) => a.model.localeCompare(b.model));
       if (!providerModels.length) {
-        listContainer.createDiv({ text: "No models yet. Use Add Model to fetch and enable.", cls: "mod-muted" });
+        listContainer.createDiv({ text: "No models yet. Use Edit to fetch and add them.", cls: "mod-muted" });
         return;
       }
       if (!filteredModels.length) {
@@ -53097,7 +53117,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     if (activeProvider && !getProviderCapabilities(activeProvider, (_a20 = this.plugin.settings.models.find((model) => model.id === this.plugin.settings.apiModel)) == null ? void 0 : _a20.model).search) {
       containerEl.createDiv({
         cls: "provider-capability-note",
-        text: `The active provider (${activeProvider.type}) cannot do search grounding. Use a Gemini provider or Bifrost with the Gemini-native API.`
+        text: `The active provider (${providerLabel(activeProvider)}) cannot do search grounding. Use a Gemini provider or Bifrost with the Gemini-native API.`
       });
     }
     new import_obsidian19.Setting(containerEl).setName("Always ask which cards to include").setDesc("Open the context picker before every request when a card has more than one connected card.").addToggle((toggle) => toggle.setValue(this.plugin.settings.alwaysAskPromptContext).onChange(async (value) => {
@@ -53139,7 +53159,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     new import_obsidian19.Setting(containerEl).setName("Image provider").setDesc("Provider used for image generation.").addDropdown((dropdown) => {
       dropdown.addOption("", "Default (active provider)");
       this.plugin.settings.providers.forEach((provider) => {
-        dropdown.addOption(provider.id, provider.type);
+        dropdown.addOption(provider.id, providerLabel(provider));
       });
       dropdown.setValue(this.plugin.settings.imageProviderId || "").onChange(async (value) => {
         var _a21;
@@ -53188,7 +53208,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     }));
     new import_obsidian19.Setting(containerEl).setName("Card title provider").setDesc("Provider used for AI card titles.").addDropdown((dropdown) => {
       this.plugin.settings.providers.forEach((provider) => {
-        dropdown.addOption(provider.id, provider.type);
+        dropdown.addOption(provider.id, providerLabel(provider));
       });
       dropdown.setValue(this.plugin.settings.cardTitleProviderId).onChange(async (value) => {
         var _a21;
@@ -53232,7 +53252,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     }));
     new import_obsidian19.Setting(containerEl).setName("Group name provider").setDesc("Provider used for AI group naming.").addDropdown((dropdown) => {
       this.plugin.settings.providers.forEach((provider) => {
-        dropdown.addOption(provider.id, provider.type);
+        dropdown.addOption(provider.id, providerLabel(provider));
       });
       dropdown.setValue(this.plugin.settings.groupTitleProviderId).onChange(async (value) => {
         var _a21;
@@ -54856,7 +54876,7 @@ var handleAddRelevantQuestions = async (app, settings2) => {
   }
   const model = settings2.models.find((m) => m.id === settings2.apiModel && m.providerId === provider.id && m.enabled) || settings2.models.find((m) => m.providerId === provider.id && m.enabled);
   if (!model) {
-    new import_obsidian21.Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
+    new import_obsidian21.Notice(`No enabled models found for ${providerLabel(provider)}. Please check your settings.`);
     return;
   }
   const aiResponse = await getResponse2(provider, [
@@ -54944,7 +54964,7 @@ var runPromptFolder = async (app, settings2, systemPrompt, folder) => {
   }
   const model = settings2.models.find((m) => m.id === settings2.apiModel && m.providerId === provider.id && m.enabled) || settings2.models.find((m) => m.providerId === provider.id && m.enabled);
   if (!model) {
-    new import_obsidian24.Notice(`No enabled models found for ${provider.type}. Please check your settings.`);
+    new import_obsidian24.Notice(`No enabled models found for ${providerLabel(provider)}. Please check your settings.`);
     return;
   }
   const NODE_WIDTH2 = 800;
