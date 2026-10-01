@@ -1050,15 +1050,20 @@ export function noteGenerator(
 
 					new Notice(`Error calling the AI: ${errorDetail}`, 10000);
 
-					// Show the error in the node instead of removing it
-					created.setText(`**Error:** ${errorDetail}`);
-					const errorDimensions = calculateNoteDimensions(created.text, 300, 500);
-					created.moveAndResize({
-						height: errorDimensions.height,
-						width: errorDimensions.width,
-						x: created.x,
-						y: created.y
-					});
+					// Show the error in the node instead of removing it. Text that already
+					// streamed stays, with the error as its last line.
+					if (created.text.trim()) {
+						created.setText(`${created.text}\n\n**Error:** ${errorDetail}`);
+					} else {
+						created.setText(`**Error:** ${errorDetail}`);
+						const errorDimensions = calculateNoteDimensions(created.text, 300, 500);
+						created.moveAndResize({
+							height: errorDimensions.height,
+							width: errorDimensions.width,
+							x: created.x,
+							y: created.y
+						});
+					}
 				}
 			} finally {
 				generationStatus?.destroy();

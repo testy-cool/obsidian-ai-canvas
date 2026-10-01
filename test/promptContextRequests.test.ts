@@ -275,6 +275,30 @@ describe("context picker request paths", () => {
 		await run(() => noteGenerator(app, settings).generateNote());
 		expect(canvas.nodes.get("response").nodeEl.className).not.toContain("ai-generating");
 	});
+	it("keeps the text already written and ends it with the error", async () => {
+		const { app, canvas, settings } = fixture(false);
+		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
+			callback("The first part of the answer.", null, null, null);
+			canvas.nodes.get("response").moveAndResize.mockClear();
+			throw new Error("Generation timed out");
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		const response = canvas.nodes.get("response");
+		expect(response.text).toBe("The first part of the answer.\n\n**Error:** Generation timed out");
+		expect(response.moveAndResize).not.toHaveBeenCalled();
+	});
+
+	it("shows only the error when the failure comes before any text", async () => {
+		const { app, canvas, settings } = fixture(false);
+		vi.mocked(streamResponse).mockImplementation(async () => {
+			throw new Error("Generation timed out");
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		const response = canvas.nodes.get("response");
+		expect(response.text).toBe("**Error:** Generation timed out");
+		expect(response.moveAndResize).toHaveBeenCalledOnce();
+	});
+
 	it("bounds streamed resizes and keeps one badge across 100 deltas", async () => {
 		const { app, canvas, settings } = fixture(false);
 		const add = vi.spyOn(indicators, "addModelIndicator");
