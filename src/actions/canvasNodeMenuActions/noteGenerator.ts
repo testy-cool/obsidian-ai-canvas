@@ -36,7 +36,6 @@ import {
 	PromptContextModal,
 	type PromptContextOption,
 } from "../../Modals/PromptContextModal";
-import { CustomQuestionModal } from "../../Modals/CustomQuestionModal";
 
 /**
  * Color for assistant notes: 6 == purple
@@ -57,6 +56,9 @@ export const NOTE_INCR_HEIGHT_STEP = 150;
 const YOUTUBE_URL_PATTERN =
 	/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtube\.com\/shorts\/|youtu\.be\/)[^\s)]+/gi;
 const MAX_YOUTUBE_URLS = 10;
+
+// Gemini returns an empty answer when the conversation ends on the model's own turn.
+const CONTINUE_PROMPT = "Continue.";
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -651,27 +653,7 @@ export function noteGenerator(
 				return;
 			}
 			if (!trimmedQuestion && messages[messages.length - 1]?.role === "assistant") {
-				new CustomQuestionModal(
-					app,
-					settings,
-					(followUp, selection) => {
-						if (!followUp.trim()) {
-							new Notice("Type a question to continue from an AI answer.");
-							return;
-						}
-						const next = noteGenerator(
-							app,
-							settings,
-							node,
-							toNode,
-							selection.provider,
-							selection.model
-						);
-						void next.generateNote(followUp, selectedNodeIds);
-					},
-					{ provider, model }
-				).open();
-				return;
+				messages.push({ role: "user", content: CONTINUE_PROMPT });
 			}
 			// logDebug({ messages });
 			if (!messages.length) return;

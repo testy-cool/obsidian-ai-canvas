@@ -23,7 +23,8 @@ vi.mock("../src/data/prompts.csv.txt", () => ({ default: "act,prompt" }));
 vi.mock("../src/utils/llm", () => ({ streamResponse: vi.fn(), getResponse: vi.fn() }));
 vi.mock("../src/obsidian/canvas-patches", async (importOriginal) => ({
 	...await importOriginal<typeof import("../src/obsidian/canvas-patches")>(),
-	createNode: (canvas: any, options: any, parent: any, data: any) => {
+	createNode: (canvas: any, options: any, parent: any, data: any, label?: string) => {
+		canvas.lastEdgeLabel = label;
 		const node = canvas.makeNode("response", options.text);
 		node.setData(data);
 		return node;
@@ -159,46 +160,50 @@ afterEach(() => {
 });
 
 describe("context picker request paths", () => {
-	it("asks for a question instead of sending an assistant-ending conversation", async () => {
+	it("continues an assistant answer with a Continue. turn and no question box", async () => {
 		const { app, canvas, prompt, settings } = fixture(false);
 		prompt.setData({ chat_role: "assistant" });
 		await run(() => noteGenerator(app, settings).generateNote());
-		expect(CustomQuestionModal.prototype.open).toHaveBeenCalledOnce();
-		expect(streamResponse).not.toHaveBeenCalled();
-		expect(canvas.nodes.has("response")).toBe(false);
-	});
-
-	it("continues an assistant answer with the submitted question and picked model", async () => {
-		const { app, prompt, settings, provider, model } = fixture(false);
-		prompt.setData({ chat_role: "assistant" });
-		await run(() => noteGenerator(app, settings).generateNote());
-		const modal: any = vi.mocked(CustomQuestionModal.prototype.open).mock.instances[0];
-		expect(modal.initialSelection).toEqual({ provider, model });
-		await run(() => modal.onSubmit("What follows?", { provider, model }));
+		expect(CustomQuestionModal.prototype.open).not.toHaveBeenCalled();
 		expect(streamResponse).toHaveBeenCalledOnce();
 		expect(vi.mocked(streamResponse).mock.calls[0][1].at(-1)).toEqual({
 			role: "user",
-			content: "What follows?",
+			content: "Continue.",
+		});
+		expect(canvas.nodes.has("response")).toBe(true);
+		expect(canvas.lastEdgeLabel).toBeUndefined();
+	});
+
+	it("sends a real question from an assistant card without a Continue. turn", async () => {
+		const { app, prompt, settings } = fixture(false);
+		prompt.setData({ chat_role: "assistant" });
+		await run(() => noteGenerator(app, settings).generateNote("What follows?"));
+		expect(streamResponse).toHaveBeenCalledOnce();
+		const sent = vi.mocked(streamResponse).mock.calls[0][1];
+		expect(sent.at(-1)).toEqual({ role: "user", content: "What follows?" });
+		expect(sent.some((m: any) => m.content === "Continue.")).toBe(false);
+	});
+
+	it("treats a whitespace-only question on an assistant card as no question", async () => {
+		const { app, prompt, settings } = fixture(false);
+		prompt.setData({ chat_role: "assistant" });
+		await run(() => noteGenerator(app, settings).generateNote("   "));
+		expect(CustomQuestionModal.prototype.open).not.toHaveBeenCalled();
+		expect(streamResponse).toHaveBeenCalledOnce();
+		expect(vi.mocked(streamResponse).mock.calls[0][1].at(-1)).toEqual({
+			role: "user",
+			content: "Continue.",
 		});
 	});
 
-	it("does not send an empty follow-up from an assistant answer", async () => {
-		const { app, prompt, settings, provider, model } = fixture(false);
-		prompt.setData({ chat_role: "assistant" });
-		await run(() => noteGenerator(app, settings).generateNote());
-		const modal: any = vi.mocked(CustomQuestionModal.prototype.open).mock.instances[0];
-		modal.onSubmit("", { provider, model });
-		expect(streamResponse).not.toHaveBeenCalled();
-		expect(obsidian.Notice).toHaveBeenCalledWith(
-			"Type a question to continue from an AI answer."
-		);
-	});
-
-	it("still sends Ask AI immediately from a user card", async () => {
+	it("sends no Continue. turn from a user card", async () => {
 		const { app, settings } = fixture(false);
 		await run(() => noteGenerator(app, settings).generateNote());
 		expect(CustomQuestionModal.prototype.open).not.toHaveBeenCalled();
 		expect(streamResponse).toHaveBeenCalledOnce();
+		expect(
+			vi.mocked(streamResponse).mock.calls[0][1].some((m: any) => m.content === "Continue.")
+		).toBe(false);
 	});
 
 	it.each([false, true])("fills a response whose content has not rendered yet (regeneration: %s)", async (regenerate) => {
