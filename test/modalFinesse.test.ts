@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { CustomQuestionModal } from "../src/Modals/CustomQuestionModal";
 import { InputModal } from "../src/Modals/InputModal";
-import { ModelSelectionModal } from "../src/Modals/ModelSelectionModal";
 import { UnifiedProviderModal } from "../src/Modals/UnifiedProviderModal";
 import { PromptContextModal } from "../src/Modals/PromptContextModal";
 import SystemPromptsModal from "../src/Modals/SystemPromptsModal";
@@ -56,9 +55,8 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("modal focus", () => {
 	it.each([
-		["CustomQuestionModal", () => new CustomQuestionModal({} as any, vi.fn()), "textarea", 0],
+		["CustomQuestionModal", () => new CustomQuestionModal({} as any, settings, vi.fn()), "textarea", 0],
 		["InputModal", () => new InputModal({} as any, { label: "Title", buttonLabel: "Save" }, vi.fn()), "input", 0],
-		["ModelSelectionModal", () => new ModelSelectionModal({} as any, settings, vi.fn()), "select", 0],
 		["UnifiedProviderModal", () => new UnifiedProviderModal({} as any, vi.fn()), "input", 0],
 		["PromptContextModal", () => new PromptContextModal({} as any, [{ id: "current", depth: 0, preview: "Current" }, { id: "parent", depth: 1, preview: "Parent" }], vi.fn()), "input", 1],
 		["SystemPromptsModal", () => new SystemPromptsModal({} as any, settings, vi.fn()), "input", 0],
@@ -76,26 +74,6 @@ describe("modal focus", () => {
 		expect((document.activeElement as any).textContent).toBe("Continue");
 	});
 
-	it("updates model options in place and submits the newly selected provider", () => {
-		const onSelect = vi.fn();
-		const modal = new ModelSelectionModal({} as any, settings, onSelect);
-		modal.onOpen();
-		const root = modal.contentEl as any as Element;
-		const children = [...root.children];
-		const [provider, model] = root.querySelectorAll("select");
-		for (const id of ["empty", "second"]) {
-			provider.value = id;
-			provider.listeners.get("change")!();
-			expect(root.children).toEqual(children);
-			expect(root.querySelectorAll("select")).toEqual([provider, model]);
-			expect(document.activeElement).toBe(provider);
-			expect(model.disabled).toBe(id === "empty");
-			expect(model.children.map(option => option.value)).toEqual(id === "empty" ? [""] : ["two"]);
-		}
-		root.querySelectorAll("button").find(button => button.textContent === "Select")!.listeners.get("click")!();
-		expect(onSelect).toHaveBeenCalledWith({ provider: settings.providers[1], model: settings.models[1] });
-	});
-
 	it("keeps the Vertex service account field at 12px", () => {
 		const modal = new UnifiedProviderModal({} as any, vi.fn(), { id: "vertex", type: "Vertex", enabled: true });
 		modal.onOpen();
@@ -106,7 +84,7 @@ describe("modal focus", () => {
 describe("question and input modal controls", () => {
 	it.each([false, true])("shows Cancel and a working shortcut (multiline: %s)", (multiline) => {
 		const submit = vi.fn();
-		const modal = multiline ? new CustomQuestionModal({} as any, submit)
+		const modal = multiline ? new CustomQuestionModal({} as any, settings, submit)
 			: new InputModal({} as any, { label: "Title", buttonLabel: "Send" }, submit);
 		const close = vi.spyOn(modal, "close");
 		modal.onOpen();
@@ -121,8 +99,26 @@ describe("question and input modal controls", () => {
 		input.value = "my question";
 		const preventDefault = vi.fn();
 		input.listeners.get("keydown")!({ key: "Enter", ctrlKey: multiline, preventDefault });
-		expect(submit).toHaveBeenCalledWith("my question");
+		expect(submit).toHaveBeenCalledWith(
+			"my question",
+			...(multiline ? [{ provider: settings.providers[0], model: settings.models[0] }] : [])
+		);
 		expect(preventDefault).toHaveBeenCalledOnce();
+	});
+
+	it.each(["", "What changed?"])("submits %j with the picked model", (question) => {
+		const submit = vi.fn();
+		const modal = new CustomQuestionModal({} as any, settings, submit);
+		modal.onOpen();
+		const root = modal.contentEl as any as Element;
+		const select = root.querySelector("select")!;
+		select.value = "1";
+		root.querySelector("textarea")!.value = question;
+		root.querySelectorAll("button").find(button => button.textContent === "Ask AI")!.listeners.get("click")!();
+		expect(submit).toHaveBeenCalledWith(question, {
+			provider: settings.providers[1],
+			model: settings.models[1],
+		});
 	});
 
 	it("uses a muted 12px shortcut hint and readable controls", () => {

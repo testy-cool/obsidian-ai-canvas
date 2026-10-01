@@ -524,16 +524,6 @@
 	margin-right: 4px;
 }
 
-.ai-menu-item[data-tooltip*="Select Model"] {
-	border: 1px solid var(--interactive-accent);
-	background: var(--background-primary-alt);
-}
-
-.ai-menu-item[data-tooltip*="Select Model"]:hover {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-}
-
 .ai-card-ui-host {
 	--ai-card-ui-padding: 32px;
 }

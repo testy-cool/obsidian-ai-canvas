@@ -3,11 +3,9 @@ import { readFileSync } from "node:fs";
 import * as obsidian from "obsidian";
 import AugmentedCanvasPlugin from "../src/AugmentedCanvasPlugin";
 import { PromptContextModal } from "../src/Modals/PromptContextModal";
-import { ModelSelectionModal } from "../src/Modals/ModelSelectionModal";
 import { noteGenerator } from "../src/actions/canvasNodeMenuActions/noteGenerator";
 import {
 	addAskAIButton,
-	addAskAIWithModelButton,
 	addRegenerateResponse,
 	handleCallAI_Question,
 } from "../src/actions/canvasNodeMenuActions/advancedCanvas";
@@ -324,17 +322,11 @@ describe("context picker request paths", () => {
 		expect(read).not.toHaveBeenCalled();
 		expect(badge(prompt)).toBeNull();
 	});
-	it.each(["Ask AI", "Ask AI (select model)", "Ask Question"])("%s skips the picker and sends all ancestors by default", async (entry) => {
-		const { app, canvas, prompt, settings, provider, model } = fixture();
+	it.each(["Ask AI", "Ask Question"])("%s skips the picker and sends all ancestors by default", async (entry) => {
+		const { app, canvas, prompt, settings } = fixture();
 		const menu = new Element();
 		if (entry === "Ask Question") {
 			await run(() => handleCallAI_Question(app, settings, prompt, "QUESTION"));
-		} else if (entry === "Ask AI (select model)") {
-			vi.spyOn(ModelSelectionModal.prototype, "open").mockImplementation(function () {
-				return (this as any).onSelect({ provider, model });
-			});
-			await addAskAIWithModelButton(app, settings, menu as any);
-			await run(() => menu.children[0].click());
 		} else {
 			await addAskAIButton(app, settings, menu as any);
 			await run(() => menu.children[0].click());

@@ -12,15 +12,9 @@ import {
 import { around } from "monkey-around";
 import {
 	addAskAIButton,
+	addAskQuestionButton,
 	addRegenerateResponse,
-	handleCallAI_Question,
-	addAskAIWithModelButton,
-	addAskQuestionWithModelButton,
 } from "./actions/canvasNodeMenuActions/advancedCanvas";
-import {
-	addGenerateCardTitleButton,
-	addGenerateGroupNameButton,
-} from "./actions/canvasNodeMenuActions/titleGenerator";
 import {
 	AugmentedCanvasSettings,
 	DEFAULT_SETTINGS,
@@ -28,7 +22,6 @@ import {
 	SystemPrompt,
 } from "./settings/AugmentedCanvasSettings";
 import SettingsTab from "./settings/SettingsTab";
-import { CustomQuestionModal } from "./Modals/CustomQuestionModal";
 import { CanvasNode } from "./obsidian/canvas-internal";
 import { getActiveCanvas, setupCanvasIndicatorPersistence } from "./utils";
 import SystemPromptsModal from "./Modals/SystemPromptsModal";
@@ -356,62 +349,19 @@ export default class AugmentedCanvasPlugin extends Plugin {
 							// @ts-expect-error
 							selectedNode.from
 						) {
-							if (!selectedNode.unknownData.isGenerated) return;
+							if (!selectedNode.unknownData.isGenerated) return result;
 							addRegenerateResponse(app, settings, this.menuEl);
 						} else {
 							// * Handles "Call AI" button
 
 							addAskAIButton(app, settings, this.menuEl);
 
-							// * Handles "Ask AI with Model Selection" button
-							addAskAIWithModelButton(app, settings, this.menuEl);
-
-							// const node = <CanvasNode>(
-							// 	Array.from(this.canvas.selection)?.first()
-							// );
-
-
-							// * Handles "Ask Question" button
-							// TODO: refactor (as above)
-
-							const buttonEl_AskQuestion = createEl(
-								"button",
-								"clickable-icon ai-menu-item"
+							addAskQuestionButton(
+								app,
+								settings,
+								this.menuEl,
+								selectedNode as unknown as CanvasNode
 							);
-							setTooltip(
-								buttonEl_AskQuestion,
-								"Ask question with AI",
-								{
-									placement: "top",
-								}
-							);
-							setIcon(buttonEl_AskQuestion, "lucide-help-circle");
-							this.menuEl.appendChild(buttonEl_AskQuestion);
-							buttonEl_AskQuestion.addEventListener(
-								"click",
-								() => {
-									const modal = new CustomQuestionModal(
-										app,
-										(question2: string) => {
-											handleCallAI_Question(
-												app,
-												settings,
-												<CanvasNode>(
-													Array.from(
-														this.canvas.selection
-													).first()!
-												),
-												question2
-											);
-											// Handle the input
-										}
-									);
-									modal.open();
-								}
-							);
-
-							// * Handles "Ask Question with Model Selection" button
-							addAskQuestionWithModelButton(app, settings, this.menuEl);
 
 							const buttonEl_GenerateImage = createEl(
 								"button",
@@ -463,18 +413,6 @@ export default class AugmentedCanvasPlugin extends Plugin {
 									selectedNode as unknown as CanvasNode
 								);
 							});
-
-							const nodeType =
-								// @ts-expect-error
-								selectedNode?.getData?.()?.type ||
-								selectedNode?.unknownData?.type;
-
-							// * Handles AI naming buttons
-							if (nodeType === "group") {
-								addGenerateGroupNameButton(app, settings, this.menuEl);
-							} else {
-								addGenerateCardTitleButton(app, settings, this.menuEl);
-							}
 
 						}
 						return result;

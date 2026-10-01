@@ -1,16 +1,60 @@
 import { Modal, App } from "obsidian";
+import {
+	AugmentedCanvasSettings,
+	LLMModel,
+	LLMProvider,
+} from "../settings/AugmentedCanvasSettings";
+
+export interface QuestionModelSelection {
+	provider: LLMProvider;
+	model: LLMModel;
+}
 
 export class CustomQuestionModal extends Modal {
-	onSubmit: (input: string) => void;
+	private settings: AugmentedCanvasSettings;
+	onSubmit: (input: string, selection: QuestionModelSelection) => void;
 
-	constructor(app: App, onSubmit: (input: string) => void) {
+	constructor(
+		app: App,
+		settings: AugmentedCanvasSettings,
+		onSubmit: (input: string, selection: QuestionModelSelection) => void
+	) {
 		super(app);
+		this.settings = settings;
 		this.onSubmit = onSubmit;
 	}
 
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.className = "augmented-canvas-modal-container";
+		const choices = this.settings.providers
+			.filter(provider => provider.enabled)
+			.flatMap(provider =>
+				this.settings.models
+					.filter(model => model.providerId === provider.id && model.enabled)
+					.map(model => ({ provider, model }))
+			);
+		const defaultIndex = Math.max(
+			0,
+			choices.findIndex(({ provider, model }) =>
+				provider.id === this.settings.activeProvider &&
+				model.id === this.settings.apiModel
+			)
+		);
+
+		const modelLabel = contentEl.createEl("label", {
+			text: "Model",
+		});
+		const modelSelect = modelLabel.createEl("select");
+		modelSelect.setAttribute("aria-label", "Model");
+		choices.forEach(({ provider, model }, index) => {
+			const option = modelSelect.createEl("option", {
+				text: `${provider.type} · ${model.model}`,
+			});
+			option.value = String(index);
+		});
+		modelSelect.value = String(defaultIndex);
+		modelSelect.disabled = choices.length === 0;
 
 		const textareaEl = contentEl.createEl("textarea");
 		textareaEl.className = "augmented-canvas-modal-textarea";
@@ -23,7 +67,8 @@ export class CustomQuestionModal extends Modal {
 				// Prevent default action to avoid any unwanted behavior
 				event.preventDefault();
 				// Call the onSubmit function and close the modal
-				this.onSubmit(textareaEl.value);
+				const selection = choices[Number(modelSelect.value)];
+				if (selection) this.onSubmit(textareaEl.value, selection);
 				this.close();
 			}
 		});
@@ -34,8 +79,10 @@ export class CustomQuestionModal extends Modal {
 
 		// Create and append a submit button
 		const submitBtn = actions.createEl("button", { text: "Ask AI" });
+		submitBtn.disabled = choices.length === 0;
 		submitBtn.onClickEvent(() => {
-			this.onSubmit(textareaEl.value);
+			const selection = choices[Number(modelSelect.value)];
+			if (selection) this.onSubmit(textareaEl.value, selection);
 			this.close();
 		});
 		textareaEl.focus();
