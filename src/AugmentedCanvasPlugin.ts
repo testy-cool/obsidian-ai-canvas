@@ -358,7 +358,12 @@ export default class AugmentedCanvasPlugin extends Plugin {
 						} else {
 							// * Handles "Call AI" button
 
-							addAskAIButton(app, settings, this.menuEl);
+							addAskAIButton(
+								app,
+								settings,
+								this.menuEl,
+								selectedNode as unknown as CanvasNode
+							);
 
 							addAskQuestionButton(
 								app,

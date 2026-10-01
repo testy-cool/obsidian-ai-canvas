@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	collectNodeAndAncestors,
+	countNodeAndAncestors,
 	isPromptContextNodeIncluded,
 } from "../src/obsidian/canvasUtil";
 import { noteGenerator } from "../src/actions/canvasNodeMenuActions/noteGenerator";
@@ -52,6 +53,20 @@ describe("prompt context selection", () => {
 		expect(isPromptContextNodeIncluded("current", selected)).toBe(true);
 		expect(isPromptContextNodeIncluded("wanted-ancestor", selected)).toBe(true);
 		expect(isPromptContextNodeIncluded("unwanted-ancestor", selected)).toBe(false);
+	});
+
+	it("counts reachable cards synchronously with the same depth boundary", () => {
+		const root = { id: "root" };
+		const parent = { id: "parent" };
+		const oldest = { id: "oldest" };
+		const parents = new Map<string, { node: TestNode; edgeLabel: string }[]>([
+			["root", [{ node: parent, edgeLabel: "" }]],
+			["parent", [{ node: oldest, edgeLabel: "" }]],
+			["oldest", []],
+		]);
+		const getParents = (node: TestNode) => parents.get(node.id) ?? [];
+		expect(countNodeAndAncestors(root, 0, getParents)).toBe(3);
+		expect(countNodeAndAncestors(root, 1, getParents)).toBe(2);
 	});
 
 	it("builds messages from checked cards while traversing through unchecked cards", async () => {

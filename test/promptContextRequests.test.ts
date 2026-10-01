@@ -6,6 +6,7 @@ import { PromptContextModal } from "../src/Modals/PromptContextModal";
 import { noteGenerator } from "../src/actions/canvasNodeMenuActions/noteGenerator";
 import {
 	addAskAIButton,
+	addAskQuestionButton,
 	addRegenerateResponse,
 	handleCallAI_Question,
 } from "../src/actions/canvasNodeMenuActions/advancedCanvas";
@@ -52,6 +53,15 @@ class Element {
 			if (nested) return nested;
 		}
 		return null;
+	}
+	querySelectorAll(selector: string): Element[] {
+		const matches = this.children.filter(child =>
+			selector.startsWith(".") && child.className.split(" ").includes(selector.slice(1))
+		);
+		return [
+			...matches,
+			...this.children.flatMap(child => child.querySelectorAll(selector)),
+		];
 	}
 	remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); }
 	setAttribute(name: string, value: string) { this.attributes.set(name, value); }
@@ -341,6 +351,51 @@ describe("context picker request paths", () => {
 		expect(response.getData().ai_context_count).toBe(3);
 		expect(response.getData().ai_context_total).toBe(3);
 		expect(badge(response).querySelector(".ai-model-indicator-label")!.textContent).toBe("3 cards • Custom • test-model");
+	});
+
+	it("shows the reachable card count in both Ask tooltips", async () => {
+		const { app, prompt, settings } = fixture();
+		const menu = new Element();
+		await addAskAIButton(app, settings, menu as any, prompt);
+		addAskQuestionButton(app, settings, menu as any, prompt);
+		expect(menu.children.map(child => child.attributes.get("aria-label"))).toEqual([
+			"Ask AI (3 cards)",
+			"Ask a question… (3 cards)",
+		]);
+
+		settings.maxDepth = 1;
+		const limitedMenu = new Element();
+		await addAskAIButton(app, settings, limitedMenu as any, prompt);
+		expect(limitedMenu.children[0].attributes.get("aria-label")).toBe("Ask AI (2 cards)");
+	});
+
+	it("renders the three card toolbar actions in order", () => {
+		const { app, canvas, prompt, settings } = fixture();
+		class CanvasMenu {
+			selection = canvas.selection;
+			canvas = canvas;
+			menuEl = new Element();
+			render() { return "rendered"; }
+		}
+		const menu = new CanvasMenu();
+		canvas.menu = menu;
+		app.workspace.getLeavesOfType = () => [{ view: { canvas } }];
+		app.workspace.onLayoutReady = (callback: () => void) => callback();
+		app.workspace.trigger = vi.fn();
+		const plugin: any = new AugmentedCanvasPlugin();
+		Object.assign(plugin, { app, settings, register: vi.fn(), registerEvent: vi.fn() });
+		plugin.patchCanvasMenu();
+		expect(menu.render()).toBe("rendered");
+		expect(menu.menuEl.children.map(child => child.attributes.get("aria-label"))).toEqual([
+			"Ask AI (3 cards)",
+			"Ask a question… (3 cards)",
+			"Generate image (Custom)",
+		]);
+		expect(menu.menuEl.children.map(child => child.attributes.get("data-icon"))).toEqual([
+			"lucide-sparkles",
+			"lucide-message-square-plus",
+			"lucide-image",
+		]);
 	});
 
 	it("counts only cards that actually contribute messages", async () => {

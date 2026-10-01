@@ -93,6 +93,32 @@ export async function collectNodeAndAncestors(
 	return entries;
 }
 
+/** Count the unique current and upstream cards without reading their contents. */
+export function countNodeAndAncestors(
+	start: HasId,
+	maxDepth = 0,
+	getNodeParents: (
+		node: HasId
+	) => { node: HasId; edgeLabel: string }[] = nodeParents
+): number {
+	const visited = new Set<string>();
+	const queue: { node: HasId; depth: number }[] = [{ node: start, depth: 0 }];
+
+	while (queue.length > 0) {
+		const { node, depth } = queue.shift()!;
+		if (visited.has(node.id)) continue;
+		if (maxDepth && depth > maxDepth) break;
+		visited.add(node.id);
+		for (const parent of getNodeParents(node)) {
+			if (!visited.has(parent.node.id)) {
+				queue.push({ node: parent.node, depth: depth + 1 });
+			}
+		}
+	}
+
+	return visited.size;
+}
+
 export function isPromptContextNodeIncluded(
 	nodeId: string,
 	selectedNodeIds?: ReadonlySet<string>
