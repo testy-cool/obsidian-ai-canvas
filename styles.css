@@ -133,7 +133,10 @@
 	scrollbar-width: thin;
 }
 
-.prompt-context-option {
+/* Obsidian's own rule for settings rows inside a modal removes side padding
+   and the first and last rows' outer padding, and it outranks a single class.
+   These rows sit in a bordered list, so they need padding on every side. */
+.modal:not(.mod-settings) .prompt-context-list .setting-item.prompt-context-option:not(.setting-item-heading) {
 	padding: 12px 14px;
 }
 
