@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import * as obsidian from "obsidian";
 import AugmentedCanvasPlugin from "../src/AugmentedCanvasPlugin";
 import { PromptContextModal } from "../src/Modals/PromptContextModal";
+import { CustomQuestionModal } from "../src/Modals/CustomQuestionModal";
 import { noteGenerator } from "../src/actions/canvasNodeMenuActions/noteGenerator";
 import {
 	addAskAIButton,
@@ -141,6 +142,7 @@ beforeEach(() => {
 	vi.stubGlobal("document", { createElement: () => new Element() });
 	vi.stubGlobal("createEl", () => new Element());
 	vi.spyOn(PromptContextModal.prototype, "open");
+	vi.spyOn(CustomQuestionModal.prototype, "open");
 	vi.spyOn(obsidian, "Notice");
 	vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
 		callback("ANSWER", null, null, null);
@@ -157,6 +159,48 @@ afterEach(() => {
 });
 
 describe("context picker request paths", () => {
+	it("asks for a question instead of sending an assistant-ending conversation", async () => {
+		const { app, canvas, prompt, settings } = fixture(false);
+		prompt.setData({ chat_role: "assistant" });
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(CustomQuestionModal.prototype.open).toHaveBeenCalledOnce();
+		expect(streamResponse).not.toHaveBeenCalled();
+		expect(canvas.nodes.has("response")).toBe(false);
+	});
+
+	it("continues an assistant answer with the submitted question and picked model", async () => {
+		const { app, prompt, settings, provider, model } = fixture(false);
+		prompt.setData({ chat_role: "assistant" });
+		await run(() => noteGenerator(app, settings).generateNote());
+		const modal: any = vi.mocked(CustomQuestionModal.prototype.open).mock.instances[0];
+		expect(modal.initialSelection).toEqual({ provider, model });
+		await run(() => modal.onSubmit("What follows?", { provider, model }));
+		expect(streamResponse).toHaveBeenCalledOnce();
+		expect(vi.mocked(streamResponse).mock.calls[0][1].at(-1)).toEqual({
+			role: "user",
+			content: "What follows?",
+		});
+	});
+
+	it("does not send an empty follow-up from an assistant answer", async () => {
+		const { app, prompt, settings, provider, model } = fixture(false);
+		prompt.setData({ chat_role: "assistant" });
+		await run(() => noteGenerator(app, settings).generateNote());
+		const modal: any = vi.mocked(CustomQuestionModal.prototype.open).mock.instances[0];
+		modal.onSubmit("", { provider, model });
+		expect(streamResponse).not.toHaveBeenCalled();
+		expect(obsidian.Notice).toHaveBeenCalledWith(
+			"Type a question to continue from an AI answer."
+		);
+	});
+
+	it("still sends Ask AI immediately from a user card", async () => {
+		const { app, settings } = fixture(false);
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(CustomQuestionModal.prototype.open).not.toHaveBeenCalled();
+		expect(streamResponse).toHaveBeenCalledOnce();
+	});
+
 	it.each([false, true])("fills a response whose content has not rendered yet (regeneration: %s)", async (regenerate) => {
 		const { app, canvas, prompt, settings } = fixture(false);
 		const makeNode = canvas.makeNode;

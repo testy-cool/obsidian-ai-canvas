@@ -17,7 +17,8 @@ export class CustomQuestionModal extends Modal {
 	constructor(
 		app: App,
 		settings: AugmentedCanvasSettings,
-		onSubmit: (input: string, selection: QuestionModelSelection) => void
+		onSubmit: (input: string, selection: QuestionModelSelection) => void,
+		private readonly initialSelection?: QuestionModelSelection
 	) {
 		super(app);
 		this.settings = settings;
@@ -36,15 +37,19 @@ export class CustomQuestionModal extends Modal {
 			);
 		// Same default as plain Ask AI: the active model, else the active
 		// provider's first enabled model.
+		const preferredProviderId =
+			this.initialSelection?.provider.id || this.settings.activeProvider;
+		const preferredModelId =
+			this.initialSelection?.model.id || this.settings.apiModel;
 		const exactIndex = choices.findIndex(({ provider, model }) =>
-			provider.id === this.settings.activeProvider &&
-			model.id === this.settings.apiModel
+			provider.id === preferredProviderId &&
+			model.id === preferredModelId
 		);
 		const defaultIndex = Math.max(
 			0,
 			exactIndex >= 0
 				? exactIndex
-				: choices.findIndex(({ provider }) => provider.id === this.settings.activeProvider)
+				: choices.findIndex(({ provider }) => provider.id === preferredProviderId)
 		);
 
 		const modelLabel = contentEl.createEl("label", {

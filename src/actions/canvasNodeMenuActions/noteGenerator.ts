@@ -36,6 +36,7 @@ import {
 	PromptContextModal,
 	type PromptContextOption,
 } from "../../Modals/PromptContextModal";
+import { CustomQuestionModal } from "../../Modals/CustomQuestionModal";
 
 /**
  * Color for assistant notes: 6 == purple
@@ -631,7 +632,7 @@ export function noteGenerator(
 				.map(({ node }) => node.id);
 			const trimmedQuestion = question?.trim();
 			const { messages, tokenCount, notes, contributedNodeIds } = await buildMessages(node, {
-				prompt: question,
+				prompt: trimmedQuestion ? question : undefined,
 				selectedNodeIds,
 			});
 			const contextCount = contributedNodeIds.size;
@@ -647,6 +648,29 @@ export function noteGenerator(
 					edgeLabel: trimmedQuestion || undefined,
 					parts: parts.length ? parts : undefined,
 				});
+				return;
+			}
+			if (!trimmedQuestion && messages[messages.length - 1]?.role === "assistant") {
+				new CustomQuestionModal(
+					app,
+					settings,
+					(followUp, selection) => {
+						if (!followUp.trim()) {
+							new Notice("Type a question to continue from an AI answer.");
+							return;
+						}
+						const next = noteGenerator(
+							app,
+							settings,
+							node,
+							toNode,
+							selection.provider,
+							selection.model
+						);
+						void next.generateNote(followUp, selectedNodeIds);
+					},
+					{ provider, model }
+				).open();
 				return;
 			}
 			// logDebug({ messages });
