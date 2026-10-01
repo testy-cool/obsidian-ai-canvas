@@ -276,21 +276,25 @@ export function noteGenerator(
 		node: CanvasNode,
 		selectedNodeIds?: ReadonlySet<string>
 	) => {
-		// TODO
 		let foundPrompt: string | null = null;
+		let sourceNodeId: string | undefined;
 
-		await visitNodeAndAncestors(node, async (n: CanvasNode) => {
+		await visitNodeAndAncestors(node, async (n: CanvasNode, depth) => {
+			if (settings.maxDepth && depth > settings.maxDepth) return false;
 			if (!isPromptContextNodeIncluded(n.id, selectedNodeIds)) return true;
 			const text = await readNodeContent(n);
 			if (text && isSystemPromptNode(text)) {
 				foundPrompt = text.replace("SYSTEM PROMPT", "").trim();
+				sourceNodeId = n.id;
 				return false;
-			} else {
-				return true;
 			}
+			return true;
 		});
 
-		return foundPrompt || settings.systemPrompt;
+		return {
+			prompt: foundPrompt || settings.systemPrompt,
+			sourceNodeId,
+		};
 	};
 
 	const buildMessages = async (
@@ -307,6 +311,7 @@ export function noteGenerator(
 	) => {
 		const messages: any[] = [];
 		const notes: string[] = [];
+		const contributedNodeIds = new Set<string>();
 		let tokenCount = 0;
 
 		const provider = resolveProvider();
@@ -322,14 +327,16 @@ export function noteGenerator(
 		};
 		const canCountTokens = isGpt && typeof encodingForModel === "function";
 		const modelName = model?.model || settings.apiModel;
+		const resolvedSystemPrompt = systemPrompt
+			? { prompt: systemPrompt, sourceNodeId: undefined }
+			: await getSystemPrompt(node, selectedNodeIds);
 
 		if (canCountTokens) {
 			const encoding = encodingForModel(modelName as any);
 
 			// Note: We are not checking for system prompt longer than context window.
 			// That scenario makes no sense, though.
-			const systemPrompt2 =
-				systemPrompt || (await getSystemPrompt(node, selectedNodeIds));
+			const systemPrompt2 = resolvedSystemPrompt.prompt;
 			if (systemPrompt2) {
 				tokenCount += encoding.encode(systemPrompt2).length;
 			}
@@ -403,6 +410,7 @@ export function noteGenerator(
 					content: edgeLabel,
 					role: "user",
 				});
+				contributedNodeIds.add(node.id);
 			}
 
 			const youtubeUrls = extractYouTubeUrls(`${nodeLinkUrl}\n${nodeText}`);
@@ -441,6 +449,7 @@ export function noteGenerator(
 					content: parts,
 					role: role === "assistant" ? "user" : role,
 				});
+				contributedNodeIds.add(node.id);
 			} else if (nodeMedia?.kind === "file" && (nodeMedia.mimeType !== "application/pdf" || capabilities.pdf)) {
 				const parts: any[] = [];
 				parts.push({
@@ -461,6 +470,7 @@ export function noteGenerator(
 					content: parts,
 					role: role === "assistant" ? "user" : role,
 				});
+				contributedNodeIds.add(node.id);
 			} else if (youtubeUrls.length && capabilities.youtube) {
 				const parts: any[] = [];
 				for (const url of youtubeUrls) {
@@ -482,22 +492,26 @@ export function noteGenerator(
 						content: parts,
 						role: role === "assistant" ? "user" : role,
 					});
+					contributedNodeIds.add(node.id);
 				} else if (nodeText) {
 					messages.unshift({
 						content: nodeText,
 						role,
 					});
+					contributedNodeIds.add(node.id);
 				}
 			} else if (nodeText) {
 				messages.unshift({
 					content: nodeText,
 					role,
 				});
+				contributedNodeIds.add(node.id);
 			} else if (nodeLinkUrl) {
 				messages.unshift({
 					content: nodeLinkUrl,
 					role,
 				});
+				contributedNodeIds.add(node.id);
 			}
 
 			return shouldContinue;
@@ -505,13 +519,15 @@ export function noteGenerator(
 
 		await visitNodeAndAncestors(node, visit);
 
-		const systemPrompt2 =
-			systemPrompt || (await getSystemPrompt(node, selectedNodeIds));
+		const systemPrompt2 = resolvedSystemPrompt.prompt;
 		if (systemPrompt2)
 			messages.unshift({
 				role: "system",
 				content: systemPrompt2,
 			});
+		if (resolvedSystemPrompt.sourceNodeId) {
+			contributedNodeIds.add(resolvedSystemPrompt.sourceNodeId);
+		}
 
 		if (prompt)
 			messages.push({
@@ -519,7 +535,7 @@ export function noteGenerator(
 				content: prompt,
 			});
 
-		return { messages, tokenCount, notes };
+		return { messages, tokenCount, notes, contributedNodeIds };
 	};
 
 	const generateNote = async (
@@ -596,13 +612,13 @@ export function noteGenerator(
 				}
 				selectedNodeIds = new Set(contextEntries.map(({ node }) => node.id));
 			}
-			const contextCount = contextEntries.filter(({ node }) => isPromptContextNodeIncluded(node.id, selectedNodeIds)).length;
-
 			const trimmedQuestion = question?.trim();
-			const { messages, tokenCount, notes } = await buildMessages(node, {
+			const { messages, tokenCount, notes, contributedNodeIds } = await buildMessages(node, {
 				prompt: question,
 				selectedNodeIds,
 			});
+			const contextCount = contributedNodeIds.size;
+			const contextTotal = contextEntries.length;
 
 			if (isImageModel(provider.type, model)) {
 				const promptOverride = buildImagePromptFromMessages(messages);
@@ -646,6 +662,7 @@ export function noteGenerator(
 						ai_model: model.model,
 						ai_provider: provider.type,
 						ai_context_count: contextCount,
+						ai_context_total: contextTotal,
 						ai_notes: notes,
 					},
 					question,
@@ -663,6 +680,7 @@ export function noteGenerator(
 					ai_model: model.model,
 					ai_provider: provider.type,
 					ai_context_count: contextCount,
+					ai_context_total: contextTotal,
 					ai_notes: notes,
 					// The previous run's numbers, until this run reports its own.
 					ai_cost: undefined,

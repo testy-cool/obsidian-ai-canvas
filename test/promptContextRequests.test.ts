@@ -339,7 +339,34 @@ describe("context picker request paths", () => {
 		]);
 		const response = canvas.nodes.get("response");
 		expect(response.getData().ai_context_count).toBe(3);
+		expect(response.getData().ai_context_total).toBe(3);
 		expect(badge(response).querySelector(".ai-model-indicator-label")!.textContent).toBe("3 cards • Custom • test-model");
+	});
+
+	it("counts only cards that actually contribute messages", async () => {
+		const { app, canvas, settings } = fixture();
+		canvas.nodes.get("oldest").text = "";
+		await run(() => noteGenerator(app, settings).generateNote());
+		const data = canvas.nodes.get("response").getData();
+		expect(data.ai_context_count).toBe(2);
+		expect(data.ai_context_total).toBe(3);
+	});
+
+	it("does not count deselected cards as contributors", async () => {
+		const { app, canvas, settings } = fixture();
+		await run(() => noteGenerator(app, settings).generateNote(undefined, new Set(["prompt", "oldest"])));
+		const data = canvas.nodes.get("response").getData();
+		expect(data.ai_context_count).toBe(2);
+		expect(data.ai_context_total).toBe(3);
+	});
+
+	it("does not count cards beyond the depth limit", async () => {
+		const { app, canvas, settings } = fixture();
+		settings.maxDepth = 1;
+		await run(() => noteGenerator(app, settings).generateNote());
+		const data = canvas.nodes.get("response").getData();
+		expect(data.ai_context_count).toBe(2);
+		expect(data.ai_context_total).toBe(3);
 	});
 
 	it("the setting opens the picker and only sends the selection after Continue", async () => {
