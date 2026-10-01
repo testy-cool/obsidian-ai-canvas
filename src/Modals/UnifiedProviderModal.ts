@@ -31,6 +31,8 @@ const PRESETS: ProviderPreset[] = [
   { id: "custom", type: "Custom", baseUrl: "" },
 ];
 
+const NO_MODELS_RETURNED = "No models returned. Type model names below.";
+
 function isGeminiType(type: string): boolean {
   return ["Gemini", "Google"].includes(type);
 }
@@ -241,6 +243,10 @@ export class UnifiedProviderModal extends Modal {
 					.onChange(val => { this.provider.cliArgs = val || undefined; });
 			});
 
+		// Built further down; the first call of updateProviderFields runs before it exists.
+		// eslint-disable-next-line prefer-const -- assigned below, read in updateProviderFields
+		let connSetting: Setting | undefined;
+
 		const updateProviderFields = () => {
 			const type = this.provider.type ?? "";
 			const gemini = isGeminiType(type);
@@ -270,12 +276,15 @@ export class UnifiedProviderModal extends Modal {
 				codexSetting.setDesc(detected ? `Detected: ${detected}` : cli.hint);
 			}
 			geminiNativeSetting!.settingEl.style.display = isBifrostProvider(this.provider) ? "" : "none";
+			// Vertex has no model list to fetch.
+			if (connSetting) connSetting.settingEl.style.display = vertex ? "none" : "";
 		};
 		updateProviderFields();
 
     // --- Test connection + Fetch models ---
-    const connSetting = new Setting(contentEl).setName("Available models")
+    connSetting = new Setting(contentEl).setName("Available models")
 			.setDesc("Fetch the model list with these credentials. Test model capabilities from the Providers tab.");
+		connSetting.settingEl.style.display = isVertexType(this.provider.type ?? "") ? "none" : "";
     // eslint-disable-next-line prefer-const -- assigned inside addButton below
     let connStatus: HTMLElement;
 
@@ -296,14 +305,17 @@ export class UnifiedProviderModal extends Modal {
             connStatus?.setText(
               !detected
                 ? `Not found. ${cliUi.hint}`
+                : listed?.length === 0
+                  ? NO_MODELS_RETURNED
                 : listed
                   ? `Found ${listed.length} models`
                   : cliUi.listModels
                     ? `Could not read the model list, showing ${cliUi.models.length} known models`
                     : `Found ${cliUi.models.length} models`
             );
-            connStatus?.toggleClass("mod-success", !!detected);
-            connStatus?.toggleClass("mod-warning", !detected);
+            const empty = !detected || listed?.length === 0;
+            connStatus?.toggleClass("mod-success", !empty);
+            connStatus?.toggleClass("mod-warning", empty);
             this.renderModelList();
             return;
           }
@@ -312,9 +324,9 @@ export class UnifiedProviderModal extends Modal {
 					if (fetchVersion !== this.modelFetchVersion) return;
           this.addToModelList(models);
           this.renderLimit = UnifiedProviderModal.MODEL_PAGE_SIZE;
-          connStatus?.setText(`Found ${models.length} models`);
-          connStatus?.addClass("mod-success");
-          connStatus?.removeClass("mod-warning");
+          connStatus?.setText(models.length ? `Found ${models.length} models` : NO_MODELS_RETURNED);
+          connStatus?.toggleClass("mod-success", models.length > 0);
+          connStatus?.toggleClass("mod-warning", models.length === 0);
 
           // Auto-fetch pricing (best-effort)
           try {
@@ -446,7 +458,9 @@ export class UnifiedProviderModal extends Modal {
 
     if (filtered.length === 0 && this.fetchedModelIds.length === 0) {
       this.modelListEl.createEl("div", {
-        text: 'Click "Fetch models" to load available models.',
+        text: isVertexType(this.provider.type ?? "")
+          ? "Vertex has no model list. Type model names below."
+          : 'Click "Fetch models" to load available models.',
         cls: "setting-item-description",
       });
       return;

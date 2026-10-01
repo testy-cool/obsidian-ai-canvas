@@ -1167,3 +1167,43 @@ describe("models listed when a provider is edited", () => {
 			.toEqual(["fetched-model", "off-model", "on-model", "typed-by-hand"]);
 	});
 });
+
+
+describe("providers that return no model list", () => {
+	const fetchRow = (root: Element) => settingNamed(root, "Available models");
+
+	it("hides the fetch row for Vertex, including when the preset moves to and from it", async () => {
+		const modal: any = new UnifiedProviderModal({} as any, vi.fn());
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		const preset = settingNamed(root, "Preset").querySelector("select")!;
+		const shown = [] as string[];
+		for (const id of ["openai", "vertex", "gemini", "vertex", "azure"]) {
+			preset.value = id;
+			await preset.listeners.get("change")!();
+			shown.push(fetchRow(root).style.display);
+		}
+		expect(shown).toEqual(["", "none", "", "none", ""]);
+	});
+
+	it("hides the fetch row when a saved Vertex provider is edited, and says there is no list", () => {
+		const modal: any = new UnifiedProviderModal({} as any, vi.fn(), { id: "vertex", type: "Vertex", baseUrl: "", apiKey: "", enabled: true });
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		expect(fetchRow(root).style.display).toBe("none");
+		expect(root.querySelector(".model-checklist")!.textContent).toBe("Vertex has no model list. Type model names below.");
+	});
+
+	it("warns, without the success style, when another provider returns zero models", async () => {
+		vi.mocked(fetchProviderModels).mockResolvedValue([]);
+		const modal: any = new UnifiedProviderModal({} as any, vi.fn(), { id: "groq", type: "Groq", baseUrl: "https://example.test/v1", apiKey: "k", enabled: true });
+		modal.onOpen();
+		const row = fetchRow(modal.contentEl as Element);
+		expect(row.style.display).toBe("");
+		await row.querySelector("button")!.listeners.get("click")!();
+		const status = row.querySelector(".provider-fetch-status")!;
+		expect(status.textContent).toBe("No models returned. Type model names below.");
+		expect(status.classList.contains("mod-warning")).toBe(true);
+		expect(status.classList.contains("mod-success")).toBe(false);
+	});
+});
