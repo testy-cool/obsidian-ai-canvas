@@ -209,7 +209,7 @@ describe("settings navigation layout", () => {
 		};
 		navigate("Providers");
 		expect(content.querySelector(".provider-models-title")!.textContent).toContain("Models (3/3)");
-		expect(content.querySelector(".provider-models-desc")!.textContent).toBe("Use Add Model to fetch and enable models.");
+		expect(content.querySelector(".provider-models-desc")!.textContent).toBe("Use Edit to fetch and add models.");
 		navigate("MCP servers");
 		expect(content.querySelector(".mcp-section-header")).not.toBeNull();
 	});
@@ -1041,6 +1041,18 @@ describe("renaming a provider", () => {
 		expect(providerLabel({ type: "Azure" })).toBe("Azure");
 		expect(providerLabel({ type: "Azure", name: "  " })).toBe("Azure");
 		expect(providerLabel({ type: "Azure", name: "Work Azure" })).toBe("Work Azure");
+	});
+
+	it("has no Add Model button, since Edit opens the same box", () => {
+		const provider = { id: "empty", type: "Custom", baseUrl: "https://example.test", apiKey: "k", enabled: true };
+		const plugin: any = { settings: { ...DEFAULT_SETTINGS, providers: [provider], models: [], activeProvider: "empty" }, saveSettings: vi.fn() };
+		const tab: any = new SettingsTab({} as any, plugin);
+		const root = new Element();
+		tab.renderProviders(root);
+		const buttons = root.querySelectorAll("button").map(button => button.textContent);
+		expect(buttons).not.toContain("Add Model");
+		expect(buttons).toContain("Edit");
+		expect(root.querySelector(".provider-model-list")!.textContent).toBe("No models yet. Use Edit to fetch and add them.");
 	});
 
 	it("shows the name in the provider dropdowns and on the card", () => {

@@ -455,8 +455,7 @@ export default class SettingsTab extends PluginSettingTab {
         const header = modelsWrapper.createDiv("provider-models-header");
         const title = header.createDiv("provider-models-title");
         const titleText = title.createEl("span");
-        title.createEl("span", { text: "Use Add Model to fetch and enable models.", cls: "provider-models-desc" });
-        const actions = header.createDiv("provider-models-actions");
+        title.createEl("span", { text: "Use Edit to fetch and add models.", cls: "provider-models-desc" });
 
         const updateHeader = () => {
             const providerModels = getProviderModels();
@@ -464,33 +463,6 @@ export default class SettingsTab extends PluginSettingTab {
             titleText.setText(`Models (${enabledCount}/${providerModels.length})`);
 			refreshTestModels();
         };
-
-        const addBtn = new ButtonComponent(actions);
-        addBtn.setButtonText("Add Model");
-        addBtn.setCta();
-        addBtn.onClick(() => {
-            new UnifiedProviderModal(
-                this.app,
-                async (updated, models) => {
-                    const index = this.plugin.settings.providers.findIndex(p => p.id === provider.id);
-                    if (index > -1) {
-                        this.plugin.settings.providers[index] = updated;
-                    }
-                    this.plugin.settings.models = this.plugin.settings.models.filter(
-                        m => m.providerId !== provider.id
-                    );
-                    this.plugin.settings.models.push(...models);
-                    this.ensureActiveModelForProvider(this.plugin.settings.activeProvider);
-                    await this.plugin.saveSettings();
-                    updateHeader();
-                    renderModelList();
-                    new Notice(`Updated models for ${providerLabel(provider)}.`);
-                },
-                provider,
-                this.plugin.settings.models.filter(m => m.providerId === provider.id),
-                this.plugin.settings.providers.filter(p => p.id !== provider.id)
-            ).open();
-        });
 
 		const reportEl = modelsWrapper.createDiv("provider-capability-report");
 		const modelSetting = new Setting(reportEl).setName("Test model")
@@ -650,7 +622,7 @@ export default class SettingsTab extends PluginSettingTab {
                 .sort((a, b) => a.model.localeCompare(b.model));
 
             if (!providerModels.length) {
-                listContainer.createDiv({ text: "No models yet. Use Add Model to fetch and enable.", cls: "mod-muted" });
+                listContainer.createDiv({ text: "No models yet. Use Edit to fetch and add them.", cls: "mod-muted" });
                 return;
             }
 
