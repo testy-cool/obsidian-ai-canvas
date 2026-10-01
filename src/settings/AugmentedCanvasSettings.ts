@@ -35,7 +35,8 @@ export interface LLMModel {
 	kind?: ModelKind;
 
 	/**
-	 * Request timeout in milliseconds
+	 * Time allowed without any output, in milliseconds. A reply that keeps
+	 * arriving is never cut off, however long it takes.
 	 */
 	timeoutMs?: number;
 

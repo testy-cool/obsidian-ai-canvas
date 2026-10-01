@@ -420,12 +420,15 @@ export const streamResponse = async (
 	const canUseSearch = useGoogle && capabilities.search && supportsSearchGrounding(modelId);
 	const canUseUrlContext = useGoogle && capabilities.urlContext && supportsUrlContext(modelId);
 
-	// Default timeout: 600s for flex tier, 60s otherwise
+	// Default silence limit: 600s for flex tier, 60s otherwise. It is the time
+	// allowed without any stream activity, not a limit on the whole answer.
 	const isFlexTier = providerParams?.serviceTier === "flex";
 	const wantsFlexFallback = isFlexTier && providerParams?.flexFallback === true;
 	const effectiveTimeout = timeoutMs ?? (isFlexTier ? 600_000 : 60_000);
 
 	let cleanupAttempt = () => {};
+	// Restarts the silence timer of the attempt that is running right now.
+	let rearmTimer = () => {};
 	let receivedText = "";
 	const runStream = (useSearchGrounding: boolean, useUrlContext: boolean) => {
 		cleanupAttempt();
@@ -445,10 +448,16 @@ export const streamResponse = async (
 
 		const abortController = new AbortController();
 		const abortRequest = () => abortController.abort();
-		const timer = setTimeout(abortRequest, effectiveTimeout);
+		let timer: ReturnType<typeof setTimeout> | undefined = setTimeout(abortRequest, effectiveTimeout);
 		abortSignal?.addEventListener("abort", abortRequest, { once: true });
-		cleanupAttempt = () => {
+		rearmTimer = () => {
+			if (timer === undefined) return;
 			clearTimeout(timer);
+			timer = setTimeout(abortRequest, effectiveTimeout);
+		};
+		cleanupAttempt = () => {
+			if (timer !== undefined) clearTimeout(timer);
+			timer = undefined;
 			abortSignal?.removeEventListener("abort", abortRequest);
 		};
 
@@ -511,6 +520,7 @@ export const streamResponse = async (
 
 	try {
 		for await (const part of result.fullStream) {
+			rearmTimer();
 			throwIfStopped();
 			logDebug("[AI Canvas] Stream event:", part.type, part.type === 'text-delta' ? (part as any).textDelta?.substring(0, 50) : '');
 			switch (part.type) {
