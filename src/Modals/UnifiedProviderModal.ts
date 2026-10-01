@@ -110,6 +110,8 @@ export class UnifiedProviderModal extends Modal {
       this.selectedModelIds = new Set(
         existingModels.filter((m) => m.enabled).map((m) => m.model)
       );
+      // Edit opens with the provider's own models listed, on or off.
+      this.fetchedModelIds = existingModels.map((m) => m.model);
     }
 
     for (const m of existingModels) {
@@ -290,7 +292,7 @@ export class UnifiedProviderModal extends Modal {
             const detected = cliUi.detect(this.provider.binaryPath);
             const listed = detected && cliUi.listModels ? await cliUi.listModels(detected) : null;
             if (fetchVersion !== this.modelFetchVersion) return;
-            this.fetchedModelIds = listed ?? cliUi.models;
+            this.addToModelList(listed ?? cliUi.models);
             connStatus?.setText(
               !detected
                 ? `Not found. ${cliUi.hint}`
@@ -308,7 +310,7 @@ export class UnifiedProviderModal extends Modal {
 
           const models = await fetchProviderModels({ ...this.provider } as LLMProvider);
 					if (fetchVersion !== this.modelFetchVersion) return;
-          this.fetchedModelIds = models;
+          this.addToModelList(models);
           this.renderLimit = UnifiedProviderModal.MODEL_PAGE_SIZE;
           connStatus?.setText(`Found ${models.length} models`);
           connStatus?.addClass("mod-success");
@@ -423,6 +425,11 @@ export class UnifiedProviderModal extends Modal {
     let id = slug;
     for (let n = 2; taken.has(id); n++) id = `${slug}-${n}`;
     return id;
+  }
+
+  /** Fetched models join the list; ones already there or typed by hand stay. */
+  private addToModelList(ids: string[]): void {
+    this.fetchedModelIds = [...new Set([...this.fetchedModelIds, ...ids])];
   }
 
   private getFilteredModelIds(): string[] {

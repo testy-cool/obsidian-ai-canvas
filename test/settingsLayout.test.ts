@@ -1137,3 +1137,33 @@ describe("saving an edited provider", () => {
 		expect("name" in onSave.mock.calls[1][0]).toBe(false);
 	});
 });
+
+
+describe("models listed when a provider is edited", () => {
+	const provider = { id: "bifrost", type: "Bifrost", baseUrl: "https://example.test/v1", apiKey: "k", enabled: true };
+	const models = [
+		{ id: "m0", model: "on-model", providerId: "bifrost", enabled: true },
+		{ id: "m1", model: "off-model", providerId: "bifrost", enabled: false },
+	];
+
+	it("lists the provider's own models, ticked when on, before anything is fetched", () => {
+		const modal: any = new UnifiedProviderModal({} as any, vi.fn(), provider, models);
+		modal.onOpen();
+		const rows = (modal.contentEl as Element).querySelectorAll(".model-check-item");
+		expect(rows.map(row => [row.querySelector(".model-check-label")!.textContent, row.querySelector("input")!.checked]))
+			.toEqual([["on-model", true], ["off-model", false]]);
+		expect((modal.contentEl as Element).textContent).not.toContain('Click "Fetch models"');
+	});
+
+	it("keeps a hand-typed model and the provider's own models when Fetch returns a list", async () => {
+		vi.mocked(fetchProviderModels).mockResolvedValue(["fetched-model", "on-model"]);
+		const modal: any = new UnifiedProviderModal({} as any, vi.fn(), provider, models);
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		modal.customModelInput = "typed-by-hand";
+		await root.querySelectorAll("button").find(button => button.textContent === "+ Add")!.listeners.get("click")!();
+		await root.querySelector(".provider-fetch-button")!.listeners.get("click")!();
+		expect(root.querySelectorAll(".model-check-label").map(label => label.textContent).sort())
+			.toEqual(["fetched-model", "off-model", "on-model", "typed-by-hand"]);
+	});
+});
