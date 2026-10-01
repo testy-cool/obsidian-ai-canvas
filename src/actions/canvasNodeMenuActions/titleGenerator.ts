@@ -1,9 +1,8 @@
-import { App, Notice, setIcon, setTooltip } from "obsidian";
+import { App, Notice } from "obsidian";
 import { CanvasNode } from "../../obsidian/canvas-internal";
 import { visitNodeAndAncestors } from "../../obsidian/canvasUtil";
 import { readNodeContent } from "../../obsidian/fileUtil";
 import { AugmentedCanvasSettings } from "../../settings/AugmentedCanvasSettings";
-import { getActiveCanvasNodes } from "../../utils";
 import { getResponse } from "../../utils/llm";
 
 const CARD_TITLE_SYSTEM_PROMPT_FALLBACK = `
@@ -378,42 +377,4 @@ export const generateGroupName = async (
 	} catch (error) {
 		new Notice(`Error generating group name: ${error.message || error}`);
 	}
-};
-
-export const addGenerateCardTitleButton = (
-	app: App,
-	settings: AugmentedCanvasSettings,
-	menuEl: HTMLElement
-) => {
-	if (!settings.enableCardTitleGeneration) return;
-
-	const buttonEl = createEl("button", "clickable-icon ai-menu-item");
-	setTooltip(buttonEl, "Generate card title", { placement: "top" });
-	setIcon(buttonEl, "lucide-type");
-	menuEl.appendChild(buttonEl);
-
-	buttonEl.addEventListener("click", async () => {
-		const nodes = getActiveCanvasNodes(app);
-		if (!nodes || nodes.length !== 1) return;
-		await generateCardTitle(app, settings, nodes[0], { force: true });
-	});
-};
-
-export const addGenerateGroupNameButton = (
-	app: App,
-	settings: AugmentedCanvasSettings,
-	menuEl: HTMLElement
-) => {
-	if (!settings.enableGroupTitleGeneration) return;
-
-	const buttonEl = createEl("button", "clickable-icon ai-menu-item");
-	setTooltip(buttonEl, "Generate group name", { placement: "top" });
-	setIcon(buttonEl, "lucide-tag");
-	menuEl.appendChild(buttonEl);
-
-	buttonEl.addEventListener("click", async () => {
-		const nodes = getActiveCanvasNodes(app);
-		if (!nodes || nodes.length !== 1) return;
-		await generateGroupName(app, settings, nodes[0]);
-	});
 };
