@@ -48385,6 +48385,8 @@ var streamResponse = async (provider, messages, {
   const effectiveTimeout = timeoutMs != null ? timeoutMs : isFlexTier ? 6e5 : 6e4;
   let cleanupAttempt = () => {
   };
+  let rearmTimer = () => {
+  };
   let receivedText = "";
   const runStream = (useSearchGrounding, useUrlContext) => {
     cleanupAttempt();
@@ -48402,10 +48404,18 @@ var streamResponse = async (provider, messages, {
     });
     const abortController = new AbortController();
     const abortRequest = () => abortController.abort();
-    const timer = setTimeout(abortRequest, effectiveTimeout);
+    let timer = setTimeout(abortRequest, effectiveTimeout);
     abortSignal == null ? void 0 : abortSignal.addEventListener("abort", abortRequest, { once: true });
-    cleanupAttempt = () => {
+    rearmTimer = () => {
+      if (timer === void 0)
+        return;
       clearTimeout(timer);
+      timer = setTimeout(abortRequest, effectiveTimeout);
+    };
+    cleanupAttempt = () => {
+      if (timer !== void 0)
+        clearTimeout(timer);
+      timer = void 0;
       abortSignal == null ? void 0 : abortSignal.removeEventListener("abort", abortRequest);
     };
     const streamConfig = {
@@ -48464,6 +48474,7 @@ var streamResponse = async (provider, messages, {
   }
   try {
     for await (const part of result.fullStream) {
+      rearmTimer();
       throwIfStopped();
       logDebug("[AI Canvas] Stream event:", part.type, part.type === "text-delta" ? (_a20 = part.textDelta) == null ? void 0 : _a20.substring(0, 50) : "");
       switch (part.type) {
@@ -51163,14 +51174,20 @@ ${nodeText}`);
             errorDetail = error40.message;
           }
           new import_obsidian13.Notice(`Error calling the AI: ${errorDetail}`, 1e4);
-          created.setText(`**Error:** ${errorDetail}`);
-          const errorDimensions = calculateNoteDimensions(created.text, 300, 500);
-          created.moveAndResize({
-            height: errorDimensions.height,
-            width: errorDimensions.width,
-            x: created.x,
-            y: created.y
-          });
+          if (created.text.trim()) {
+            created.setText(`${created.text}
+
+**Error:** ${errorDetail}`);
+          } else {
+            created.setText(`**Error:** ${errorDetail}`);
+            const errorDimensions = calculateNoteDimensions(created.text, 300, 500);
+            created.moveAndResize({
+              height: errorDimensions.height,
+              width: errorDimensions.width,
+              x: created.x,
+              y: created.y
+            });
+          }
         }
       } finally {
         generationStatus == null ? void 0 : generationStatus.destroy();
