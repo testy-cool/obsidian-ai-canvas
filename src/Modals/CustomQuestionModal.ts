@@ -34,18 +34,24 @@ export class CustomQuestionModal extends Modal {
 					.filter(model => model.providerId === provider.id && model.enabled)
 					.map(model => ({ provider, model }))
 			);
+		// Same default as plain Ask AI: the active model, else the active
+		// provider's first enabled model.
+		const exactIndex = choices.findIndex(({ provider, model }) =>
+			provider.id === this.settings.activeProvider &&
+			model.id === this.settings.apiModel
+		);
 		const defaultIndex = Math.max(
 			0,
-			choices.findIndex(({ provider, model }) =>
-				provider.id === this.settings.activeProvider &&
-				model.id === this.settings.apiModel
-			)
+			exactIndex >= 0
+				? exactIndex
+				: choices.findIndex(({ provider }) => provider.id === this.settings.activeProvider)
 		);
 
 		const modelLabel = contentEl.createEl("label", {
 			text: "Model",
+			cls: "augmented-canvas-modal-model",
 		});
-		const modelSelect = modelLabel.createEl("select");
+		const modelSelect = modelLabel.createEl("select", { cls: "dropdown" });
 		modelSelect.setAttribute("aria-label", "Model");
 		choices.forEach(({ provider, model }, index) => {
 			const option = modelSelect.createEl("option", {

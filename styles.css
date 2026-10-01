@@ -20,6 +20,19 @@
 	padding: 12px;
 }
 
+.augmented-canvas-modal-model {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	font-size: var(--font-ui-small);
+}
+
+.augmented-canvas-modal-model select {
+	flex-grow: 1;
+	min-width: 0;
+}
+
 .augmented-canvas-modal-hint {
 	align-self: flex-start;
 	font-size: 12px;
