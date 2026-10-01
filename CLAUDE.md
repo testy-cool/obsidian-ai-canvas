@@ -10,7 +10,7 @@ Always use `pnpm` (pinned via `packageManager` in `package.json`).
 - `pnpm run build` — `tsc -noEmit` type check, then esbuild production build.
 - `pnpm run deploy` — build and copy `main.js`, `manifest.json`, `styles.css` into the local vault at `/home/testycool/Obsidian-New/.obsidian/plugins/obsidian-ai-canvas` (path is hardcoded in `deploy.mjs`). Reload the plugin in Obsidian afterwards.
 - `pnpm run build:diff` — build, then diff the shipped `main.js` against the one that was there before. Use it to prove a cleanup changed nothing in the build. Tree-shaken code never reaches the bundle, so an unused export shows as no change.
-- `pnpm test` — run the Vitest suite once (39 files, 442 tests). `pnpm run test:watch` for watch mode.
+- `pnpm test` — run the Vitest suite once (39 files, 445 tests). `pnpm run test:watch` for watch mode.
 - Single test file: `pnpm exec vitest run test/mcp.test.ts`. Single test by name: `pnpm exec vitest run -t "name"`.
 - `pnpm run lint` — eslint over `src`. Unused imports are auto-fixable, so `pnpm exec eslint src --ext .ts --fix` clears them.
 - `pnpm dlx knip` — finds dead files, unused dependencies and exports nothing imports. Config in `knip.json`; it is not a dependency, run it on demand. The tree passes it, so any problem it reports is yours. `no-explicit-any` and `no-non-null-assertion` are off on purpose: Obsidian does not expose the Canvas API, so the internals are untyped by necessity and flagging every one buried the real problems.
@@ -44,7 +44,7 @@ Two persistence hooks re-attach UI on `active-leaf-change` / `layout-change` bec
 4. `streamResponse` from `src/utils/llm.ts` streams into the card, periodically resizing it to a 3:5 aspect ratio. Reasoning deltas render as `<details>` blocks, MCP tool calls render as live status pills, and the status phase follows the stream (`Connecting tools…`, `Thinking…`, `Using <tool>…`).
 5. On completion the card's `unknownData` keeps the model, provider, and context counts used for the request; the model badge is drawn, auto-titling runs if enabled, and any ```html fence is mounted as a preview.
 
-Metadata the plugin stores on canvas nodes (`unknownData`): `ai_provider`, `ai_model`, `ai_cost` (dollars, drawn in the badge), `ai_usage` (input, output and cached tokens; the badge shows the cached share), `ai_duration_ms` (shown with the tokens when the card is selected), `ai_context_count` (cards that contributed), `ai_context_total` (all reachable cards), `ai_notes`, `isGenerated`, `imagePrompt`, `questions`.
+Metadata the plugin stores on canvas nodes (`unknownData`): `ai_provider`, `ai_model`, `ai_cost` (dollars, drawn in the badge), `ai_usage` (input, output and cached tokens; the badge shows the cached share), `ai_duration_ms` (shown with the tokens when the card is selected), `ai_context_count` (cards that contributed), `ai_context_total` (all reachable cards), `ai_context_excluded` (card IDs switched off for regeneration), `ai_notes`, `isGenerated`, `imagePrompt`, `questions`.
 
 Cancellation: `abortSignal` threads from `noteGenerator.ts` through `llm.ts` and `ai.ts` into `codexCli.ts`, `cancelActiveGenerations()` stops every running card on plugin unload, and an aborted run must not fall through to the flex/retry fallback in `ai.ts`. `test/codexCancellation.test.ts` and `test/flexFallback.test.ts` guard that.
 

@@ -479,6 +479,52 @@ describe("context picker request paths", () => {
 		expect(response.getData().ai_context_count).toBe(3);
 	});
 
+	it("ordinary regeneration reuses saved exclusions", async () => {
+		const { app, settings, canvas, prompt } = fixture();
+		const response = canvas.makeNode("existing-response", "OLD ANSWER");
+		response.setData({ ai_context_excluded: ["parent"] });
+		canvas.selection = new Set([{ from: { node: prompt }, to: { node: response } }]);
+		const menu = new Element();
+		await addRegenerateResponse(app, settings, menu as any);
+		await run(() => menu.children[0].click());
+		expect(vi.mocked(streamResponse).mock.calls[0][1].map((message: any) => message.content))
+			.toEqual(["SYSTEM", "OLDEST", "CURRENT"]);
+		expect(response.getData().ai_context_excluded).toEqual(["parent"]);
+		expect(response.getData().ai_context_count).toBe(2);
+		expect(response.getData().ai_context_total).toBe(3);
+	});
+
+	it("chosen context starts from, replaces and clears saved exclusions", async () => {
+		const { app, settings, canvas, prompt } = fixture();
+		const response = canvas.makeNode("existing-response", "OLD ANSWER");
+		response.setData({ ai_context_excluded: ["parent"] });
+		canvas.selection = new Set([{ from: { node: prompt }, to: { node: response } }]);
+		const menu = new Element();
+		await addRegenerateResponse(app, settings, menu as any);
+		await run(() => menu.children[1].click());
+		const firstModal: any = vi.mocked(PromptContextModal.prototype.open).mock.instances[0];
+		expect([...firstModal.selectedNodeIds]).toEqual(["prompt", "oldest"]);
+		await run(() => firstModal.onSubmit(new Set(["prompt", "parent"])));
+		expect(response.getData().ai_context_excluded).toEqual(["oldest"]);
+
+		await run(() => menu.children[1].click());
+		const secondModal: any = vi.mocked(PromptContextModal.prototype.open).mock.instances[1];
+		expect([...secondModal.selectedNodeIds]).toEqual(["prompt", "parent"]);
+		await run(() => secondModal.onSubmit(new Set(["prompt", "parent", "oldest"])));
+		expect(response.getData().ai_context_excluded).toBeUndefined();
+	});
+
+	it("the always-ask picker starts with saved exclusions switched off", async () => {
+		const { app, settings, canvas, prompt } = fixture();
+		settings.alwaysAskPromptContext = true;
+		const response = canvas.makeNode("existing-response", "OLD ANSWER");
+		response.setData({ ai_context_excluded: ["oldest"] });
+		await run(() => noteGenerator(app, settings, prompt, response).generateNote());
+		const modal: any = vi.mocked(PromptContextModal.prototype.open).mock.instances[0];
+		expect([...modal.selectedNodeIds]).toEqual(["prompt", "parent"]);
+		expect(streamResponse).not.toHaveBeenCalled();
+	});
+
 	it("keeps the context badge during streaming and restores it through canvas events", async () => {
 		const { app, canvas, settings, events } = fixture();
 		const cleanup = setupCanvasIndicatorPersistence(app);

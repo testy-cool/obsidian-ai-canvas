@@ -584,6 +584,11 @@ export function noteGenerator(
 			await sleep(200);
 
 			const contextEntries = await collectNodeAndAncestors(node);
+			const savedExcludedNodeIds = new Set<string>(
+				Array.isArray(toNode?.getData()?.ai_context_excluded)
+					? toNode.getData().ai_context_excluded
+					: []
+			);
 			if (!selectedNodeIds) {
 				if (chooseContext || (settings.alwaysAskPromptContext && contextEntries.length > 1)) {
 					const contextOptions: PromptContextOption[] = await Promise.all(
@@ -605,13 +610,25 @@ export function noteGenerator(
 							return { id: canvasNode.id, depth, preview };
 						})
 					);
-					new PromptContextModal(app, contextOptions, (selection) => {
-						void generateNote(question, selection);
-					}).open();
+					new PromptContextModal(
+						app,
+						contextOptions,
+						(selection) => {
+							void generateNote(question, selection);
+						},
+						savedExcludedNodeIds
+					).open();
 					return;
 				}
-				selectedNodeIds = new Set(contextEntries.map(({ node }) => node.id));
+				selectedNodeIds = new Set(
+					contextEntries
+						.filter(({ node }) => !savedExcludedNodeIds.has(node.id))
+						.map(({ node }) => node.id)
+				);
 			}
+			const excludedNodeIds = contextEntries
+				.filter(({ node }) => !selectedNodeIds!.has(node.id))
+				.map(({ node }) => node.id);
 			const trimmedQuestion = question?.trim();
 			const { messages, tokenCount, notes, contributedNodeIds } = await buildMessages(node, {
 				prompt: question,
@@ -663,6 +680,9 @@ export function noteGenerator(
 						ai_provider: provider.type,
 						ai_context_count: contextCount,
 						ai_context_total: contextTotal,
+						...(excludedNodeIds.length
+							? { ai_context_excluded: excludedNodeIds }
+							: {}),
 						ai_notes: notes,
 					},
 					question,
@@ -681,6 +701,9 @@ export function noteGenerator(
 					ai_provider: provider.type,
 					ai_context_count: contextCount,
 					ai_context_total: contextTotal,
+					ai_context_excluded: excludedNodeIds.length
+						? excludedNodeIds
+						: undefined,
 					ai_notes: notes,
 					// The previous run's numbers, until this run reports its own.
 					ai_cost: undefined,

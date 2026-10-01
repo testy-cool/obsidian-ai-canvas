@@ -12,10 +12,16 @@ export class PromptContextModal extends Modal {
 	constructor(
 		app: App,
 		private readonly options: PromptContextOption[],
-		private readonly onSubmit: (selectedNodeIds: ReadonlySet<string>) => void
+		private readonly onSubmit: (selectedNodeIds: ReadonlySet<string>) => void,
+		initialExcludedNodeIds: ReadonlySet<string> = new Set()
 	) {
 		super(app);
-		this.selectedNodeIds = new Set(options.map((option) => option.id));
+		this.selectedNodeIds = new Set(
+			options
+				.filter((option) => !initialExcludedNodeIds.has(option.id))
+				.map((option) => option.id)
+		);
+		if (options[0]) this.selectedNodeIds.add(options[0].id);
 	}
 
 	onOpen(): void {
@@ -75,7 +81,7 @@ export class PromptContextModal extends Modal {
 			setting.settingEl.addClass("prompt-context-option");
 			setting.addToggle((toggle) => {
 				toggles.set(option.id, toggle);
-				toggle.setValue(true);
+				toggle.setValue(this.selectedNodeIds.has(option.id));
 				if (isCurrent) toggle.setDisabled(true);
 				toggle.onChange((selected) => {
 					if (selected) {
