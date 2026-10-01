@@ -1104,6 +1104,25 @@ describe("saving an edited provider", () => {
 		expect(onSave.mock.calls[0][1]).toEqual([expect.objectContaining(model)]);
 	});
 
+	it("keeps models that are switched off, and turns on one the user ticks", () => {
+		const onSave = vi.fn();
+		const provider = { id: "bifrost", type: "Bifrost", baseUrl: "https://example.test/v1", apiKey: "k", enabled: true };
+		const models = ["on-model", "off-model", "later-model"].map((model, index) => ({
+			id: `m${index}`, model, providerId: "bifrost", enabled: model === "on-model",
+		}));
+		const modal: any = new UnifiedProviderModal({} as any, onSave, provider, models);
+		modal.onOpen();
+		modal.save();
+		const unchanged = onSave.mock.calls[0][1];
+		expect(unchanged.map((m: any) => [m.id, m.enabled]).sort()).toEqual([["m0", true], ["m1", false], ["m2", false]]);
+
+		modal.selectedModelIds.add("off-model");
+		modal.selectedModelIds.delete("on-model");
+		modal.save();
+		const changed = onSave.mock.calls[1][1];
+		expect(changed.map((m: any) => [m.id, m.enabled]).sort()).toEqual([["m0", false], ["m1", true], ["m2", false]]);
+	});
+
 	it("keeps provider fields the box does not show and drops a name that went back to the kind", async () => {
 		const onSave = vi.fn();
 		const saved: any = { id: "gemini", type: "Gemini", name: "Work Gemini", baseUrl: "", apiKey: "k", enabled: true, addedLater: "kept" };

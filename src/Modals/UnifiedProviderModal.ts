@@ -608,7 +608,7 @@ export class UnifiedProviderModal extends Modal {
 			provider.capabilityReports = undefined;
 		}
 
-    const models: LLMModel[] = [...this.selectedModelIds].map((modelId) => {
+    const ticked: LLMModel[] = [...this.selectedModelIds].map((modelId) => {
       const existing = this.existingModels.find((m) => m.model === modelId);
       const price = this.pricingData?.get(modelId);
       const defaultParams = getDefaultProviderParams(modelId, provider.type);
@@ -619,7 +619,7 @@ export class UnifiedProviderModal extends Modal {
         id: existing?.id ?? `${provider.id}-${modelId}`,
         providerId: provider.id,
         model: modelId,
-        enabled: existing?.enabled ?? true,
+        enabled: true,
         timeoutMs: existing?.timeoutMs,
         maxRetries: existing?.maxRetries,
         inputCostPerMillion: existing?.costOverridden
@@ -638,7 +638,12 @@ export class UnifiedProviderModal extends Modal {
       };
     });
 
-    this.onSave(provider, models);
+    // A model the provider already has stays in its list, switched off, when it is not ticked.
+    const switchedOff: LLMModel[] = this.existingModels
+      .filter((m) => !this.selectedModelIds.has(m.model))
+      .map((m) => ({ ...m, enabled: false }));
+
+    this.onSave(provider, [...ticked, ...switchedOff]);
     this.close();
   }
 
