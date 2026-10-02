@@ -51337,6 +51337,26 @@ function migrateAutoPreviewHtmlSettings(settings2) {
   settings2.autoPreviewHtmlMigrated = true;
   return true;
 }
+function clearStaleImageSelection(settings2) {
+  if (settings2.imageProviderId && !settings2.providers.some((provider) => provider.id === settings2.imageProviderId)) {
+    settings2.imageProviderId = "";
+  }
+  if (settings2.imageModelId) {
+    const resolvedProviderId = settings2.imageProviderId || settings2.activeProvider;
+    const enabledImageModels = settings2.models.filter((model) => model.providerId === resolvedProviderId && model.enabled);
+    if (!enabledImageModels.some((model) => model.id === settings2.imageModelId)) {
+      settings2.imageModelId = "";
+    }
+  }
+}
+var LEGACY_DEFAULT_PROVIDER_IDS = /* @__PURE__ */ new Set(["openai", "anthropic", "groq", "openrouter", "gemini", "ollama"]);
+var LEGACY_DEFAULT_MODEL_IDS = /* @__PURE__ */ new Set(["default", "default-mini", "claude-3-sonnet", "claude-3-opus", "gemini-pro"]);
+function isUntouchedLegacyDefaults(providers, models) {
+  return providers.length > 1 && models.every((model) => model.providerId === "gemini" || LEGACY_DEFAULT_MODEL_IDS.has(model.id)) && providers.every((provider) => {
+    var _a20, _b19;
+    return LEGACY_DEFAULT_PROVIDER_IDS.has(provider.id) && ((_a20 = provider.type) == null ? void 0 : _a20.toLowerCase()) === provider.id && !provider.name && !((_b19 = provider.apiKey) == null ? void 0 : _b19.trim());
+  });
+}
 var DEFAULT_SYSTEM_PROMPT = `
 You must respond in markdown.
 The response must be in the same language the user used, default to english.
@@ -51630,6 +51650,7 @@ var PRESETS = [
   { id: "anthropic", type: "Anthropic", baseUrl: "https://api.anthropic.com/v1" },
   { id: "groq", type: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
   { id: "openrouter", type: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
+  { id: "bifrost", type: "Bifrost", baseUrl: "" },
   { id: "azure", type: "Azure", baseUrl: "" },
   { id: "gemini", type: "Gemini", baseUrl: GEMINI_BASE_URL },
   { id: "vertex", type: "Vertex", baseUrl: "" },
@@ -51641,6 +51662,13 @@ var PRESETS = [
   { id: "local-command", type: CLI_ADAPTERS.custom.providerType, baseUrl: "" },
   { id: "custom", type: "Custom", baseUrl: "" }
 ];
+var KIND_IDS = /* @__PURE__ */ new Map([
+  ["gemini", ["Gemini", "Google"]],
+  ["google", ["Gemini", "Google"]],
+  ["vertex", ["Vertex"]],
+  ["azure", ["Azure"]],
+  ["ollama", ["Ollama"]]
+]);
 var NO_MODELS_RETURNED = "No models returned. Type model names below.";
 function isGeminiType(type) {
   return ["Gemini", "Google"].includes(type);
@@ -51650,6 +51678,9 @@ function isVertexType(type) {
 }
 function isCodexType(type) {
   return type === "Codex";
+}
+function takesOpenAIRoute(type) {
+  return !isGeminiType(type) && !isVertexType(type) && !isCodexType(type) && type !== "Azure" && !cliAdapterForProviderType(type);
 }
 function localCliUi(type) {
   if (isCodexType(type)) {
@@ -51973,11 +52004,15 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
     var _a20;
     return (_a20 = this.provider.name) != null ? _a20 : this.editing ? providerLabel(this.provider) : "";
   }
-  freeId(name20, others) {
+  freeId(name20, type, others) {
     const slug = name20.toLowerCase().replace(/\s+/g, "-");
     const taken = new Set(others.map((o) => o.id));
+    const isTaken = (id2) => {
+      var _a20, _b19;
+      return taken.has(id2) || !((_b19 = (_a20 = KIND_IDS.get(id2)) == null ? void 0 : _a20.includes(type)) != null ? _b19 : true);
+    };
     let id = slug;
-    for (let n = 2; taken.has(id); n++)
+    for (let n = 2; isTaken(id); n++)
       id = `${slug}-${n}`;
     return id;
   }
@@ -52121,7 +52156,9 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
       var _a21;
       return o.id !== ((_a21 = this.initialProvider) == null ? void 0 : _a21.id);
     });
-    const type = ((_a20 = p.type) == null ? void 0 : _a20.trim()) || "Custom";
+    let type = ((_a20 = p.type) == null ? void 0 : _a20.trim()) || "Custom";
+    if (takesOpenAIRoute(type) && (isBifrostProvider({ ...p, name: name20 }) || isBifrostProvider(this.initialProvider)))
+      type = "Bifrost";
     if (!name20) {
       new import_obsidian18.Notice("Provider name is required.");
       this.setFieldError(this.nameField, "Provider name is required.", true);
@@ -52138,12 +52175,12 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
     }
     const provider = {
       ...this.initialProvider,
-      id: (_d = (_c = this.initialProvider) == null ? void 0 : _c.id) != null ? _d : this.freeId(name20, others),
+      id: (_d = (_c = this.initialProvider) == null ? void 0 : _c.id) != null ? _d : this.freeId(name20, type, others),
       type,
       baseUrl: isGeminiType(type) ? GEMINI_BASE_URL : (_e = p.baseUrl) != null ? _e : "",
       apiKey: (_f = p.apiKey) != null ? _f : "",
       enabled: (_g = p.enabled) != null ? _g : true,
-      geminiNative: isBifrostProvider(p) && ((_h = p.geminiNative) != null ? _h : false),
+      geminiNative: isBifrostProvider({ ...p, type }) && ((_h = p.geminiNative) != null ? _h : false),
       capabilityReport: p.capabilityReport,
       capabilityReports: p.capabilityReports,
       projectId: p.projectId,
@@ -52156,9 +52193,18 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
       provider.name = name20;
     else
       delete provider.name;
-    if (this.initialProvider && ["apiKey", "baseUrl", "type", "geminiNative", "projectId", "location", "serviceAccountJson"].some((key) => key === "geminiNative" ? !!provider.geminiNative !== !!this.initialProvider.geminiNative : provider[key] !== this.initialProvider[key])) {
-      provider.capabilityReport = void 0;
-      provider.capabilityReports = void 0;
+    if (this.initialProvider) {
+      const initial = this.initialProvider;
+      const promoted = provider.type === "Bifrost" && initial.type !== "Bifrost";
+      const changed = ["apiKey", "baseUrl", "type", "geminiNative", "projectId", "location", "serviceAccountJson"].some((key) => key === "type" && promoted ? false : key === "geminiNative" ? !!provider.geminiNative !== !!initial.geminiNative : provider[key] !== initial[key]);
+      if (changed) {
+        provider.capabilityReport = void 0;
+        provider.capabilityReports = void 0;
+      } else if (promoted && provider.capabilityReports) {
+        const oldRoute = getCapabilityRoute(initial);
+        const newRoute = getCapabilityRoute(provider);
+        provider.capabilityReports = Object.fromEntries(Object.entries(provider.capabilityReports).map(([key, report]) => report.route === oldRoute && report.model !== void 0 ? [getCapabilityReportKey(provider, report.model), { ...report, route: newRoute }] : [key, report]));
+      }
     }
     const ticked = [...this.selectedModelIds].map((modelId) => {
       var _a21, _b20, _c2, _d2, _e2, _f2, _g2;
@@ -52436,8 +52482,8 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     this.capabilityModels = /* @__PURE__ */ new Map();
     this.capabilityProgress = /* @__PURE__ */ new Map();
     this.capabilityViews = /* @__PURE__ */ new Map();
-    this.modelFilters = {};
-    this.modelEnabledOnly = {};
+    this.modelFilters = /* @__PURE__ */ new Map();
+    this.modelEnabledOnly = /* @__PURE__ */ new Map();
     this.activeSectionId = "general";
     this.searchQuery = "";
     this.plugin = plugin;
@@ -52630,6 +52676,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
           this.plugin.settings.models = this.plugin.settings.models.filter((m) => m.providerId !== provider.id);
           this.plugin.settings.models.push(...models);
           this.ensureActiveModelForProvider(this.plugin.settings.activeProvider);
+          clearStaleImageSelection(this.plugin.settings);
           await this.plugin.saveSettings();
           this.display();
         }, provider, this.plugin.settings.models.filter((m) => m.providerId === provider.id), this.plugin.settings.providers.filter((p) => p.id !== provider.id)).open();
@@ -52650,6 +52697,8 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
         const removedModels = this.plugin.settings.models.map((model, index) => ({ model, index })).filter(({ model }) => model.providerId === provider.id);
         const previousActiveProvider = this.plugin.settings.activeProvider;
         const previousApiModel = this.plugin.settings.apiModel;
+        const previousImageProviderId = this.plugin.settings.imageProviderId;
+        const previousImageModelId = this.plugin.settings.imageModelId;
         if (this.plugin.settings.activeProvider === provider.id) {
           const remainingProviders = this.plugin.settings.providers.filter((p) => p.id !== provider.id);
           if (remainingProviders.length > 0) {
@@ -52662,6 +52711,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
         }
         this.plugin.settings.providers = this.plugin.settings.providers.filter((p) => p.id !== provider.id);
         this.plugin.settings.models = this.plugin.settings.models.filter((m) => m.providerId !== provider.id);
+        clearStaleImageSelection(this.plugin.settings);
         await this.plugin.saveSettings();
         this.display();
         this.showUndoNotice(`Deleted ${providerLabel(provider)}.`, () => {
@@ -52671,6 +52721,9 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
           }
           this.plugin.settings.activeProvider = previousActiveProvider;
           this.plugin.settings.apiModel = previousApiModel;
+          this.plugin.settings.imageProviderId = previousImageProviderId;
+          this.plugin.settings.imageModelId = previousImageModelId;
+          clearStaleImageSelection(this.plugin.settings);
         });
       });
       const metaRow = providerBlock.createDiv("provider-meta");
@@ -52873,8 +52926,8 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
       renderReport();
     };
     updateHeader();
-    let filterText = this.modelFilters[provider.id] || "";
-    let enabledOnly = this.modelEnabledOnly[provider.id] || false;
+    let filterText = this.modelFilters.get(provider.id) || "";
+    let enabledOnly = this.modelEnabledOnly.get(provider.id) || false;
     const filterRow = modelsWrapper.createDiv("provider-models-filter");
     filterRow.createEl("span", { text: "Filter" });
     const filterInput = new import_obsidian19.TextComponent(filterRow);
@@ -52883,7 +52936,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     filterInput.setValue(filterText);
     filterInput.onChange((value) => {
       filterText = value;
-      this.modelFilters[provider.id] = value;
+      this.modelFilters.set(provider.id, value);
       renderModelList();
     });
     const enabledWrap = filterRow.createDiv("provider-models-toggle");
@@ -52891,7 +52944,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
     enabledToggle.setValue(enabledOnly);
     enabledToggle.onChange((value) => {
       enabledOnly = value;
-      this.modelEnabledOnly[provider.id] = value;
+      this.modelEnabledOnly.set(provider.id, value);
       renderModelList();
     });
     enabledWrap.createEl("span", { text: "Enabled only" });
@@ -52922,6 +52975,7 @@ var SettingsTab = class extends import_obsidian19.PluginSettingTab {
         checkbox.addEventListener("change", async () => {
           model.enabled = checkbox.checked;
           this.ensureActiveModelForProvider(this.plugin.settings.activeProvider);
+          clearStaleImageSelection(this.plugin.settings);
           await this.plugin.saveSettings();
           updateHeader();
           renderModelList();
@@ -55414,17 +55468,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
     const loadedSettings = await this.loadData();
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
     const htmlPreviewSettingsMigrated = migrateAutoPreviewHtmlSettings(this.settings);
-    const legacyDefaultIds = /* @__PURE__ */ new Set([
-      "openai",
-      "anthropic",
-      "groq",
-      "openrouter",
-      "gemini",
-      "ollama"
-    ]);
-    const hasCustomProviders = this.settings.providers.some((provider) => !legacyDefaultIds.has(provider.id));
-    const hasAnyProviderKey = this.settings.providers.some((provider) => provider.apiKey && provider.apiKey.trim().length > 0);
-    if (this.settings.providers.length > 1 && !hasCustomProviders && !hasAnyProviderKey) {
+    if (isUntouchedLegacyDefaults(this.settings.providers, this.settings.models)) {
       this.settings.providers = DEFAULT_SETTINGS.providers.map((provider) => ({ ...provider }));
       this.settings.models = this.settings.models.filter((model) => model.providerId === "gemini");
       if (!this.settings.models.length) {
@@ -55464,16 +55508,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian27.Plugin {
     const groupSelection = ensureNamingModelSelection(this.settings.groupTitleProviderId, this.settings.groupTitleModelId);
     this.settings.groupTitleProviderId = groupSelection.providerId;
     this.settings.groupTitleModelId = groupSelection.modelId;
-    if (this.settings.imageProviderId && !this.settings.providers.some((provider) => provider.id === this.settings.imageProviderId)) {
-      this.settings.imageProviderId = "";
-    }
-    if (this.settings.imageModelId) {
-      const resolvedProviderId = this.settings.imageProviderId || this.settings.activeProvider;
-      const enabledImageModels = this.settings.models.filter((model) => model.providerId === resolvedProviderId && model.enabled);
-      if (!enabledImageModels.some((model) => model.id === this.settings.imageModelId)) {
-        this.settings.imageModelId = "";
-      }
-    }
+    clearStaleImageSelection(this.settings);
     if (!this.settings.observability) {
       this.settings.observability = {
         provider: "none",
