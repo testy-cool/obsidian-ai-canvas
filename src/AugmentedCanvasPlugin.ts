@@ -19,6 +19,7 @@ import {
 	AugmentedCanvasSettings,
 	clearStaleImageSelection,
 	DEFAULT_SETTINGS,
+	isUntouchedLegacyDefaults,
 	migrateAutoPreviewHtmlSettings,
 	SystemPrompt,
 } from "./settings/AugmentedCanvasSettings";
@@ -162,26 +163,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
 		const htmlPreviewSettingsMigrated = migrateAutoPreviewHtmlSettings(this.settings);
 
-		const legacyDefaultIds = new Set([
-			"openai",
-			"anthropic",
-			"groq",
-			"openrouter",
-			"gemini",
-			"ollama",
-		]);
-		const hasCustomProviders = this.settings.providers.some(
-			provider => !legacyDefaultIds.has(provider.id)
-		);
-		const hasAnyProviderKey = this.settings.providers.some(
-			provider => provider.apiKey && provider.apiKey.trim().length > 0
-		);
-
-		if (
-			this.settings.providers.length > 1 &&
-			!hasCustomProviders &&
-			!hasAnyProviderKey
-		) {
+		if (isUntouchedLegacyDefaults(this.settings.providers)) {
 			this.settings.providers = DEFAULT_SETTINGS.providers.map(provider => ({ ...provider }));
 			this.settings.models = this.settings.models.filter(model => model.providerId === "gemini");
 			if (!this.settings.models.length) {

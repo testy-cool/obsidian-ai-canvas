@@ -428,6 +428,26 @@ export function clearStaleImageSelection(
 	}
 }
 
+const LEGACY_DEFAULT_PROVIDER_IDS = new Set(["openai", "anthropic", "groq", "openrouter", "gemini", "ollama"]);
+
+/**
+ * True when the saved providers are still the old built-in list that nobody set
+ * up: several of them, none with an API key, each one an old default under its
+ * own kind and never renamed.
+ */
+export function isUntouchedLegacyDefaults(providers: LLMProvider[]): boolean {
+	return (
+		providers.length > 1 &&
+		providers.every(
+			provider =>
+				LEGACY_DEFAULT_PROVIDER_IDS.has(provider.id) &&
+				provider.type?.toLowerCase() === provider.id &&
+				!provider.name &&
+				!provider.apiKey?.trim()
+		)
+	);
+}
+
 const DEFAULT_SYSTEM_PROMPT = `
 You must respond in markdown.
 The response must be in the same language the user used, default to english.

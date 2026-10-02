@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearStaleImageSelection, type LLMModel, type LLMProvider } from "../src/settings/AugmentedCanvasSettings";
+import { clearStaleImageSelection, isUntouchedLegacyDefaults, type LLMModel, type LLMProvider } from "../src/settings/AugmentedCanvasSettings";
 
 const provider = (id: string): LLMProvider => ({ id, type: "Custom", baseUrl: "https://example.test/v1", apiKey: "k", enabled: true });
 const model = (providerId: string, id: string, enabled = true): LLMModel => ({ id, providerId, model: id, enabled });
@@ -44,5 +44,49 @@ describe("clearStaleImageSelection", () => {
 		const s = settings("", "");
 		clearStaleImageSelection(s);
 		expect([s.imageProviderId, s.imageModelId]).toEqual(["", ""]);
+	});
+});
+
+describe("isUntouchedLegacyDefaults", () => {
+	const legacy = (id: string, extra: Partial<LLMProvider> = {}): LLMProvider => ({
+		id,
+		type: { openai: "OpenAI", anthropic: "Anthropic", groq: "Groq", openrouter: "OpenRouter", gemini: "Gemini", ollama: "Ollama" }[id]!,
+		baseUrl: "https://example.test/v1",
+		apiKey: "",
+		enabled: true,
+		...extra,
+	});
+	const six = () => ["openai", "anthropic", "groq", "openrouter", "gemini", "ollama"].map(id => legacy(id));
+
+	it("is true for the old six built-in providers with no key", () => {
+		expect(isUntouchedLegacyDefaults(six())).toBe(true);
+		expect(isUntouchedLegacyDefaults([legacy("gemini"), legacy("openai")])).toBe(true);
+	});
+
+	it("is false for a single provider or none", () => {
+		expect(isUntouchedLegacyDefaults([legacy("gemini")])).toBe(false);
+		expect(isUntouchedLegacyDefaults([])).toBe(false);
+	});
+
+	it("is false when any provider has an API key", () => {
+		const providers = six();
+		providers[3].apiKey = "sk-set";
+		expect(isUntouchedLegacyDefaults(providers)).toBe(false);
+	});
+
+	it("is false for a Codex provider that took the id openai", () => {
+		const providers = six();
+		providers[0] = { ...legacy("openai"), type: "Codex", baseUrl: "" };
+		expect(isUntouchedLegacyDefaults(providers)).toBe(false);
+	});
+
+	it("is false for a renamed provider", () => {
+		const providers = six();
+		providers[1] = legacy("anthropic", { name: "Work Claude" });
+		expect(isUntouchedLegacyDefaults(providers)).toBe(false);
+	});
+
+	it("is false when a provider is not on the old list", () => {
+		expect(isUntouchedLegacyDefaults([legacy("gemini"), { id: "mine", type: "Custom", baseUrl: "https://x.test", apiKey: "", enabled: true }])).toBe(false);
 	});
 });
