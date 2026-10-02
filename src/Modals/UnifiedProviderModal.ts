@@ -32,6 +32,15 @@ const PRESETS: ProviderPreset[] = [
   { id: "custom", type: "Custom", baseUrl: "" },
 ];
 
+/** Ids that older settings read as a kind of provider, and the kinds that may use them. */
+const KIND_IDS = new Map<string, string[]>([
+  ["gemini", ["Gemini", "Google"]],
+  ["google", ["Gemini", "Google"]],
+  ["vertex", ["Vertex"]],
+  ["azure", ["Azure"]],
+  ["ollama", ["Ollama"]],
+]);
+
 const NO_MODELS_RETURNED = "No models returned. Type model names below.";
 
 function isGeminiType(type: string): boolean {
@@ -431,12 +440,16 @@ export class UnifiedProviderModal extends Modal {
     return this.provider.name ?? (this.editing ? providerLabel(this.provider as LLMProvider) : "");
   }
 
-  /** The id for a new provider: the slug of its name, numbered if another provider has it. */
-  private freeId(name: string, others: LLMProvider[]): string {
+  /**
+   * The id for a new provider: the slug of its name, numbered if another provider has it.
+   * An id that older settings read as a kind (such as "azure") is taken unless this is that kind.
+   */
+  private freeId(name: string, type: string, others: LLMProvider[]): string {
     const slug = name.toLowerCase().replace(/\s+/g, "-");
     const taken = new Set(others.map((o) => o.id));
+    const isTaken = (id: string) => taken.has(id) || !(KIND_IDS.get(id)?.includes(type) ?? true);
     let id = slug;
-    for (let n = 2; taken.has(id); n++) id = `${slug}-${n}`;
+    for (let n = 2; isTaken(id); n++) id = `${slug}-${n}`;
     return id;
   }
 
@@ -607,7 +620,7 @@ export class UnifiedProviderModal extends Modal {
     const provider: LLMProvider = {
       // Fields this box does not show stay as they were.
       ...this.initialProvider,
-      id: this.initialProvider?.id ?? this.freeId(name, others),
+      id: this.initialProvider?.id ?? this.freeId(name, type, others),
       type,
       baseUrl: isGeminiType(type) ? GEMINI_BASE_URL : (p.baseUrl ?? ""),
       apiKey: p.apiKey ?? "",

@@ -1066,6 +1066,31 @@ describe("renaming a provider", () => {
 		expect(onSave.mock.calls[0][0]).toEqual(expect.objectContaining({ id: "azure-3", type: "Azure" }));
 	});
 
+	it("gives an endpoint named after a kind a numbered id, and the real kind the plain one", async () => {
+		const custom = async (name: string) => {
+			const onSave = vi.fn();
+			const modal: any = new UnifiedProviderModal({} as any, onSave);
+			modal.onOpen();
+			const root = modal.contentEl as Element;
+			for (const [field, value] of [["Provider name", name], ["Base URL", "https://example.test/v1"]]) {
+				const input = settingNamed(root, field).querySelector("input")!;
+				input.value = value;
+				await input.listeners.get("input")!();
+			}
+			modal.save();
+			return onSave.mock.calls[0][0];
+		};
+		expect((await custom("Azure")).id).toBe("azure-2");
+		expect((await custom("Gemini")).id).toBe("gemini-2");
+		expect((await custom("Ollama")).id).toBe("ollama-2");
+		expect((await custom("Vertex")).id).toBe("vertex-2");
+		expect((await custom("Google")).id).toBe("google-2");
+		expect((await custom("Work")).id).toBe("work");
+		expect((await saveWith("azure", "Azure")).mock.calls[0][0].id).toBe("azure");
+		expect((await saveWith("gemini", "Google")).mock.calls[0][0].id).toBe("google");
+		expect((await saveWith("ollama", "Ollama")).mock.calls[0][0].id).toBe("ollama");
+	});
+
 	it("keeps the box open and says so on the field when another provider has the name", async () => {
 		const others = [{ id: "work", type: "Azure", name: "Work Azure", baseUrl: "https://a.test", apiKey: "k", enabled: true }];
 		const onSave = vi.fn();
