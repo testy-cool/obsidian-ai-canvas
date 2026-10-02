@@ -256,6 +256,66 @@ describe("Bifrost Gemini-native setting", () => {
 		);
 	});
 
+	it("offers a Bifrost preset that shows the address, the key and the native switch", async () => {
+		const modal: any = new UnifiedProviderModal({} as any, vi.fn());
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		const select = settingNamed(root, "Preset").querySelector("select")!;
+		expect(select.querySelectorAll("option").map(option => [option.value, option.text])).toContainEqual(["bifrost", "Bifrost"]);
+		select.value = "bifrost";
+		await select.listeners.get("change")!();
+		expect(settingNamed(root, "Provider name").querySelector("input")!.value).toBe("Bifrost");
+		for (const name of ["Base URL", "API key", "Use Gemini-native API"]) expect(settingNamed(root, name).style.display).toBe("");
+	});
+
+	it("stores a gateway recognised by its name as Bifrost, so a rename keeps the native switch", async () => {
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave);
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		for (const [field, value] of [["Provider name", "Work Bifrost"], ["Base URL", "https://gateway.example.test/v1"]]) {
+			const input = settingNamed(root, field).querySelector("input")!;
+			input.value = value;
+			await input.listeners.get("input")!();
+		}
+		const toggle = settingNamed(root, "Use Gemini-native API").querySelector("input")!;
+		toggle.checked = true;
+		await toggle.listeners.get("change")!();
+		modal.save();
+		const saved = onSave.mock.calls[0][0];
+		expect(saved).toEqual(expect.objectContaining({ id: "work-bifrost", type: "Bifrost", name: "Work Bifrost", geminiNative: true }));
+
+		const edit = vi.fn();
+		const again: any = new UnifiedProviderModal({} as any, edit, saved);
+		again.onOpen();
+		const name = settingNamed(again.contentEl, "Provider name").querySelector("input")!;
+		name.value = "Work Gateway";
+		await name.listeners.get("input")!();
+		again.save();
+		expect(edit.mock.calls[0][0]).toEqual(expect.objectContaining({ type: "Bifrost", name: "Work Gateway", geminiNative: true }));
+	});
+
+	it("stores a saved Custom gateway as Bifrost even when the same edit renames it", async () => {
+		const onSave = vi.fn();
+		const saved: any = { id: "gateway", type: "Custom", name: "Work Bifrost", baseUrl: "https://gateway.example.test/v1", apiKey: "k", enabled: true, geminiNative: true };
+		const modal: any = new UnifiedProviderModal({} as any, onSave, saved);
+		modal.onOpen();
+		const name = settingNamed(modal.contentEl, "Provider name").querySelector("input")!;
+		name.value = "Work Gateway";
+		await name.listeners.get("input")!();
+		modal.save();
+		expect(onSave.mock.calls[0][0]).toEqual(expect.objectContaining({ type: "Bifrost", name: "Work Gateway", geminiNative: true }));
+	});
+
+	it("does not treat a provider already of kind Bifrost as changed when it is saved untouched", () => {
+		const onSave = vi.fn();
+		const saved: any = { id: "gw", type: "Bifrost", baseUrl: "https://example.test/v1", apiKey: "k", enabled: true, geminiNative: true, capabilityReports: { kept: { model: "m" } } };
+		const modal: any = new UnifiedProviderModal({} as any, onSave, saved);
+		modal.onOpen();
+		modal.save();
+		expect(onSave.mock.calls[0][0]).toEqual(expect.objectContaining({ type: "Bifrost", geminiNative: true, capabilityReports: saved.capabilityReports }));
+	});
+
 	it("hides the native toggle for other provider types", () => {
 		const modal: any = new UnifiedProviderModal({} as any, vi.fn(), {
 			id: "openai", type: "OpenAI", baseUrl: "https://example.test/v1", apiKey: "test", enabled: true,

@@ -19,6 +19,7 @@ const PRESETS: ProviderPreset[] = [
   { id: "anthropic", type: "Anthropic", baseUrl: "https://api.anthropic.com/v1" },
   { id: "groq", type: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
   { id: "openrouter", type: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
+  { id: "bifrost", type: "Bifrost", baseUrl: "" },
   { id: "azure", type: "Azure", baseUrl: "" },
   { id: "gemini", type: "Gemini", baseUrl: GEMINI_BASE_URL },
   { id: "vertex", type: "Vertex", baseUrl: "" },
@@ -577,7 +578,9 @@ export class UnifiedProviderModal extends Modal {
     const name = this.displayName().trim();
     const others = this.otherProviders.filter((o) => o.id !== this.initialProvider?.id);
     // No preset chosen means an OpenAI-compatible endpoint.
-    const type = p.type?.trim() || "Custom";
+    let type = p.type?.trim() || "Custom";
+    // A gateway recognised by its name or address is stored as one, so renaming it later cannot switch off its Gemini-native setting.
+    if (type === "Custom" && (isBifrostProvider({ ...p, name }) || isBifrostProvider(this.initialProvider))) type = "Bifrost";
     if (!name) {
       new Notice("Provider name is required.");
 			this.setFieldError(this.nameField, "Provider name is required.", true);
@@ -609,7 +612,7 @@ export class UnifiedProviderModal extends Modal {
       baseUrl: isGeminiType(type) ? GEMINI_BASE_URL : (p.baseUrl ?? ""),
       apiKey: p.apiKey ?? "",
       enabled: p.enabled ?? true,
-			geminiNative: isBifrostProvider(p) && (p.geminiNative ?? false),
+			geminiNative: isBifrostProvider({ ...p, type }) && (p.geminiNative ?? false),
 			capabilityReport: p.capabilityReport,
 			capabilityReports: p.capabilityReports,
       projectId: p.projectId,
