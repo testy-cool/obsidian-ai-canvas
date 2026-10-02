@@ -1381,3 +1381,27 @@ describe("an image model that is switched off", () => {
 		expect([plugin.settings.imageProviderId, plugin.settings.imageModelId]).toEqual(["other", "other-m"]);
 	});
 });
+
+
+describe("a provider whose id is an object property name", () => {
+	it.each(["constructor", "__proto__", "toString"])("renders %s and keeps its filter", async id => {
+		const providers = [{ id, type: "Custom", name: "Odd id", baseUrl: "https://example.test/v1", apiKey: "k", enabled: true }];
+		const models = ["alpha", "beta"].map(model => ({ id: `${id}-${model}`, model, providerId: id, enabled: true }));
+		const plugin: any = { settings: { ...DEFAULT_SETTINGS, providers, models, activeProvider: id, apiModel: models[0].id }, saveSettings: vi.fn() };
+		const tab: any = new SettingsTab({} as any, plugin);
+		const root = new Element();
+		expect(() => tab.renderProviders(root)).not.toThrow();
+		const names = () => root.querySelectorAll(".provider-model-name").map(item => item.textContent);
+		expect(names()).toHaveLength(2);
+
+		const filter = root.querySelector(".provider-models-filter")!.querySelector("input")!;
+		filter.value = "alp";
+		await filter.listeners.get("input")!();
+		expect(names().map(text => text!.startsWith("alpha"))).toEqual([true]);
+		expect(tab.modelFilters.get(id)).toBe("alp");
+
+		const again = new Element();
+		tab.renderProviders(again);
+		expect(again.querySelectorAll(".provider-model-name")).toHaveLength(1);
+	});
+});

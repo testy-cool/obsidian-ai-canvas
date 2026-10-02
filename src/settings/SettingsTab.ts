@@ -42,8 +42,8 @@ export default class SettingsTab extends PluginSettingTab {
 	private capabilityProgress = new Map<string, ProviderCapabilityReport>();
 	private capabilityViews = new Map<string, () => void>();
     plugin: AugmentedCanvasPlugin;
-    private modelFilters: Record<string, string> = {};
-    private modelEnabledOnly: Record<string, boolean> = {};
+    private modelFilters = new Map<string, string>();
+    private modelEnabledOnly = new Map<string, boolean>();
     private activeSectionId = "general";
     private searchQuery = "";
 
@@ -587,8 +587,8 @@ export default class SettingsTab extends PluginSettingTab {
 
         updateHeader();
 
-        let filterText = this.modelFilters[provider.id] || "";
-        let enabledOnly = this.modelEnabledOnly[provider.id] || false;
+        let filterText = this.modelFilters.get(provider.id) || "";
+        let enabledOnly = this.modelEnabledOnly.get(provider.id) || false;
 
         const filterRow = modelsWrapper.createDiv("provider-models-filter");
         filterRow.createEl("span", { text: "Filter" });
@@ -598,7 +598,7 @@ export default class SettingsTab extends PluginSettingTab {
         filterInput.setValue(filterText);
         filterInput.onChange(value => {
             filterText = value;
-            this.modelFilters[provider.id] = value;
+            this.modelFilters.set(provider.id, value);
             renderModelList();
         });
 
@@ -607,7 +607,7 @@ export default class SettingsTab extends PluginSettingTab {
         enabledToggle.setValue(enabledOnly);
         enabledToggle.onChange(value => {
             enabledOnly = value;
-            this.modelEnabledOnly[provider.id] = value;
+            this.modelEnabledOnly.set(provider.id, value);
             renderModelList();
         });
         enabledWrap.createEl("span", { text: "Enabled only" });
