@@ -662,7 +662,11 @@ export class UnifiedProviderModal extends Modal {
     // A model the provider already has stays in its list, switched off, when it is not ticked.
     const switchedOff: LLMModel[] = this.existingModels
       .filter((m) => !this.selectedModelIds.has(m.model))
-      .map((m) => ({ ...m, enabled: false }));
+      .map((m) => ({
+        ...m,
+        enabled: false,
+        providerParams: this.modelParams.get(m.model) ?? m.providerParams,
+      }));
 
     this.onSave(provider, [...ticked, ...switchedOff]);
     this.close();

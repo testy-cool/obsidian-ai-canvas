@@ -1135,6 +1135,18 @@ describe("saving an edited provider", () => {
 		expect(changed.map((m: any) => [m.id, m.enabled]).sort()).toEqual([["m0", false], ["m1", true], ["m2", false]]);
 	});
 
+	it("keeps a parameter change on a model that is then switched off", () => {
+		const onSave = vi.fn();
+		const provider = { id: "gemini", type: "Gemini", baseUrl: "", apiKey: "k", enabled: true };
+		const model = { id: "m0", model: "gemini-3-flash-preview", providerId: "gemini", enabled: true, providerParams: { serviceTier: "standard" } };
+		const modal: any = new UnifiedProviderModal({} as any, onSave, provider, [model]);
+		modal.onOpen();
+		modal.modelParams.set(model.model, { serviceTier: "flex" });
+		modal.selectedModelIds.delete(model.model);
+		modal.save();
+		expect(onSave.mock.calls[0][1]).toEqual([expect.objectContaining({ id: "m0", enabled: false, providerParams: { serviceTier: "flex" } })]);
+	});
+
 	it("keeps provider fields the box does not show and drops a name that went back to the kind", async () => {
 		const onSave = vi.fn();
 		const saved: any = { id: "gemini", type: "Gemini", name: "Work Gemini", baseUrl: "", apiKey: "k", enabled: true, addedLater: "kept" };
