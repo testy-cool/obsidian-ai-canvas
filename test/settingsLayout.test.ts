@@ -8,7 +8,7 @@ import { probeProviderCapabilities } from "../src/utils/capabilityProbe";
 import { testMCPServer } from "../src/utils/mcpClient";
 import { fetchPricingForModels } from "../src/utils/pricingFetch";
 import { fetchProviderModels } from "../src/utils/modelFetch";
-import { getCapabilityReportKey, getCapabilityRoute, providerLabel, type ProviderCapabilityReport } from "../src/utils/providerCapabilities";
+import { getCapabilityReportKey, getCapabilityRoute, getModelCapabilityReport, providerLabel, type ProviderCapabilityReport } from "../src/utils/providerCapabilities";
 
 vi.mock("../src/utils/capabilityProbe", () => ({ probeProviderCapabilities: vi.fn() }));
 
@@ -374,6 +374,44 @@ describe("provider diagnostic invalidation", () => {
 		if (changed) modal.provider.apiKey = "replacement-key";
 		await modal.contentEl.querySelectorAll("button").find((button:any)=>button.textContent==="Save provider").listeners.get("click")();
 		expect(save.mock.calls[0][0].capabilityReports).toEqual(changed ? undefined : provider.capabilityReports);
+	});
+});
+
+describe("capability results of a gateway first stored as Bifrost", () => {
+	const custom: any = { id: "gateway", type: "Custom", baseUrl: "https://bifrost.example/v1", apiKey: "k", enabled: true };
+	const stored = (route: string, model: string, key: string) => ({
+		[key]: { image: "yes", pdf: "yes", video: "no", youtube: "no", search: "no", urlContext: "no", schemaVersion: 2, route, model } as ProviderCapabilityReport,
+	});
+	const saveOnce = async (change: boolean) => {
+		const other = stored("other-route", "m", "other-key");
+		const provider = { ...custom, capabilityReports: { ...stored(getCapabilityRoute(custom), "m", getCapabilityReportKey(custom, "m")), ...other } };
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave, provider);
+		modal.onOpen();
+		if (change) {
+			const key = settingNamed(modal.contentEl, "API key").querySelector("input")!;
+			key.value = "replacement";
+			await key.listeners.get("input")!();
+		}
+		modal.save();
+		return { saved: onSave.mock.calls[0][0], other };
+	};
+
+	it("keeps the results, now under the Bifrost route, and leaves other routes alone", async () => {
+		const { saved, other } = await saveOnce(false);
+		expect(saved.type).toBe("Bifrost");
+		const report = getModelCapabilityReport(saved, "m");
+		expect(report?.pdf).toBe("yes");
+		expect(report?.route).toBe(getCapabilityRoute(saved));
+		expect(saved.capabilityReports["other-key"]).toEqual(other["other-key"]);
+		expect(Object.keys(saved.capabilityReports)).toHaveLength(2);
+	});
+
+	it("drops the results when the API key changed in the same save", async () => {
+		const { saved } = await saveOnce(true);
+		expect(saved.type).toBe("Bifrost");
+		expect(getModelCapabilityReport(saved, "m")).toBeUndefined();
+		expect(saved.capabilityReports).toBeUndefined();
 	});
 });
 

@@ -1,7 +1,7 @@
 import { App, Modal, Setting, Notice, ButtonComponent } from "obsidian";
 import type { LLMProvider, LLMModel } from "../settings/AugmentedCanvasSettings";
 import { GEMINI_BASE_URL } from "../settings/AugmentedCanvasSettings";
-import { isBifrostProvider, providerLabel } from "../utils/providerCapabilities";
+import { getCapabilityReportKey, getCapabilityRoute, isBifrostProvider, providerLabel } from "../utils/providerCapabilities";
 import { fetchProviderModels } from "../utils/modelFetch";
 import { fetchPricingForModels } from "../utils/pricingFetch";
 import { getDefaultProviderParams, getParamsForModel, detectProviderLabel } from "../utils/providerParams";
@@ -643,11 +643,25 @@ export class UnifiedProviderModal extends Modal {
     if (name !== type) provider.name = name;
     else delete provider.name;
 
-		if (this.initialProvider && ["apiKey", "baseUrl", "type", "geminiNative", "projectId", "location", "serviceAccountJson"].some(key =>
-			key === "geminiNative" ? !!provider.geminiNative !== !!this.initialProvider!.geminiNative
-				: (provider as any)[key] !== (this.initialProvider as any)[key])) {
-			provider.capabilityReport = undefined;
-			provider.capabilityReports = undefined;
+		if (this.initialProvider) {
+			const initial = this.initialProvider;
+			// Storing a gateway as Bifrost for the first time changes only its kind, so its test results move to the new route instead of being dropped.
+			const promoted = provider.type === "Bifrost" && initial.type !== "Bifrost";
+			const changed = ["apiKey", "baseUrl", "type", "geminiNative", "projectId", "location", "serviceAccountJson"].some(key =>
+				key === "type" && promoted ? false
+					: key === "geminiNative" ? !!provider.geminiNative !== !!initial.geminiNative
+						: (provider as any)[key] !== (initial as any)[key]);
+			if (changed) {
+				provider.capabilityReport = undefined;
+				provider.capabilityReports = undefined;
+			} else if (promoted && provider.capabilityReports) {
+				const oldRoute = getCapabilityRoute(initial);
+				const newRoute = getCapabilityRoute(provider);
+				provider.capabilityReports = Object.fromEntries(Object.entries(provider.capabilityReports).map(([key, report]) =>
+					report.route === oldRoute && report.model !== undefined
+						? [getCapabilityReportKey(provider, report.model), { ...report, route: newRoute }]
+						: [key, report]));
+			}
 		}
 
     const ticked: LLMModel[] = [...this.selectedModelIds].map((modelId) => {
