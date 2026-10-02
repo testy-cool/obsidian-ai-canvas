@@ -51484,11 +51484,12 @@ var parseModelIds = (payload) => {
   return Array.from(new Set(ids));
 };
 var fetchProviderModels = async (provider, apiKey = provider.apiKey) => {
-  var _a20, _b19, _c, _d, _e;
-  const isOllama = provider.type === "Ollama" || provider.id.toLowerCase() === "ollama";
-  const isGoogle = provider.type === "Gemini" || provider.type === "Google" || ["gemini", "google"].includes(provider.id.toLowerCase());
-  const isVertex = provider.type === "Vertex" || provider.id.toLowerCase() === "vertex";
-  const isAzure = provider.type === "Azure" || provider.id.toLowerCase() === "azure";
+  var _a20, _b19, _c, _d, _e, _f, _g;
+  const id = (_b19 = (_a20 = provider.id) == null ? void 0 : _a20.toLowerCase()) != null ? _b19 : "";
+  const isOllama = provider.type === "Ollama" || id === "ollama";
+  const isGoogle = provider.type === "Gemini" || provider.type === "Google" || ["gemini", "google"].includes(id);
+  const isVertex = provider.type === "Vertex" || id === "vertex";
+  const isAzure = provider.type === "Azure" || id === "azure";
   const headers = {};
   if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`;
@@ -51510,21 +51511,21 @@ var fetchProviderModels = async (provider, apiKey = provider.apiKey) => {
       method: "GET",
       headers: azureHeaders
     });
-    const payload = (_a20 = response.json) != null ? _a20 : JSON.parse(response.text);
+    const payload = (_c = response.json) != null ? _c : JSON.parse(response.text);
     return parseModelIds(payload);
   }
   if (isGoogle) {
     if (!apiKey) {
       throw new Error("Gemini API key is required to fetch models.");
     }
-    const googleBase = ((_b19 = provider.baseUrl) == null ? void 0 : _b19.length) > 0 ? normalizeBaseUrl2(provider.baseUrl) : GEMINI_BASE_URL;
+    const googleBase = ((_d = provider.baseUrl) == null ? void 0 : _d.length) > 0 ? normalizeBaseUrl2(provider.baseUrl) : GEMINI_BASE_URL;
     const baseWithModels = /\/models$/i.test(googleBase) ? googleBase : `${googleBase}/models`;
     const modelsUrl2 = `${baseWithModels}?key=${encodeURIComponent(apiKey)}`;
     const response = await (0, import_obsidian16.requestUrl)({
       url: modelsUrl2,
       method: "GET"
     });
-    const payload = (_c = response.json) != null ? _c : JSON.parse(response.text);
+    const payload = (_e = response.json) != null ? _e : JSON.parse(response.text);
     return parseModelIds(payload);
   }
   if (!provider.baseUrl) {
@@ -51537,7 +51538,7 @@ var fetchProviderModels = async (provider, apiKey = provider.apiKey) => {
       method: "GET",
       headers
     });
-    const payload = (_d = response.json) != null ? _d : JSON.parse(response.text);
+    const payload = (_f = response.json) != null ? _f : JSON.parse(response.text);
     const ids = parseModelIds(payload);
     if (ids.length)
       return ids;
@@ -51554,7 +51555,7 @@ var fetchProviderModels = async (provider, apiKey = provider.apiKey) => {
       method: "GET",
       headers
     });
-    const payload = (_e = response.json) != null ? _e : JSON.parse(response.text);
+    const payload = (_g = response.json) != null ? _g : JSON.parse(response.text);
     return parseModelIds(payload);
   }
   return [];
@@ -52178,7 +52179,14 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
         providerParams: (_g2 = (_f2 = this.modelParams.get(modelId)) != null ? _f2 : existing == null ? void 0 : existing.providerParams) != null ? _g2 : Object.keys(defaultParams).length > 0 ? defaultParams : void 0
       };
     });
-    const switchedOff = this.existingModels.filter((m) => !this.selectedModelIds.has(m.model)).map((m) => ({ ...m, enabled: false }));
+    const switchedOff = this.existingModels.filter((m) => !this.selectedModelIds.has(m.model)).map((m) => {
+      var _a21;
+      return {
+        ...m,
+        enabled: false,
+        providerParams: (_a21 = this.modelParams.get(m.model)) != null ? _a21 : m.providerParams
+      };
+    });
     this.onSave(provider, [...ticked, ...switchedOff]);
     this.close();
   }
