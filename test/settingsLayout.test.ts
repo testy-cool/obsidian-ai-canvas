@@ -1405,3 +1405,39 @@ describe("a provider whose id is an object property name", () => {
 		expect(again.querySelectorAll(".provider-model-name")).toHaveLength(1);
 	});
 });
+
+
+describe("adding a provider end to end", () => {
+	it("picks a preset, fetches the real model list, ticks a model and saves it", async () => {
+		// Only the network call is replaced; the listing code is the real one.
+		const actual = await vi.importActual<typeof import("../src/utils/modelFetch")>("../src/utils/modelFetch");
+		vi.mocked(fetchProviderModels).mockImplementationOnce(actual.fetchProviderModels);
+		const request = vi.spyOn(obsidian, "requestUrl").mockResolvedValue({ json: { data: [{ id: "model-a" }, { id: "model-b" }] } } as any);
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave);
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+
+		const preset = settingNamed(root, "Preset").querySelector("select")!;
+		preset.value = "groq";
+		await preset.listeners.get("change")!();
+		for (const [field, value] of [["Base URL", "https://example.test/v1"], ["API key", "secret-key"]]) {
+			const input = settingNamed(root, field).querySelector("input")!;
+			input.value = value;
+			await input.listeners.get("input")!();
+		}
+		await root.querySelector(".provider-fetch-button")!.listeners.get("click")!();
+
+		expect(request).toHaveBeenCalledWith(expect.objectContaining({ url: "https://example.test/v1/models", headers: { Authorization: "Bearer secret-key" } }));
+		expect(root.querySelector(".provider-fetch-status")!.textContent).toBe("Found 2 models");
+		const row = root.querySelectorAll(".model-check-item").find(item => item.querySelector(".model-check-label")!.textContent === "model-b")!;
+		const checkbox = row.querySelector("input")!;
+		checkbox.checked = true;
+		await checkbox.listeners.get("change")!();
+		modal.save();
+
+		const [provider, models] = onSave.mock.calls[0];
+		expect(provider).toEqual(expect.objectContaining({ id: "groq", type: "Groq", baseUrl: "https://example.test/v1", apiKey: "secret-key" }));
+		expect(models).toEqual([expect.objectContaining({ id: "groq-model-b", providerId: "groq", model: "model-b", enabled: true })]);
+	});
+});
