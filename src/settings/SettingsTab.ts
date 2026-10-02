@@ -385,6 +385,8 @@ export default class SettingsTab extends PluginSettingTab {
 					this.plugin.settings.apiModel = previousApiModel;
 					this.plugin.settings.imageProviderId = previousImageProviderId;
 					this.plugin.settings.imageModelId = previousImageModelId;
+					// The snapshot may name a provider that was deleted after this one.
+					clearStaleImageSelection(this.plugin.settings);
 				});
             });
 

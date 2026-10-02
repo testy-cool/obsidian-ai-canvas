@@ -1368,6 +1368,29 @@ describe("an image model that is switched off", () => {
 		expect(plugin.settings.imageModelId).toBe("image");
 	});
 
+	it("stays forgotten when an earlier deletion is undone after its provider was deleted", async () => {
+		const providers = ["main", "extra", "images"].map(id => ({ id, type: "Custom", baseUrl: "https://example.test/v1", apiKey: "k", enabled: true }));
+		const models = providers.map(p => ({ id: `${p.id}-m`, model: `${p.id}-m`, providerId: p.id, enabled: true }));
+		const plugin: any = {
+			settings: { ...DEFAULT_SETTINGS, providers, models, activeProvider: "main", apiModel: "main-m", imageProviderId: "images", imageModelId: "images-m" },
+			saveSettings: vi.fn().mockResolvedValue(undefined),
+		};
+		const tab: any = new SettingsTab({} as any, plugin);
+		vi.spyOn(tab, "display").mockImplementation(() => {});
+		const notice = vi.spyOn(obsidian, "Notice");
+		const root = new Element();
+		tab.renderProviders(root);
+		const cards = root.querySelectorAll(".provider-block");
+		const remove = (index: number) => cards[index].querySelectorAll("button").find(button => button.textContent === "Delete")!.listeners.get("click")!();
+		await remove(1);
+		await remove(2);
+		expect([plugin.settings.imageProviderId, plugin.settings.imageModelId]).toEqual(["", ""]);
+		const undoFirst = (notice.mock.instances[0].noticeEl as any as Element).querySelector("button")!;
+		await undoFirst.listeners.get("click")!();
+		expect(plugin.settings.providers.map((p: any) => p.id)).toEqual(["main", "extra"]);
+		expect([plugin.settings.imageProviderId, plugin.settings.imageModelId]).toEqual(["", ""]);
+	});
+
 	it("is forgotten when its provider is deleted, and Undo brings the choice back", async () => {
 		const { plugin, root } = setup();
 		plugin.settings.imageProviderId = "other";
