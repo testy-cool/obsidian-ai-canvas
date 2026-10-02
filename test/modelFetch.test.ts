@@ -29,3 +29,17 @@ describe("model listing authentication", () => {
 		expect(requestUrl).toHaveBeenCalledWith(expect.objectContaining({ url: "https://generativelanguage.googleapis.com/v1beta/models?key=saved-key" }));
 	});
 });
+
+describe("model listing for a provider that is not saved yet", () => {
+	// The Add Provider box fetches before Save, when the provider has no id.
+	it.each([
+		["OpenAI", "https://example.test/v1", "https://example.test/v1/models"],
+		["Ollama", "http://localhost:11434/v1", "http://localhost:11434/v1/models"],
+		["Azure", "https://resource.example", "https://resource.example/openai/v1/models"],
+		["Gemini", "https://generativelanguage.googleapis.com/v1beta", "https://generativelanguage.googleapis.com/v1beta/models?key=saved-key"],
+	])("lists %s models", async (type, baseUrl, url) => {
+		const unsaved: any = { type, baseUrl, apiKey: "saved-key", enabled: true };
+		expect(await fetchProviderModels(unsaved)).toEqual(["test-model"]);
+		expect(requestUrl).toHaveBeenCalledWith(expect.objectContaining({ url }));
+	});
+});

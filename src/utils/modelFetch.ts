@@ -44,16 +44,15 @@ export const fetchProviderModels = async (
 	provider: LLMProvider,
 	apiKey: string = provider.apiKey
 ): Promise<string[]> => {
-	const isOllama =
-		provider.type === "Ollama" || provider.id.toLowerCase() === "ollama";
+	// A provider being added has no id until it is saved.
+	const id = provider.id?.toLowerCase() ?? "";
+	const isOllama = provider.type === "Ollama" || id === "ollama";
 	const isGoogle =
 		provider.type === "Gemini" ||
 		provider.type === "Google" ||
-		["gemini", "google"].includes(provider.id.toLowerCase());
-	const isVertex =
-		provider.type === "Vertex" || provider.id.toLowerCase() === "vertex";
-	const isAzure =
-		provider.type === "Azure" || provider.id.toLowerCase() === "azure";
+		["gemini", "google"].includes(id);
+	const isVertex = provider.type === "Vertex" || id === "vertex";
+	const isAzure = provider.type === "Azure" || id === "azure";
 
 	const headers: Record<string, string> = {};
 	if (apiKey) {
