@@ -55,6 +55,11 @@ function isCodexType(type: string): boolean {
   return type === "Codex";
 }
 
+/** Kinds that are called through an OpenAI-compatible endpoint, so a gateway may stand behind any of them. */
+function takesOpenAIRoute(type: string): boolean {
+  return !isGeminiType(type) && !isVertexType(type) && !isCodexType(type) && type !== "Azure" && !cliAdapterForProviderType(type);
+}
+
 /**
  * Everything a provider that runs a local command needs from the UI. Codex keeps
  * its own runner, so it is described here rather than in the adapter registry.
@@ -592,8 +597,8 @@ export class UnifiedProviderModal extends Modal {
     const others = this.otherProviders.filter((o) => o.id !== this.initialProvider?.id);
     // No preset chosen means an OpenAI-compatible endpoint.
     let type = p.type?.trim() || "Custom";
-    // A gateway recognised by its name or address is stored as one, so renaming it later cannot switch off its Gemini-native setting.
-    if (type === "Custom" && (isBifrostProvider({ ...p, name }) || isBifrostProvider(this.initialProvider))) type = "Bifrost";
+    // A gateway recognised by its name or address is stored as one whatever preset it was added with, so renaming it later cannot switch off its Gemini-native setting.
+    if (takesOpenAIRoute(type) && (isBifrostProvider({ ...p, name }) || isBifrostProvider(this.initialProvider))) type = "Bifrost";
     if (!name) {
       new Notice("Provider name is required.");
 			this.setFieldError(this.nameField, "Provider name is required.", true);

@@ -295,6 +295,43 @@ describe("Bifrost Gemini-native setting", () => {
 		expect(edit.mock.calls[0][0]).toEqual(expect.objectContaining({ type: "Bifrost", name: "Work Gateway", geminiNative: true }));
 	});
 
+	it("stores a gateway added with another OpenAI-compatible preset as Bifrost, and keeps the switch on rename", async () => {
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave);
+		modal.onOpen();
+		const root = modal.contentEl as Element;
+		const select = settingNamed(root, "Preset").querySelector("select")!;
+		select.value = "openai";
+		await select.listeners.get("change")!();
+		const input = settingNamed(root, "Provider name").querySelector("input")!;
+		input.value = "Office Bifrost";
+		await input.listeners.get("input")!();
+		const toggle = settingNamed(root, "Use Gemini-native API").querySelector("input")!;
+		toggle.checked = true;
+		await toggle.listeners.get("change")!();
+		modal.save();
+		const saved = onSave.mock.calls[0][0];
+		expect(saved).toEqual(expect.objectContaining({ id: "office-bifrost", type: "Bifrost", geminiNative: true }));
+
+		const edit = vi.fn();
+		const again: any = new UnifiedProviderModal({} as any, edit, saved);
+		again.onOpen();
+		const name = settingNamed(again.contentEl, "Provider name").querySelector("input")!;
+		name.value = "Office Gateway";
+		await name.listeners.get("input")!();
+		again.save();
+		expect(edit.mock.calls[0][0]).toEqual(expect.objectContaining({ type: "Bifrost", name: "Office Gateway", geminiNative: true }));
+	});
+
+	it("leaves kinds that are not called through an OpenAI-compatible endpoint alone", async () => {
+		const azure: any = { id: "azure-bifrost", type: "Azure", name: "Azure Bifrost", baseUrl: "https://example.services.ai.azure.com", apiKey: "k", enabled: true };
+		const onSave = vi.fn();
+		const modal: any = new UnifiedProviderModal({} as any, onSave, azure);
+		modal.onOpen();
+		modal.save();
+		expect(onSave.mock.calls[0][0].type).toBe("Azure");
+	});
+
 	it("stores a saved Custom gateway as Bifrost even when the same edit renames it", async () => {
 		const onSave = vi.fn();
 		const saved: any = { id: "gateway", type: "Custom", name: "Work Bifrost", baseUrl: "https://gateway.example.test/v1", apiKey: "k", enabled: true, geminiNative: true };
@@ -712,7 +749,8 @@ it.each([
 	modal.onOpen();
 	expect(settingNamed(modal.contentEl, "Use Gemini-native API").style.display).toBe("");
 	modal.save();
-	expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ ...identity, geminiNative: true }), []);
+	// A gateway recognised under any other kind name is stored as Bifrost, so a rename cannot lose the switch.
+	expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ ...identity, type: "Bifrost", geminiNative: true }), []);
 });
 
 it("updates Bifrost detection when the user edits the name or endpoint", async () => {
