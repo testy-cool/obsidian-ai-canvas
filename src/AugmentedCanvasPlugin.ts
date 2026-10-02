@@ -17,6 +17,7 @@ import {
 } from "./actions/canvasNodeMenuActions/advancedCanvas";
 import {
 	AugmentedCanvasSettings,
+	clearStaleImageSelection,
 	DEFAULT_SETTINGS,
 	migrateAutoPreviewHtmlSettings,
 	SystemPrompt,
@@ -246,25 +247,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		this.settings.groupTitleProviderId = groupSelection.providerId;
 		this.settings.groupTitleModelId = groupSelection.modelId;
 
-		if (
-			this.settings.imageProviderId &&
-			!this.settings.providers.some(
-				provider => provider.id === this.settings.imageProviderId
-			)
-		) {
-			this.settings.imageProviderId = "";
-		}
-
-		if (this.settings.imageModelId) {
-			const resolvedProviderId =
-				this.settings.imageProviderId || this.settings.activeProvider;
-			const enabledImageModels = this.settings.models.filter(
-				model => model.providerId === resolvedProviderId && model.enabled
-			);
-			if (!enabledImageModels.some(model => model.id === this.settings.imageModelId)) {
-				this.settings.imageModelId = "";
-			}
-		}
+		clearStaleImageSelection(this.settings);
 
 		// Ensure observability settings exist (upgrade from pre-0.2.0)
 		if (!this.settings.observability) {

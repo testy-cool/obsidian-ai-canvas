@@ -2,7 +2,7 @@ import { App, PluginSettingTab, Setting, ButtonComponent, Notice, TextComponent,
 import { guessImageModel } from "../utils/modelKind";
 import AugmentedCanvasPlugin from "./../AugmentedCanvasPlugin";
 import { UnifiedProviderModal } from "src/Modals/UnifiedProviderModal";
-import { LLMProvider, MCPServer, MCPTransportType } from "./AugmentedCanvasSettings";
+import { LLMProvider, MCPServer, MCPTransportType, clearStaleImageSelection } from "./AugmentedCanvasSettings";
 import { testMCPServer } from "src/utils/mcpClient";
 import { buildManualMCPServer, parseMCPServersConfig, serializeMCPServers } from "src/utils/mcpConfig";
 import { getParamsForModel, detectProviderLabel } from "src/utils/providerParams";
@@ -325,6 +325,7 @@ export default class SettingsTab extends PluginSettingTab {
                         );
                         this.plugin.settings.models.push(...models);
                         this.ensureActiveModelForProvider(this.plugin.settings.activeProvider);
+                        clearStaleImageSelection(this.plugin.settings);
                         await this.plugin.saveSettings();
                         this.display();
                     },
@@ -353,6 +354,8 @@ export default class SettingsTab extends PluginSettingTab {
 					.filter(({ model }) => model.providerId === provider.id);
 				const previousActiveProvider = this.plugin.settings.activeProvider;
 				const previousApiModel = this.plugin.settings.apiModel;
+				const previousImageProviderId = this.plugin.settings.imageProviderId;
+				const previousImageModelId = this.plugin.settings.imageModelId;
 
                 if (this.plugin.settings.activeProvider === provider.id) {
                     const remainingProviders = this.plugin.settings.providers.filter(p => p.id !== provider.id);
@@ -369,6 +372,7 @@ export default class SettingsTab extends PluginSettingTab {
 
                 this.plugin.settings.providers = this.plugin.settings.providers.filter(p => p.id !== provider.id);
                 this.plugin.settings.models = this.plugin.settings.models.filter(m => m.providerId !== provider.id);
+                clearStaleImageSelection(this.plugin.settings);
 
                 await this.plugin.saveSettings();
                 this.display();
@@ -379,6 +383,8 @@ export default class SettingsTab extends PluginSettingTab {
 					}
 					this.plugin.settings.activeProvider = previousActiveProvider;
 					this.plugin.settings.apiModel = previousApiModel;
+					this.plugin.settings.imageProviderId = previousImageProviderId;
+					this.plugin.settings.imageModelId = previousImageModelId;
 				});
             });
 
@@ -638,6 +644,7 @@ export default class SettingsTab extends PluginSettingTab {
                 checkbox.addEventListener("change", async () => {
                     model.enabled = checkbox.checked;
                     this.ensureActiveModelForProvider(this.plugin.settings.activeProvider);
+                    clearStaleImageSelection(this.plugin.settings);
                     await this.plugin.saveSettings();
                     updateHeader();
                     renderModelList();

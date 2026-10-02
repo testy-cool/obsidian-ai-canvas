@@ -1291,3 +1291,68 @@ describe("providers that return no model list", () => {
 		expect(status.classList.contains("mod-success")).toBe(false);
 	});
 });
+
+
+describe("an image model that is switched off", () => {
+	const setup = () => {
+		const providers = [
+			{ id: "bifrost", type: "Bifrost", baseUrl: "https://example.test/v1", apiKey: "k", enabled: true },
+			{ id: "other", type: "Custom", baseUrl: "https://other.test/v1", apiKey: "k", enabled: true },
+		];
+		const models = [
+			{ id: "text", model: "text-model", providerId: "bifrost", enabled: true },
+			{ id: "image", model: "image-model", providerId: "bifrost", enabled: true },
+			{ id: "other-m", model: "other-model", providerId: "other", enabled: true },
+		];
+		const plugin: any = {
+			settings: { ...DEFAULT_SETTINGS, providers, models, activeProvider: "bifrost", apiModel: "text", imageProviderId: "", imageModelId: "image" },
+			saveSettings: vi.fn().mockResolvedValue(undefined),
+		};
+		const tab: any = new SettingsTab({} as any, plugin);
+		vi.spyOn(tab, "display").mockImplementation(() => {});
+		const root = new Element();
+		tab.renderProviders(root);
+		return { plugin, root, models };
+	};
+
+	it("is forgotten when it is unticked in Edit", async () => {
+		const { plugin, root, models } = setup();
+		let box: any;
+		vi.spyOn(UnifiedProviderModal.prototype, "open").mockImplementation(function (this: any) { box = this; });
+		await root.querySelectorAll("button").find(button => button.textContent === "Edit")!.listeners.get("click")!();
+		await box.onSave(plugin.settings.providers[0], models.slice(0, 2).map(model => ({ ...model, enabled: model.id === "text" })));
+		expect(plugin.settings.imageModelId).toBe("");
+		expect(plugin.saveSettings).toHaveBeenCalledOnce();
+	});
+
+	it("is forgotten when its checkbox is cleared in the provider's list", async () => {
+		const { plugin, root } = setup();
+		const row = root.querySelectorAll(".provider-model-row").find(item => item.querySelector(".provider-model-name")!.textContent!.startsWith("image-model"))!;
+		const checkbox = row.querySelector("input")!;
+		checkbox.checked = false;
+		await checkbox.listeners.get("change")!();
+		expect(plugin.settings.imageModelId).toBe("");
+	});
+
+	it("is kept when another model is switched off", async () => {
+		const { plugin, root } = setup();
+		const row = root.querySelectorAll(".provider-model-row").find(item => item.querySelector(".provider-model-name")!.textContent!.startsWith("text-model"))!;
+		const checkbox = row.querySelector("input")!;
+		checkbox.checked = false;
+		await checkbox.listeners.get("change")!();
+		expect(plugin.settings.imageModelId).toBe("image");
+	});
+
+	it("is forgotten when its provider is deleted, and Undo brings the choice back", async () => {
+		const { plugin, root } = setup();
+		plugin.settings.imageProviderId = "other";
+		plugin.settings.imageModelId = "other-m";
+		const notice = vi.spyOn(obsidian, "Notice");
+		const card = root.querySelectorAll(".provider-block")[1];
+		await card.querySelectorAll("button").find(button => button.textContent === "Delete")!.listeners.get("click")!();
+		expect([plugin.settings.imageProviderId, plugin.settings.imageModelId]).toEqual(["", ""]);
+		const undo = (notice.mock.instances[0].noticeEl as any as Element).querySelector("button")!;
+		await undo.listeners.get("click")!();
+		expect([plugin.settings.imageProviderId, plugin.settings.imageModelId]).toEqual(["other", "other-m"]);
+	});
+});

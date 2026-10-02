@@ -402,6 +402,32 @@ export function migrateAutoPreviewHtmlSettings(
 	return true;
 }
 
+/**
+ * Forget an image provider that no longer exists and an image model that is not
+ * an enabled model of the provider images are made with, so the stored choice
+ * never points at something switched off or deleted.
+ */
+export function clearStaleImageSelection(
+	settings: Pick<AugmentedCanvasSettings, "providers" | "models" | "activeProvider" | "imageProviderId" | "imageModelId">
+): void {
+	if (
+		settings.imageProviderId &&
+		!settings.providers.some(provider => provider.id === settings.imageProviderId)
+	) {
+		settings.imageProviderId = "";
+	}
+
+	if (settings.imageModelId) {
+		const resolvedProviderId = settings.imageProviderId || settings.activeProvider;
+		const enabledImageModels = settings.models.filter(
+			model => model.providerId === resolvedProviderId && model.enabled
+		);
+		if (!enabledImageModels.some(model => model.id === settings.imageModelId)) {
+			settings.imageModelId = "";
+		}
+	}
+}
+
 const DEFAULT_SYSTEM_PROMPT = `
 You must respond in markdown.
 The response must be in the same language the user used, default to english.
