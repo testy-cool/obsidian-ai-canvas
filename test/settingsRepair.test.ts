@@ -56,37 +56,43 @@ describe("isUntouchedLegacyDefaults", () => {
 		enabled: true,
 		...extra,
 	});
+	const oldModels = [model("openai", "default"), model("anthropic", "claude-3-opus"), model("gemini", "gemini-3-flash-preview"), model("ollama", "gemini-pro")];
 	const six = () => ["openai", "anthropic", "groq", "openrouter", "gemini", "ollama"].map(id => legacy(id));
 
 	it("is true for the old six built-in providers with no key", () => {
-		expect(isUntouchedLegacyDefaults(six())).toBe(true);
-		expect(isUntouchedLegacyDefaults([legacy("gemini"), legacy("openai")])).toBe(true);
+		expect(isUntouchedLegacyDefaults(six(), oldModels)).toBe(true);
+		expect(isUntouchedLegacyDefaults([legacy("gemini"), legacy("openai")], oldModels)).toBe(true);
 	});
 
 	it("is false for a single provider or none", () => {
-		expect(isUntouchedLegacyDefaults([legacy("gemini")])).toBe(false);
-		expect(isUntouchedLegacyDefaults([])).toBe(false);
+		expect(isUntouchedLegacyDefaults([legacy("gemini")], [])).toBe(false);
+		expect(isUntouchedLegacyDefaults([], [])).toBe(false);
 	});
 
 	it("is false when any provider has an API key", () => {
 		const providers = six();
 		providers[3].apiKey = "sk-set";
-		expect(isUntouchedLegacyDefaults(providers)).toBe(false);
+		expect(isUntouchedLegacyDefaults(providers, oldModels)).toBe(false);
 	});
 
 	it("is false for a Codex provider that took the id openai", () => {
 		const providers = six();
 		providers[0] = { ...legacy("openai"), type: "Codex", baseUrl: "" };
-		expect(isUntouchedLegacyDefaults(providers)).toBe(false);
+		expect(isUntouchedLegacyDefaults(providers, oldModels)).toBe(false);
 	});
 
 	it("is false for a renamed provider", () => {
 		const providers = six();
 		providers[1] = legacy("anthropic", { name: "Work Claude" });
-		expect(isUntouchedLegacyDefaults(providers)).toBe(false);
+		expect(isUntouchedLegacyDefaults(providers, oldModels)).toBe(false);
 	});
 
 	it("is false when a provider is not on the old list", () => {
-		expect(isUntouchedLegacyDefaults([legacy("gemini"), { id: "mine", type: "Custom", baseUrl: "https://x.test", apiKey: "", enabled: true }])).toBe(false);
+		expect(isUntouchedLegacyDefaults([legacy("gemini"), { id: "mine", type: "Custom", baseUrl: "https://x.test", apiKey: "", enabled: true }], oldModels)).toBe(false);
+	});
+
+	it("is false when a provider that would be dropped has a model of its own", () => {
+		const providers = [legacy("gemini"), legacy("ollama")];
+		expect(isUntouchedLegacyDefaults(providers, [model("gemini", "gemini-3-flash-preview"), model("ollama", "ollama-llama3")])).toBe(false);
 	});
 });

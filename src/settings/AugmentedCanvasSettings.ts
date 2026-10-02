@@ -430,14 +430,18 @@ export function clearStaleImageSelection(
 
 const LEGACY_DEFAULT_PROVIDER_IDS = new Set(["openai", "anthropic", "groq", "openrouter", "gemini", "ollama"]);
 
+const LEGACY_DEFAULT_MODEL_IDS = new Set(["default", "default-mini", "claude-3-sonnet", "claude-3-opus", "gemini-pro"]);
+
 /**
  * True when the saved providers are still the old built-in list that nobody set
  * up: several of them, none with an API key, each one an old default under its
- * own kind and never renamed.
+ * own kind and never renamed. The reset drops every model that is not Gemini's,
+ * so each of those must be an old built-in one too.
  */
-export function isUntouchedLegacyDefaults(providers: LLMProvider[]): boolean {
+export function isUntouchedLegacyDefaults(providers: LLMProvider[], models: LLMModel[]): boolean {
 	return (
 		providers.length > 1 &&
+		models.every(model => model.providerId === "gemini" || LEGACY_DEFAULT_MODEL_IDS.has(model.id)) &&
 		providers.every(
 			provider =>
 				LEGACY_DEFAULT_PROVIDER_IDS.has(provider.id) &&

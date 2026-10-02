@@ -163,7 +163,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
 		const htmlPreviewSettingsMigrated = migrateAutoPreviewHtmlSettings(this.settings);
 
-		if (isUntouchedLegacyDefaults(this.settings.providers)) {
+		if (isUntouchedLegacyDefaults(this.settings.providers, this.settings.models)) {
 			this.settings.providers = DEFAULT_SETTINGS.providers.map(provider => ({ ...provider }));
 			this.settings.models = this.settings.models.filter(model => model.providerId === "gemini");
 			if (!this.settings.models.length) {
