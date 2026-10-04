@@ -50749,6 +50749,9 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
   const resolveProvider = () => customProvider || settings2.providers.find((provider) => provider.id === settings2.activeProvider);
   const resolveModel = (provider) => customModel || settings2.models.find((model) => model.id === settings2.apiModel && model.providerId === (provider == null ? void 0 : provider.id) && model.enabled) || settings2.models.find((model) => model.providerId === (provider == null ? void 0 : provider.id) && model.enabled);
   const canCallAI = () => {
+    const provider = resolveProvider();
+    if (provider && (provider.type === "Codex" || cliAdapterForProviderType(provider.type)))
+      return true;
     if (!settings2.apiKey && !getActiveProviderApiKey()) {
       new import_obsidian13.Notice("Please set your OpenAI API key in the plugin settings");
       return false;
