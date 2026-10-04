@@ -33,9 +33,9 @@ describe("building the invocation", () => {
 			.toEqual(["-p", "--output-format", "stream-json", "--verbose"]);
 	});
 
-	it("passes the prompt to Pi as an argument, in plain text mode", () => {
+	it("passes the prompt to Pi as an argument, in json mode", () => {
 		const call = buildCliInvocation(CLI_ADAPTERS.pi, { prompt: "hello", model: "google/gemini-3-flash" });
-		expect(call.args).toEqual(["-p", "--mode", "text", "--model", "google/gemini-3-flash", "hello"]);
+		expect(call.args).toEqual(["-p", "--mode", "json", "--model", "google/gemini-3-flash", "hello"]);
 		expect(call.stdin).toBeUndefined();
 	});
 

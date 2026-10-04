@@ -365,7 +365,21 @@ export interface StreamOptions {
 	maxSteps?: number;
 	providerParams?: Record<string, unknown>;
 	timeoutMs?: number;
-	onComplete?: (result: { inputTokens: number; outputTokens: number; cachedInputTokens?: number; totalText: string; error?: string }) => void;
+	onComplete?: (result: {
+		inputTokens: number;
+		outputTokens: number;
+		cachedInputTokens?: number;
+		totalText: string;
+		error?: string;
+		/** Dollars, for a provider that reports its own cost instead of leaving it to the price list. */
+		costUsd?: number;
+		/** The model that really answered, when the provider says so. */
+		model?: string;
+	}) => void;
+	/** Swap the whole answer written so far for this text. Only some local CLIs rewrite what they streamed. */
+	onReplaceText?: (text: string) => void;
+	/** What the provider is doing, for the card's status line. */
+	onPhase?: (phase: string) => void;
 }
 
 export type ToolEvent = {
@@ -389,6 +403,8 @@ export const streamResponse = async (
 		providerParams,
 		timeoutMs,
 		onComplete,
+		onReplaceText,
+		onPhase,
 		abortSignal,
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
@@ -398,7 +414,7 @@ export const streamResponse = async (
 	};
 	throwIfStopped();
 	if (cliAdapterForProviderType(provider.type)) {
-		return streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, abortSignal }, cb);
+		return streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, onReplaceText, onPhase, abortSignal }, cb);
 	}
 	if (provider.type === "Codex") {
 		return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete, abortSignal }, cb);
@@ -663,7 +679,7 @@ export const getResponse = async (
 	if (localCli || provider.type === "Codex") {
 		let text = "";
 		const run = localCli
-			? streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete }, (chunk) => { if (chunk) text += chunk; })
+			? streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, onReplaceText: replaced => { text = replaced; } }, (chunk) => { if (chunk) text += chunk; })
 			: streamCodexResponse(provider, messages, { model, providerParams, timeoutMs, onComplete }, (chunk) => { if (chunk) text += chunk; });
 		await run;
 		if (includeMetadata) return { text, sources: [], providerMetadata: undefined };

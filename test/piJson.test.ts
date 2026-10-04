@@ -1,0 +1,148 @@
+import { describe, it, expect, afterEach } from "vitest";
+import { Platform } from "obsidian";
+import { createPiJsonParser, streamLocalCliResponse, CliEvent } from "../src/utils/localCli";
+import { fixtureLines, makeFakePi } from "./helpers/fakePi";
+
+afterEach(() => { Platform.isDesktopApp = true; });
+
+const readRun = (lines: string[]): CliEvent[] => {
+	const parse = createPiJsonParser();
+	return lines.map(parse).filter((event): event is NonNullable<CliEvent> => event !== null);
+};
+
+const assistantStart = JSON.stringify({ type: "message_start", message: { role: "assistant", content: [] } });
+const textDelta = (delta: string) => JSON.stringify({
+	type: "message_update",
+	assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta },
+});
+const agentEnd = (...parts: any[]) => JSON.stringify({
+	type: "agent_end",
+	messages: [{ role: "assistant", content: parts, model: "m", usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: { total: 0.5 } } }],
+});
+const signed = (text: string, phase: string) => ({ type: "text", text, textSignature: JSON.stringify({ v: 1, id: "msg", phase }) });
+
+describe("reading one Pi run in json mode", () => {
+	it("gives the answer, the usage, the cost and the model of a one-message run", () => {
+		const events = readRun(fixtureLines("pi-answer.jsonl"));
+		expect(events.filter(event => event.textDelta).map(event => event.textDelta).join("")).toBe("OK");
+		expect(events.some(event => event.textReplace !== undefined)).toBe(false);
+		expect(events.at(-1)).toEqual({
+			usage: { inputTokens: 64568, outputTokens: 254 },
+			cost: 0.263352,
+			model: "gpt-5.6-sol",
+		});
+	});
+
+	it("sums every message of a run that used tools, not only the last one", () => {
+		const done = readRun(fixtureLines("pi-tool-run.jsonl")).at(-1)!;
+		expect(done.usage).toEqual({
+			inputTokens: 64239 + (599 + 64128) + (363 + 64640),
+			outputTokens: 317 + 262 + 5,
+			cachedInputTokens: 64128 + 64640,
+		});
+		expect(done.cost).toBeCloseTo(0.263296 + 0.0332872 + 0.027408, 6);
+	});
+
+	it("never writes thinking or tool calls into the answer", () => {
+		const events = readRun(fixtureLines("pi-tool-run.jsonl"));
+		const written = events.filter(event => event.textDelta).map(event => event.textDelta).join("");
+		expect(written).toBe("DONE");
+		expect(JSON.stringify(events)).not.toContain("Planning session-start");
+	});
+
+	it("reports what Pi is doing as a status phase", () => {
+		const phases = readRun(fixtureLines("pi-tool-run.jsonl")).map(event => event.phase).filter(Boolean);
+		expect(phases).toContain("Thinking…");
+		expect(phases).toContain("Using write…");
+		expect(phases).toContain("Using bash…");
+	});
+
+	it("ignores lines that are not events", () => {
+		const parse = createPiJsonParser();
+		expect(parse("not json")).toBeNull();
+		expect(parse(JSON.stringify({ type: "agent_start" }))).toBeNull();
+		expect(parse(JSON.stringify({ type: "message_start", message: { role: "user" } }))).toBeNull();
+	});
+});
+
+describe("replacing text that was only a step on the way", () => {
+	it("clears the text of a message when the next assistant message starts", () => {
+		const events = readRun([
+			assistantStart,
+			textDelta("Let me look at the file."),
+			assistantStart,
+			textDelta("The answer."),
+			agentEnd(signed("The answer.", "final_answer")),
+		]);
+		expect(events.map(event => event.textDelta ?? event.textReplace)).toEqual([
+			"Let me look at the file.", "", "The answer.", undefined,
+		]);
+		expect(events.at(-1)).not.toHaveProperty("textReplace");
+	});
+
+	it("ends on exactly the final answer when the last message also held other text", () => {
+		const events = readRun([
+			assistantStart,
+			textDelta("Checking. "),
+			textDelta("All done."),
+			agentEnd(signed("Checking. ", "commentary"), signed("All done.", "final_answer")),
+		]);
+		expect(events.at(-1)?.textReplace).toBe("All done.");
+	});
+
+	it("uses every text part when none is marked as the final answer", () => {
+		const events = readRun([
+			assistantStart,
+			agentEnd({ type: "text", text: "one " }, { type: "text", text: "two" }),
+		]);
+		expect(events.at(-1)?.textReplace).toBe("one two");
+	});
+
+	it("leaves the card empty when the last message has no text", () => {
+		const events = readRun([assistantStart, textDelta("half a thought"), agentEnd({ type: "thinking", thinking: "x" })]);
+		expect(events.at(-1)?.textReplace).toBe("");
+	});
+});
+
+describe("running Pi through the plugin", () => {
+	const provider = (binaryPath: string) => ({
+		id: "pi", type: "Pi CLI", baseUrl: "", apiKey: "", enabled: true, binaryPath,
+	}) as any;
+
+	it("leaves a card with only the final answer, and the cost Pi reported", async () => {
+		const pi = makeFakePi({ script: "pi-tool-run.jsonl" });
+		try {
+			let text = "";
+			const phases: string[] = [];
+			let completion: any;
+			await streamLocalCliResponse(
+				provider(pi.binary),
+				[{ role: "user", content: "Create a.txt, then reply DONE." }] as any,
+				{
+					onComplete: result => { completion = result; },
+					onReplaceText: replaced => { text = replaced; },
+					onPhase: phase => phases.push(phase),
+				},
+				chunk => { if (chunk) text += chunk; },
+			);
+			expect(text).toBe("DONE");
+			expect(completion.totalText).toBe("DONE");
+			expect(completion.model).toBe("gpt-5.6-sol");
+			expect(completion.costUsd).toBeCloseTo(0.3240, 3);
+			expect(phases).toContain("Using write…");
+		} finally {
+			pi.cleanup();
+		}
+	}, 30000);
+
+	it("returns only the final answer to callers that wait for the whole text", async () => {
+		const { getResponse } = await import("../src/utils/ai");
+		const pi = makeFakePi({ script: "pi-tool-run.jsonl" });
+		try {
+			const text = await getResponse(provider(pi.binary), [{ role: "user", content: "x" }] as any, {});
+			expect(text).toBe("DONE");
+		} finally {
+			pi.cleanup();
+		}
+	}, 30000);
+});

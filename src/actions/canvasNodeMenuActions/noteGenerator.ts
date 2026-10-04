@@ -28,6 +28,7 @@ import { addModelIndicator, setModelIndicatorText, getYouTubeVideoId } from "../
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { createGenerationStatus } from "../../utils/generationStatus";
 import { costForModel } from "../../utils/cost";
+import { CLI_DEFAULT_MODEL } from "../../utils/localCli";
 import { isImageModel } from "../../utils/modelKind";
 import { getAllMCPTools } from "../../utils/mcpClient";
 import { getProviderCapabilities, providerLabel, supportsGoogleTools } from "../../utils/providerCapabilities";
@@ -728,6 +729,7 @@ export function noteGenerator(
 			}
 
 			const controller = new AbortController();
+			let shownModel = model.model;
 			let generationStatus: ReturnType<typeof createGenerationStatus> | undefined;
 			try {
 				// Unfocused cards can lack contentEl until Canvas renders them.
@@ -784,6 +786,15 @@ export function noteGenerator(
 				let firstDelta = true;
 				let lastResizeAt = Date.now();
 				const toolRefs = new Map<string, HTMLElement>();
+				// The first text, or the first rewrite of it, clears the card and
+				// makes room for the tool calls.
+				const startWriting = () => {
+					if (!firstDelta) return;
+					created.setText("");
+					// Create tools container for MCP tool calls
+					toolsContainer = created.contentEl.createEl("div", { cls: "mcp-tools-container" });
+					firstDelta = false;
+				};
 
 				// Determine what features are active
 				const hasMcpTools = mcpTools && Object.keys(mcpTools).length > 0;
@@ -821,27 +832,30 @@ export function noteGenerator(
 						onComplete: usage => {
 							// Show what the card cost and how much came from the cache next
 							// to the model it used. Cost is undefined when the model has no
-							// prices, so the badge leaves it out.
-							const cost = costForModel(settings.models, provider.id, model.model, usage);
+							// prices, so the badge leaves it out. A provider that reports its
+							// own cost, such as Pi, wins over the price list.
+							const cost = usage.costUsd ?? costForModel(settings.models, provider.id, model.model, usage);
 							const { inputTokens, outputTokens, cachedInputTokens } = usage;
+							// "default" says nothing about which model answered.
+							if (usage.model && model.model === CLI_DEFAULT_MODEL) shownModel = usage.model;
 							created.setData({
 								...created.getData(),
 								ai_usage: { inputTokens, outputTokens, cachedInputTokens: cachedInputTokens ?? 0 },
 								ai_duration_ms: Date.now() - requestStartedAt,
 								...(cost == null ? {} : { ai_cost: cost }),
+								...(shownModel === model.model ? {} : { ai_model: shownModel }),
 							});
 						},
+						onReplaceText: text => {
+							if (controller.signal.aborted) return;
+							startWriting();
+							created.setText(text);
+						},
+						onPhase: phase => generationStatus?.setPhase(phase),
 					},
 					(delta: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => {
 						if (controller.signal.aborted) return;
-						if (firstDelta) {
-							created.setText("");
-
-
-							// Create tools container for MCP tool calls
-							toolsContainer = created.contentEl.createEl("div", { cls: "mcp-tools-container" });
-							firstDelta = false;
-						}
+						startWriting();
 
 						if (reasoningDelta) {
 							generationStatus?.setPhase("Thinking…");
@@ -963,7 +977,7 @@ export function noteGenerator(
 						if (reasoningDetails && !created.contentEl.contains(reasoningDetails)) created.contentEl.appendChild(reasoningDetails);
 						if (featuresEl && !created.contentEl.contains(featuresEl)) created.contentEl.appendChild(featuresEl);
 						if (!created.contentEl.contains(toolsContainer)) created.contentEl.appendChild(toolsContainer);
-						setModelIndicatorText(created, providerLabel(provider), model.model, !final);
+						setModelIndicatorText(created, providerLabel(provider), shownModel, !final);
 					}
 				);
 
@@ -1068,7 +1082,7 @@ export function noteGenerator(
 			} finally {
 				generationStatus?.destroy();
 				created.nodeEl?.removeClass("ai-generating");
-				if (created.contentEl) addModelIndicator(created, providerLabel(provider), model.model);
+				if (created.contentEl) addModelIndicator(created, providerLabel(provider), shownModel);
 			}
 
 			await canvas.requestSave();

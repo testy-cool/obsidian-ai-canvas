@@ -8,7 +8,20 @@ import type { StreamOptions, ToolEvent } from "./ai";
 export const CLI_DEFAULT_MODEL = "default";
 
 export type CliUsage = { inputTokens: number; outputTokens: number; cachedInputTokens?: number };
-export type CliEvent = { textDelta?: string; reasoningDelta?: string; usage?: CliUsage; error?: string } | null;
+export type CliEvent = {
+	textDelta?: string;
+	/** Swap everything written so far for this text, for a CLI whose last message is not what it streamed. */
+	textReplace?: string;
+	reasoningDelta?: string;
+	/** What the CLI is doing, for the card's status line. */
+	phase?: string;
+	usage?: CliUsage;
+	/** Dollars, when the CLI reports its own cost. */
+	cost?: number;
+	/** The model the CLI actually used. */
+	model?: string;
+	error?: string;
+} | null;
 
 export type CliAdapter = {
 	id: string;
@@ -26,6 +39,8 @@ export type CliAdapter = {
 	baseArgs: string[];
 	/** Left undefined when the command simply prints its answer. */
 	parseLine?: (line: string) => CliEvent;
+	/** Like `parseLine`, for a CLI whose events only make sense in order. Called once per run. */
+	createParser?: () => (line: string) => CliEvent;
 };
 
 /**
@@ -64,6 +79,91 @@ export const parseClaudeCliEvent = (line: string): CliEvent => {
 	return null;
 };
 
+const piTextPhase = (part: any): string | undefined => {
+	try {
+		return JSON.parse(part.textSignature)?.phase;
+	} catch {
+		return undefined;
+	}
+};
+
+/**
+ * Read the lines of `pi -p --mode json` for one run. Pi may write several
+ * assistant messages (one per tool round) and only the last is the answer, so
+ * the text streamed while a message is being written is swapped out when the
+ * next message starts, and again at the end for exactly the answer. Usage and
+ * cost are summed over every assistant message of the run, because the last one
+ * alone reports only its own round.
+ */
+export const createPiJsonParser = () => {
+	let written = "";
+
+	return (line: string): CliEvent => {
+		let event: any;
+		try {
+			event = JSON.parse(line);
+		} catch {
+			return null;
+		}
+
+		switch (event?.type) {
+			case "message_start": {
+				if (event.message?.role !== "assistant" || !written) return null;
+				written = "";
+				return { textReplace: "" };
+			}
+			case "message_update": {
+				const update = event.assistantMessageEvent;
+				if (update?.type === "text_delta" && typeof update.delta === "string") {
+					written += update.delta;
+					return { textDelta: update.delta };
+				}
+				if (update?.type === "thinking_start") return { phase: "Thinking…" };
+				if (update?.type === "toolcall_start") return { phase: `Using ${update.toolName || "tool"}…` };
+				return null;
+			}
+			case "tool_execution_start":
+				return { phase: `Using ${event.toolName || "tool"}…` };
+			case "tool_execution_end":
+				return { phase: "Generating…" };
+			case "agent_end": {
+				const assistants: any[] = (event.messages ?? []).filter((message: any) => message?.role === "assistant");
+				const last = assistants[assistants.length - 1];
+				const parts = (last?.content ?? []).filter((part: any) => part?.type === "text" && typeof part.text === "string");
+				const marked = parts.filter((part: any) => piTextPhase(part) === "final_answer");
+				const answer = (marked.length ? marked : parts).map((part: any) => part.text).join("");
+
+				let inputTokens = 0;
+				let outputTokens = 0;
+				let cachedInputTokens = 0;
+				let cost = 0;
+				let reported = false;
+				for (const message of assistants) {
+					const usage = message.usage;
+					if (!usage) continue;
+					reported = true;
+					inputTokens += (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
+					outputTokens += usage.output ?? 0;
+					cachedInputTokens += usage.cacheRead ?? 0;
+					cost += usage.cost?.total ?? 0;
+				}
+
+				const result: NonNullable<CliEvent> = {};
+				if (answer !== written) result.textReplace = answer;
+				written = answer;
+				if (reported) {
+					result.usage = { inputTokens, outputTokens, ...(cachedInputTokens ? { cachedInputTokens } : {}) };
+					result.cost = cost;
+				}
+				if (typeof last?.model === "string") result.model = last.model;
+				return Object.keys(result).length ? result : null;
+			}
+			default:
+				return null;
+		}
+	};
+};
+
 export const CLI_ADAPTERS: Record<string, CliAdapter> = {
 	claude: {
 		id: "claude",
@@ -84,7 +184,8 @@ export const CLI_ADAPTERS: Record<string, CliAdapter> = {
 		installHint: "Install pi, or set the binary path in the provider settings.",
 		modelFlag: "--model",
 		promptVia: "arg",
-		baseArgs: ["-p", "--mode", "text"],
+		baseArgs: ["-p", "--mode", "json"],
+		createParser: createPiJsonParser,
 	},
 	hermes: {
 		id: "hermes",
@@ -184,7 +285,7 @@ const flattenMessages = (messages: ModelMessage[]): string =>
 export const streamLocalCliResponse = async (
 	provider: LLMProvider,
 	messages: ModelMessage[],
-	{ model, timeoutMs, onComplete, abortSignal }: StreamOptions,
+	{ model, timeoutMs, onComplete, onReplaceText, onPhase, abortSignal }: StreamOptions,
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ): Promise<void> => {
 	if (abortSignal?.aborted) throw new DOMException("Generation stopped", "AbortError");
@@ -213,6 +314,9 @@ export const streamLocalCliResponse = async (
 		let streamedText = "";
 		let stderrTail = "";
 		let usage: CliUsage | undefined;
+		let costUsd: number | undefined;
+		let reportedModel: string | undefined;
+		const parseLine = adapter.createParser?.() ?? adapter.parseLine;
 		let buffer = "";
 		let settled = false;
 
@@ -242,6 +346,8 @@ export const streamLocalCliResponse = async (
 				outputTokens: usage?.outputTokens ?? 0,
 				cachedInputTokens: usage?.cachedInputTokens,
 				totalText: streamedText,
+				...(costUsd === undefined ? {} : { costUsd }),
+				...(reportedModel ? { model: reportedModel } : {}),
 			});
 			resolve();
 		};
@@ -251,7 +357,7 @@ export const streamLocalCliResponse = async (
 		child.stdout.setEncoding("utf8");
 		child.stdout.on("data", (chunk: string) => {
 			if (settled) return;
-			if (!adapter.parseLine) {
+			if (!parseLine) {
 				streamedText += chunk;
 				cb(chunk, null, null, null);
 				return;
@@ -261,7 +367,7 @@ export const streamLocalCliResponse = async (
 			buffer = lines.pop() ?? "";
 			for (const line of lines) {
 				if (!line.trim()) continue;
-				const event = adapter.parseLine(line);
+				const event = parseLine(line);
 				if (!event) continue;
 				if (event.error) {
 					child.kill("SIGKILL");
@@ -269,6 +375,13 @@ export const streamLocalCliResponse = async (
 					return;
 				}
 				if (event.usage) usage = event.usage;
+				if (event.cost !== undefined) costUsd = event.cost;
+				if (event.model) reportedModel = event.model;
+				if (event.phase) onPhase?.(event.phase);
+				if (event.textReplace !== undefined) {
+					streamedText = event.textReplace;
+					onReplaceText?.(event.textReplace);
+				}
 				if (event.reasoningDelta) cb(null, null, null, event.reasoningDelta);
 				if (event.textDelta) {
 					streamedText += event.textDelta;
