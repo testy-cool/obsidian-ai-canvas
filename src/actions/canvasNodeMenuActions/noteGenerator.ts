@@ -30,7 +30,7 @@ import { createGenerationStatus } from "../../utils/generationStatus";
 import { costForModel } from "../../utils/cost";
 import { canvasFolderPath } from "../../utils/canvasFolder";
 import { PI_FRESH_SESSION_NOTE, PI_PROVIDER_TYPE, PI_SESSION_KEY, planPiContinuation } from "../../utils/piSessions";
-import { CLI_DEFAULT_MODEL } from "../../utils/localCli";
+import { CLI_DEFAULT_MODEL, cliAdapterForProviderType } from "../../utils/localCli";
 import { isImageModel } from "../../utils/modelKind";
 import { getAllMCPTools } from "../../utils/mcpClient";
 import { getProviderCapabilities, providerLabel, supportsGoogleTools } from "../../utils/providerCapabilities";
@@ -249,7 +249,9 @@ export function noteGenerator(
 		settings.models.find(model => model.providerId === provider?.id && model.enabled);
 
 	const canCallAI = () => {
-		// return true;
+		// Codex and the local commands sign in on their own and never send a key.
+		const provider = resolveProvider();
+		if (provider && (provider.type === "Codex" || cliAdapterForProviderType(provider.type))) return true;
 		if (!settings.apiKey && !getActiveProviderApiKey()) {
 			new Notice("Please set your OpenAI API key in the plugin settings");
 			return false;

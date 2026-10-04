@@ -10,7 +10,7 @@ Always use `pnpm` (pinned via `packageManager` in `package.json`).
 - `pnpm run build` — `tsc -noEmit` type check, then esbuild production build.
 - `pnpm run deploy` — build and copy `main.js`, `manifest.json`, `styles.css` into the local vault at `/home/testycool/Obsidian-New/.obsidian/plugins/obsidian-ai-canvas` (path is hardcoded in `deploy.mjs`). Reload the plugin in Obsidian afterwards.
 - `pnpm run build:diff` — build, then diff the shipped `main.js` against the one that was there before. Use it to prove a cleanup changed nothing in the build. Tree-shaken code never reaches the bundle, so an unused export shows as no change.
-- `pnpm test` — run the Vitest suite once (42 files, 572 tests). `pnpm run test:watch` for watch mode.
+- `pnpm test` — run the Vitest suite once (42 files, 575 tests). `pnpm run test:watch` for watch mode.
 - Single test file: `pnpm exec vitest run test/mcp.test.ts`. Single test by name: `pnpm exec vitest run -t "name"`.
 - `pnpm run lint` — eslint over `src`. Unused imports are auto-fixable, so `pnpm exec eslint src --ext .ts --fix` clears them.
 - `pnpm dlx knip` — finds dead files, unused dependencies and exports nothing imports. Config in `knip.json`; it is not a dependency, run it on demand. The tree passes it, so any problem it reports is yours. `no-explicit-any` and `no-non-null-assertion` are off on purpose: Obsidian does not expose the Canvas API, so the internals are untyped by necessity and flagging every one buried the real problems.

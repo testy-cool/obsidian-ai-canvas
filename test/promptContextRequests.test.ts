@@ -159,6 +159,25 @@ afterEach(() => {
 	vi.useRealTimers();
 });
 
+describe("asking without an API key", () => {
+	it.each(["Pi CLI", "Codex"])("runs a %s provider, which signs in on its own", async type => {
+		const { app, settings, provider } = fixture(false);
+		Object.assign(provider, { type, apiKey: "" });
+		settings.apiKey = "";
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(obsidian.Notice).not.toHaveBeenCalledWith(expect.stringContaining("API key"));
+		expect(streamResponse).toHaveBeenCalledOnce();
+	});
+
+	it("still stops a remote provider that has no key", async () => {
+		const { app, settings, provider } = fixture(false);
+		provider.apiKey = "";
+		settings.apiKey = "";
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(streamResponse).not.toHaveBeenCalled();
+	});
+});
+
 describe("context picker request paths", () => {
 	it("continues an assistant answer with a Continue. turn and no question box", async () => {
 		const { app, canvas, prompt, settings } = fixture(false);
