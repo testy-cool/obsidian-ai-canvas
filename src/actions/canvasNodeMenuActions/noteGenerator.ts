@@ -658,9 +658,16 @@ export function noteGenerator(
 				continuing: !!piSession,
 			});
 			const contextCount = contributedNodeIds.size + (piSession?.coveredCount ?? 0);
-			// Should Pi no longer have that session, the whole chain starts a fresh one.
-			const fullChain = piSession
-				? await buildMessages(node, { prompt: trimmedQuestion ? question : undefined, selectedNodeIds })
+			// Should Pi no longer have that session, the whole chain starts a fresh
+			// one. It is built only then, so a skipped-media notice is not shown twice.
+			const buildFullChain = piSession
+				? async () => {
+					const { messages: whole } = await buildMessages(node, { prompt: trimmedQuestion ? question : undefined, selectedNodeIds });
+					if (!trimmedQuestion && (!whole.length || whole[whole.length - 1]?.role === "assistant")) {
+						whole.push({ role: "user", content: CONTINUE_PROMPT });
+					}
+					return whole;
+				}
 				: undefined;
 			const contextTotal = contextEntries.length;
 
@@ -675,9 +682,6 @@ export function noteGenerator(
 					parts: parts.length ? parts : undefined,
 				});
 				return;
-			}
-			if (!trimmedQuestion && fullChain?.messages[fullChain.messages.length - 1]?.role === "assistant") {
-				fullChain.messages.push({ role: "user", content: CONTINUE_PROMPT });
 			}
 			if (!trimmedQuestion && (messages[messages.length - 1]?.role === "assistant" || (piSession && !messages.length))) {
 				messages.push({ role: "user", content: CONTINUE_PROMPT });
@@ -858,7 +862,7 @@ export function noteGenerator(
 						abortSignal: controller.signal,
 						cwd: getCanvasFolder(),
 						forkSession: piSession?.sessionId,
-						fallbackMessages: fullChain?.messages.length ? fullChain.messages : undefined,
+						fallbackMessages: buildFullChain,
 						onComplete: usage => {
 							// Show what the card cost and how much came from the cache next
 							// to the model it used. Cost is undefined when the model has no

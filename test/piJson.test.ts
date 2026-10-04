@@ -274,7 +274,7 @@ describe("starting fresh when the Pi session is gone", () => {
 			let text = "";
 			await streamLocalCliResponse(
 				provider(pi.binary), onlyNew,
-				{ forkSession: "old-session", fallbackMessages: wholeChain, onComplete: result => { completion = result; } },
+				{ forkSession: "old-session", fallbackMessages: async () => wholeChain, onComplete: result => { completion = result; } },
 				chunk => { if (chunk) text += chunk; },
 			);
 			const calls = pi.calls();
@@ -296,7 +296,7 @@ describe("starting fresh when the Pi session is gone", () => {
 			let completion: any;
 			await streamLocalCliResponse(
 				provider(pi.binary), onlyNew,
-				{ forkSession: "old-session", fallbackMessages: wholeChain, onComplete: result => { completion = result; } },
+				{ forkSession: "old-session", fallbackMessages: async () => wholeChain, onComplete: result => { completion = result; } },
 				() => {},
 			);
 			expect(pi.calls()).toHaveLength(1);
@@ -310,7 +310,7 @@ describe("starting fresh when the Pi session is gone", () => {
 		const pi = makeFakePi({ script: "pi-fork.jsonl", lateFailures: { 0: "provider exploded" } });
 		try {
 			await expect(streamLocalCliResponse(
-				provider(pi.binary), onlyNew, { forkSession: "old-session", fallbackMessages: wholeChain }, () => {},
+				provider(pi.binary), onlyNew, { forkSession: "old-session", fallbackMessages: async () => wholeChain }, () => {},
 			)).rejects.toThrow(/provider exploded/);
 			expect(pi.calls()).toHaveLength(1);
 		} finally {
@@ -322,7 +322,7 @@ describe("starting fresh when the Pi session is gone", () => {
 		const pi = makeFakePi({ script: "pi-answer.jsonl", failures: { 0: gone, 1: "Error: Model not found" } });
 		try {
 			await expect(streamLocalCliResponse(
-				provider(pi.binary), onlyNew, { forkSession: "old-session", fallbackMessages: wholeChain }, () => {},
+				provider(pi.binary), onlyNew, { forkSession: "old-session", fallbackMessages: async () => wholeChain }, () => {},
 			)).rejects.toThrow(/Model not found/);
 			expect(pi.calls()).toHaveLength(2);
 		} finally {
@@ -346,7 +346,7 @@ describe("starting fresh when the Pi session is gone", () => {
 		const pi = makeFakePi({ script: "pi-answer.jsonl", failures: { 0: "Error: Model not found" } });
 		try {
 			await expect(streamLocalCliResponse(
-				provider(pi.binary), onlyNew, { fallbackMessages: wholeChain }, () => {},
+				provider(pi.binary), onlyNew, { fallbackMessages: async () => wholeChain }, () => {},
 			)).rejects.toThrow(/Model not found/);
 			expect(pi.calls()).toHaveLength(1);
 		} finally {

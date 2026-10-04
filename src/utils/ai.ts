@@ -388,8 +388,8 @@ export interface StreamOptions {
 	cwd?: string;
 	/** Start from a copy of this session of a local CLI that keeps sessions, so the request carries only what is new. */
 	forkSession?: string;
-	/** What to send instead, in full, if the session to fork turns out to be gone. */
-	fallbackMessages?: ModelMessage[];
+	/** Builds what to send instead, in full, if the session to fork turns out to be gone. Called only then. */
+	fallbackMessages?: () => Promise<ModelMessage[]>;
 }
 
 export type ToolEvent = {

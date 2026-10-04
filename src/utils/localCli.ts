@@ -450,6 +450,6 @@ export const streamLocalCliResponse = async (
 	const outcome = await runOnce(messages, forkSession, canRestart, false);
 	if (outcome === "retry") {
 		if (abortSignal?.aborted) throw new DOMException("Generation stopped", "AbortError");
-		await runOnce(fallbackMessages!, undefined, false, true);
+		await runOnce(await fallbackMessages!(), undefined, false, true);
 	}
 };

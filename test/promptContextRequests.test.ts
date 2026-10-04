@@ -1132,17 +1132,58 @@ describe("a Pi card and its Pi session", () => {
 		expect(data.ai_model).toBe("gpt-5.6-sol");
 	});
 
-	it("hands over the whole chain for Pi to start fresh with if the session is gone", async () => {
+	it("builds the whole chain for Pi to start fresh with only when asked for it", async () => {
 		const { app, settings } = piFixture({ oldest: "session-oldest" });
 		await run(() => noteGenerator(app, settings).generateNote());
-		expect(sentOptions().fallbackMessages.map((message: any) => message.content))
+		expect(typeof sentOptions().fallbackMessages).toBe("function");
+		const whole = await sentOptions().fallbackMessages();
+		expect(whole.map((message: any) => message.content))
 			.toEqual(["SYSTEM", "OLDEST", "PARENT", "edge label", "CURRENT"]);
+	});
+
+	it("ends the whole chain the way the short one ends, with Continue. after an answer card", async () => {
+		const { app, settings } = piFixture({ oldest: "session-oldest" });
+		await run(() => noteGenerator(app, settings).generateNote());
+		const whole = await sentOptions().fallbackMessages();
+		expect(whole.at(-1)).toEqual({ role: "user", content: "CURRENT" });
+		const second = piFixture({ prompt: "session-prompt" });
+		vi.mocked(streamResponse).mockClear();
+		second.prompt.setData({ chat_role: "assistant" });
+		await run(() => noteGenerator(second.app, second.settings).generateNote());
+		expect((await sentOptions().fallbackMessages()).at(-1)).toEqual({ role: "user", content: "Continue." });
 	});
 
 	it("gives no fallback when there is no session to lose", async () => {
 		const { app, settings } = piFixture();
 		await run(() => noteGenerator(app, settings).generateNote());
 		expect(sentOptions().fallbackMessages).toBeUndefined();
+	});
+
+	describe("a skipped-media notice", () => {
+		const youtubeNotices = () => vi.mocked(obsidian.Notice).mock.calls
+			.filter(([message]) => message.includes("cannot take"));
+		const withYoutube = () => {
+			const set = piFixture({ oldest: "session-oldest" });
+			set.canvas.nodes.get("parent").text = "Also read https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+			return set;
+		};
+
+		it("appears once when the fork works, because the card list is built once", async () => {
+			const { app, settings } = withYoutube();
+			await run(() => noteGenerator(app, settings).generateNote());
+			expect(youtubeNotices()).toHaveLength(1);
+		});
+
+		it("appears again only when the fork fails and the whole chain is built", async () => {
+			const { app, settings } = withYoutube();
+			vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
+				await options?.fallbackMessages?.();
+				callback("ANSWER", null, null, null);
+				callback(null, { text: "ANSWER" }, null, null);
+			});
+			await run(() => noteGenerator(app, settings).generateNote());
+			expect(youtubeNotices()).toHaveLength(2);
+		});
 	});
 
 	it("notes on the card that a fresh Pi session was started", async () => {
