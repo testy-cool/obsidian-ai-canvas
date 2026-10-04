@@ -29,6 +29,7 @@ import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { createGenerationStatus } from "../../utils/generationStatus";
 import { costForModel } from "../../utils/cost";
 import { canvasFolderPath } from "../../utils/canvasFolder";
+import { PI_PROVIDER_TYPE, PI_SESSION_KEY, planPiContinuation } from "../../utils/piSessions";
 import { CLI_DEFAULT_MODEL } from "../../utils/localCli";
 import { isImageModel } from "../../utils/modelKind";
 import { getAllMCPTools } from "../../utils/mcpClient";
@@ -315,10 +316,13 @@ export function noteGenerator(
 			systemPrompt,
 			prompt,
 			selectedNodeIds,
+			continuing,
 		}: {
 			systemPrompt?: string;
 			prompt?: string;
 			selectedNodeIds?: ReadonlySet<string>;
+			// The provider already holds the earlier cards in a session, and the system prompt with them.
+			continuing?: boolean;
 		} = {}
 	) => {
 		const messages: any[] = [];
@@ -342,6 +346,7 @@ export function noteGenerator(
 		const resolvedSystemPrompt = systemPrompt
 			? { prompt: systemPrompt, sourceNodeId: undefined }
 			: await getSystemPrompt(node, selectedNodeIds);
+		if (continuing && !resolvedSystemPrompt.sourceNodeId) resolvedSystemPrompt.prompt = "";
 
 		if (canCountTokens) {
 			const encoding = encodingForModel(modelName as any);
@@ -642,11 +647,17 @@ export function noteGenerator(
 				.filter(({ node }) => !selectedNodeIds!.has(node.id))
 				.map(({ node }) => node.id);
 			const trimmedQuestion = question?.trim();
+			// A Pi card carries its own Pi session. Continue the nearest one above
+			// and send only the cards added since, because Pi remembers the rest.
+			const piSession = provider.type === PI_PROVIDER_TYPE
+				? await planPiContinuation(contextEntries, selectedNodeIds, contextNode => (contextNode as CanvasNode).getData())
+				: undefined;
 			const { messages, tokenCount, notes, contributedNodeIds } = await buildMessages(node, {
 				prompt: trimmedQuestion ? question : undefined,
-				selectedNodeIds,
+				selectedNodeIds: piSession?.newNodeIds ?? selectedNodeIds,
+				continuing: !!piSession,
 			});
-			const contextCount = contributedNodeIds.size;
+			const contextCount = contributedNodeIds.size + (piSession?.coveredCount ?? 0);
 			const contextTotal = contextEntries.length;
 
 			if (isImageModel(provider.type, model)) {
@@ -661,7 +672,7 @@ export function noteGenerator(
 				});
 				return;
 			}
-			if (!trimmedQuestion && messages[messages.length - 1]?.role === "assistant") {
+			if (!trimmedQuestion && (messages[messages.length - 1]?.role === "assistant" || (piSession && !messages.length))) {
 				messages.push({ role: "user", content: CONTINUE_PROMPT });
 			}
 			// logDebug({ messages });
@@ -724,6 +735,7 @@ export function noteGenerator(
 					ai_cost: undefined,
 					ai_usage: undefined,
 					ai_duration_ms: undefined,
+					[PI_SESSION_KEY]: undefined,
 				});
 				
 				// Resize existing node to proper initial dimensions
@@ -838,6 +850,7 @@ export function noteGenerator(
 						timeoutMs: model.timeoutMs,
 						abortSignal: controller.signal,
 						cwd: getCanvasFolder(),
+						forkSession: piSession?.sessionId,
 						onComplete: usage => {
 							// Show what the card cost and how much came from the cache next
 							// to the model it used. Cost is undefined when the model has no
@@ -853,6 +866,7 @@ export function noteGenerator(
 								ai_duration_ms: Date.now() - requestStartedAt,
 								...(cost == null ? {} : { ai_cost: cost }),
 								...(shownModel === model.model ? {} : { ai_model: shownModel }),
+								...(usage.sessionId ? { [PI_SESSION_KEY]: usage.sessionId } : {}),
 							});
 						},
 						onReplaceText: text => {

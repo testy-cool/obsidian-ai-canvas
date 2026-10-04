@@ -375,6 +375,8 @@ export interface StreamOptions {
 		costUsd?: number;
 		/** The model that really answered, when the provider says so. */
 		model?: string;
+		/** The provider's own id for this conversation, so a later request can pick it up. */
+		sessionId?: string;
 	}) => void;
 	/** Swap the whole answer written so far for this text. Only some local CLIs rewrite what they streamed. */
 	onReplaceText?: (text: string) => void;
@@ -382,6 +384,8 @@ export interface StreamOptions {
 	onPhase?: (phase: string) => void;
 	/** The folder a local CLI that works on files should run in. Other providers ignore it. */
 	cwd?: string;
+	/** Start from a copy of this session of a local CLI that keeps sessions, so the request carries only what is new. */
+	forkSession?: string;
 }
 
 export type ToolEvent = {
@@ -408,6 +412,7 @@ export const streamResponse = async (
 		onReplaceText,
 		onPhase,
 		cwd,
+		forkSession,
 		abortSignal,
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
@@ -417,7 +422,7 @@ export const streamResponse = async (
 	};
 	throwIfStopped();
 	if (cliAdapterForProviderType(provider.type)) {
-		return streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, abortSignal }, cb);
+		return streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, forkSession, abortSignal }, cb);
 	}
 	if (provider.type === "Codex") {
 		return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete, abortSignal }, cb);

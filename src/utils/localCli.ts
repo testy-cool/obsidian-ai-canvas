@@ -20,6 +20,8 @@ export type CliEvent = {
 	cost?: number;
 	/** The model the CLI actually used. */
 	model?: string;
+	/** The id of the session this run belongs to, for a CLI that keeps sessions. */
+	session?: string;
 	error?: string;
 } | null;
 
@@ -43,6 +45,8 @@ export type CliAdapter = {
 	createParser?: () => (line: string) => CliEvent;
 	/** Work in the canvas's own folder, not a temporary one. For a CLI that acts on files and keeps its sessions per folder. */
 	runsInCanvasFolder?: boolean;
+	/** Flag that starts a run as a copy of an earlier session, leaving that session as it was. */
+	forkFlag?: string;
 };
 
 /**
@@ -109,6 +113,8 @@ export const createPiJsonParser = () => {
 		}
 
 		switch (event?.type) {
+			case "session":
+				return typeof event.id === "string" ? { session: event.id } : null;
 			case "message_start": {
 				if (event.message?.role !== "assistant" || !written) return null;
 				written = "";
@@ -189,6 +195,7 @@ export const CLI_ADAPTERS: Record<string, CliAdapter> = {
 		baseArgs: ["-p", "--mode", "json"],
 		createParser: createPiJsonParser,
 		runsInCanvasFolder: true,
+		forkFlag: "--fork",
 	},
 	hermes: {
 		id: "hermes",
@@ -220,10 +227,11 @@ export type CliInvocation = { args: string[]; stdin?: string };
 /** Assemble argv for one adapter. The prompt goes last so it cannot be read as a flag value. */
 export const buildCliInvocation = (
 	adapter: CliAdapter,
-	{ prompt, model, extraArgs }: { prompt: string; model?: string; extraArgs?: string[] }
+	{ prompt, model, extraArgs, forkSession }: { prompt: string; model?: string; extraArgs?: string[]; forkSession?: string }
 ): CliInvocation => {
 	const args = [...adapter.baseArgs];
 	if (model && model !== CLI_DEFAULT_MODEL && adapter.modelFlag) args.push(adapter.modelFlag, model);
+	if (forkSession && adapter.forkFlag) args.push(adapter.forkFlag, forkSession);
 	if (extraArgs?.length) args.push(...extraArgs);
 
 	if (adapter.promptVia === "flag" && adapter.promptFlag) {
@@ -288,7 +296,7 @@ const flattenMessages = (messages: ModelMessage[]): string =>
 export const streamLocalCliResponse = async (
 	provider: LLMProvider,
 	messages: ModelMessage[],
-	{ model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, abortSignal }: StreamOptions,
+	{ model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, forkSession, abortSignal }: StreamOptions,
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ): Promise<void> => {
 	if (abortSignal?.aborted) throw new DOMException("Generation stopped", "AbortError");
@@ -303,7 +311,7 @@ export const streamLocalCliResponse = async (
 	if (!binary) throw new Error(`${adapter.providerType} not found. ${adapter.installHint}`);
 
 	const extraArgs = provider.cliArgs?.trim() ? provider.cliArgs.trim().split(/\s+/) : undefined;
-	const { args, stdin } = buildCliInvocation(adapter, { prompt: flattenMessages(messages), model, extraArgs });
+	const { args, stdin } = buildCliInvocation(adapter, { prompt: flattenMessages(messages), model, extraArgs, forkSession });
 	logDebug(`[${adapter.providerType}] spawning`, { binary, args });
 
 	// eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -322,6 +330,7 @@ export const streamLocalCliResponse = async (
 		let usage: CliUsage | undefined;
 		let costUsd: number | undefined;
 		let reportedModel: string | undefined;
+		let sessionId: string | undefined;
 		const parseLine = adapter.createParser?.() ?? adapter.parseLine;
 		let buffer = "";
 		let settled = false;
@@ -354,6 +363,7 @@ export const streamLocalCliResponse = async (
 				totalText: streamedText,
 				...(costUsd === undefined ? {} : { costUsd }),
 				...(reportedModel ? { model: reportedModel } : {}),
+				...(sessionId ? { sessionId } : {}),
 			});
 			resolve();
 		};
@@ -383,6 +393,7 @@ export const streamLocalCliResponse = async (
 				if (event.usage) usage = event.usage;
 				if (event.cost !== undefined) costUsd = event.cost;
 				if (event.model) reportedModel = event.model;
+				if (event.session) sessionId = event.session;
 				if (event.phase) onPhase?.(event.phase);
 				if (event.textReplace !== undefined) {
 					streamedText = event.textReplace;

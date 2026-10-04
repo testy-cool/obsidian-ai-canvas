@@ -1045,3 +1045,98 @@ describe("the folder a local CLI runs in", () => {
 		expect(vi.mocked(streamResponse).mock.calls[0][2].cwd).toBeUndefined();
 	});
 });
+
+describe("a Pi card and its Pi session", () => {
+	const piFixture = (sessions: Record<string, string> = {}, type = "Pi CLI") => {
+		const set = fixture();
+		set.provider.type = type;
+		set.model.model = "default";
+		for (const [id, session] of Object.entries(sessions)) set.canvas.nodes.get(id).setData({ pi_session: session });
+		return set;
+	};
+	const sentContents = () => vi.mocked(streamResponse).mock.calls[0][1].map((message: any) => message.content);
+	const sentOptions = () => vi.mocked(streamResponse).mock.calls[0][2];
+
+	it("sends the whole chain and no fork when no card has a session", async () => {
+		const { app, settings } = piFixture();
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentOptions().forkSession).toBeUndefined();
+		expect(sentContents()).toEqual(["SYSTEM", "OLDEST", "PARENT", "edge label", "CURRENT"]);
+	});
+
+	it("continues the session above and sends only the cards added since", async () => {
+		const { app, settings, canvas } = piFixture({ oldest: "session-oldest" });
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentOptions().forkSession).toBe("session-oldest");
+		expect(sentContents()).toEqual(["PARENT", "edge label", "CURRENT"]);
+		expect(canvas.nodes.get("response").getData().ai_context_count).toBe(3);
+		expect(canvas.nodes.get("response").getData().ai_context_total).toBe(3);
+	});
+
+	it("picks the session nearest to the card being asked from", async () => {
+		const { app, settings } = piFixture({ oldest: "session-oldest", parent: "session-parent" });
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentOptions().forkSession).toBe("session-parent");
+		expect(sentContents()).toEqual(["CURRENT"]);
+	});
+
+	it("branches from an older card without sending the cards that came after it", async () => {
+		const { app, settings, canvas } = piFixture({ oldest: "session-oldest", parent: "session-parent" });
+		await run(() => noteGenerator(app, settings, canvas.nodes.get("parent")).generateNote("Another way?"));
+		expect(sentOptions().forkSession).toBe("session-parent");
+		expect(sentContents()).toEqual(["Another way?"]);
+	});
+
+	it("continues from the answer card itself with Continue. as the only new message", async () => {
+		const { app, settings } = piFixture({ prompt: "session-prompt" });
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentOptions().forkSession).toBe("session-prompt");
+		expect(sentContents()).toEqual(["Continue."]);
+	});
+
+	it("does not continue from a card the user switched off", async () => {
+		const { app, settings } = piFixture({ oldest: "session-oldest", parent: "session-parent" });
+		await run(() => noteGenerator(app, settings).generateNote(undefined, new Set(["prompt", "oldest"])));
+		expect(sentOptions().forkSession).toBe("session-oldest");
+		expect(sentContents()).toEqual(["CURRENT"]);
+	});
+
+	it("keeps a system prompt card that was added after the session", async () => {
+		const { app, settings, canvas } = piFixture({ oldest: "session-oldest" });
+		canvas.nodes.get("parent").setText("SYSTEM PROMPT Be brief.");
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentContents()).toEqual(["Be brief.", "CURRENT"]);
+	});
+
+	it("ignores the sessions when the active provider is not Pi", async () => {
+		const { app, settings } = piFixture({ oldest: "session-oldest" }, "Custom");
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentOptions().forkSession).toBeUndefined();
+		expect(sentContents()).toEqual(["SYSTEM", "OLDEST", "PARENT", "edge label", "CURRENT"]);
+	});
+
+	it("keeps the session Pi reports on the answer card, with Pi's cost and model", async () => {
+		const { app, settings, canvas } = piFixture();
+		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
+			callback("ANSWER", null, null, null);
+			callback(null, { text: "ANSWER" }, null, null);
+			options?.onComplete?.({
+				inputTokens: 10, outputTokens: 2, totalText: "ANSWER",
+				sessionId: "session-new", costUsd: 0.25, model: "gpt-5.6-sol",
+			});
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		const data = canvas.nodes.get("response").getData();
+		expect(data.pi_session).toBe("session-new");
+		expect(data.ai_cost).toBe(0.25);
+		expect(data.ai_model).toBe("gpt-5.6-sol");
+	});
+
+	it("forgets the old session of a card that is regenerated", async () => {
+		const { app, settings, canvas, prompt } = piFixture();
+		const existing = canvas.makeNode("existing", "old answer");
+		existing.setData({ pi_session: "session-stale" });
+		await run(() => noteGenerator(app, settings, prompt, existing).generateNote());
+		expect(existing.getData().pi_session).toBeUndefined();
+	});
+});

@@ -3,7 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { Platform } from "obsidian";
-import { CLI_ADAPTERS, createPiJsonParser, streamLocalCliResponse, CliEvent } from "../src/utils/localCli";
+import { CLI_ADAPTERS, buildCliInvocation, createPiJsonParser, streamLocalCliResponse, CliEvent } from "../src/utils/localCli";
 import { canvasFolderPath } from "../src/utils/canvasFolder";
 import { fixtureLines, makeFakePi } from "./helpers/fakePi";
 
@@ -208,4 +208,53 @@ describe("the canvas folder", () => {
 		expect(canvasFolderPath("/home/me/Vault", "/")).toBe("/home/me/Vault");
 		expect(canvasFolderPath("/home/me/Vault", "")).toBe("/home/me/Vault");
 	});
+});
+
+describe("Pi sessions", () => {
+	const provider = (binaryPath: string) => ({
+		id: "pi", type: "Pi CLI", baseUrl: "", apiKey: "", enabled: true, binaryPath,
+	}) as any;
+
+	it("reads the session id from the first event", () => {
+		expect(readRun(fixtureLines("pi-answer.jsonl"))[0]).toEqual({ session: "11111111-2222-4333-8444-555555555555" });
+	});
+
+	it("reads the id of the new session when a run forked another", () => {
+		expect(readRun(fixtureLines("pi-fork.jsonl"))[0]).toEqual({ session: "01a104dd-476c-7662-b338-57736c760c7c" });
+	});
+
+	it("forks the session before the prompt, which stays last", () => {
+		const call = buildCliInvocation(CLI_ADAPTERS.pi, { prompt: "next", model: "m", forkSession: "abc" });
+		expect(call.args).toEqual(["-p", "--mode", "json", "--model", "m", "--fork", "abc", "next"]);
+	});
+
+	it("starts a plain session when there is nothing to fork", () => {
+		expect(buildCliInvocation(CLI_ADAPTERS.pi, { prompt: "next" }).args).toEqual(["-p", "--mode", "json", "next"]);
+	});
+
+	it("leaves the other CLIs without a fork flag", () => {
+		for (const adapter of Object.values(CLI_ADAPTERS).filter(adapter => adapter.id !== "pi")) {
+			const call = buildCliInvocation(adapter, { prompt: "next", forkSession: "abc" });
+			expect([...call.args, call.stdin]).not.toContain("--fork");
+			expect(call.args).not.toContain("abc");
+		}
+	});
+
+	it("passes the fork to the command and reports the session of the run", async () => {
+		const pi = makeFakePi({ script: "pi-fork.jsonl" });
+		try {
+			let completion: any;
+			await streamLocalCliResponse(
+				provider(pi.binary), [{ role: "user", content: "and now?" }] as any,
+				{ forkSession: "01a104dc-7492-7183-854f-890681a92a30", onComplete: result => { completion = result; } },
+				() => {},
+			);
+			const args = pi.calls()[0].args;
+			expect(args.slice(-3)).toEqual(["--fork", "01a104dc-7492-7183-854f-890681a92a30", "user: and now?"]);
+			expect(completion.sessionId).toBe("01a104dd-476c-7662-b338-57736c760c7c");
+			expect(completion.totalText).toBe("hi");
+		} finally {
+			pi.cleanup();
+		}
+	}, 30000);
 });
