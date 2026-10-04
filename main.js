@@ -51870,6 +51870,7 @@ var KIND_IDS = /* @__PURE__ */ new Map([
   ["ollama", ["Ollama"]]
 ]);
 var NO_MODELS_RETURNED = "No models returned. Type model names below.";
+var foundModels = (count) => `Found ${count} ${count === 1 ? "model" : "models"}`;
 function isGeminiType(type) {
   return ["Gemini", "Google"].includes(type);
 }
@@ -52106,7 +52107,7 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
             if (fetchVersion !== this.modelFetchVersion)
               return;
             this.addToModelList(listed != null ? listed : cliUi.models);
-            connStatus == null ? void 0 : connStatus.setText(!detected ? `Not found. ${cliUi.hint}` : (listed == null ? void 0 : listed.length) === 0 ? NO_MODELS_RETURNED : listed ? `Found ${listed.length} models` : cliUi.listModels ? `Could not read the model list, showing ${cliUi.models.length} known models` : `Found ${cliUi.models.length} models`);
+            connStatus == null ? void 0 : connStatus.setText(!detected ? `Not found. ${cliUi.hint}` : (listed == null ? void 0 : listed.length) === 0 ? NO_MODELS_RETURNED : listed ? foundModels(listed.length) : cliUi.listModels ? `Could not read the model list, showing ${cliUi.models.length} known models` : foundModels(cliUi.models.length));
             const empty = !detected || (listed == null ? void 0 : listed.length) === 0;
             connStatus == null ? void 0 : connStatus.toggleClass("mod-success", !empty);
             connStatus == null ? void 0 : connStatus.toggleClass("mod-warning", empty);
@@ -52118,7 +52119,7 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
             return;
           this.addToModelList(models);
           this.renderLimit = _UnifiedProviderModal.MODEL_PAGE_SIZE;
-          connStatus == null ? void 0 : connStatus.setText(models.length ? `Found ${models.length} models` : NO_MODELS_RETURNED);
+          connStatus == null ? void 0 : connStatus.setText(models.length ? foundModels(models.length) : NO_MODELS_RETURNED);
           connStatus == null ? void 0 : connStatus.toggleClass("mod-success", models.length > 0);
           connStatus == null ? void 0 : connStatus.toggleClass("mod-warning", models.length === 0);
           try {
