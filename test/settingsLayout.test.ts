@@ -175,6 +175,20 @@ describe("MCP settings layout", () => {
 	});
 });
 
+describe("shipped stylesheet", () => {
+	// Obsidian loads only styles.css, so a rule added to the source file alone never reaches the screen.
+	const selectors = (path: string) => new Set(
+		[...readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{[^{}]*\}/g)]
+			.map(match => match[1].split(/\s+/).join(" ").trim())
+			.filter(selector => !selector.startsWith("@")),
+	);
+
+	it("carries every rule of src/styles/settings.css", () => {
+		const shipped = selectors("styles.css");
+		expect([...selectors("src/styles/settings.css")].filter(selector => !shipped.has(selector))).toEqual([]);
+	});
+});
+
 describe("settings navigation layout", () => {
 	it("keeps navigation outside the scrolling content and resets the scroll when switching sections", () => {
 		const plugin: any = {

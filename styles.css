@@ -277,6 +277,31 @@
 	padding-bottom: 6px;
 }
 
+.provider-header.is-collapsible {
+	cursor: pointer;
+}
+
+.provider-header.is-collapsible:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 3px;
+	border-radius: var(--radius-s);
+}
+
+.provider-chevron {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+}
+
+.provider-chevron svg {
+	width: 16px;
+	height: 16px;
+}
+
+.provider-body[hidden] {
+	display: none;
+}
+
 .provider-title {
 	display: flex;
 	flex-direction: column;
@@ -452,8 +477,19 @@
 	align-items: center;
 	gap: 8px;
 	padding: 2px 0;
-	font-size: var(--font-ui-small);
+	font-size: max(12px, var(--font-ui-small));
 	color: var(--text-normal);
+}
+
+.provider-model-name {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.provider-model-kind {
+	flex-shrink: 0;
+	font-size: max(12px, var(--font-ui-small));
 }
 
 .model-fetch-actions {
@@ -582,6 +618,23 @@
 	margin-top: 4px;
 	font-size: 12px;
 	color: var(--text-muted);
+}
+
+/* Token counts and time taken, only on the card you have selected. */
+.ai-card-usage {
+	display: none;
+	grid-area: 3 / 1;
+	contain: inline-size;
+	white-space: normal;
+	margin-top: 2px;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.canvas-node.is-focused .ai-card-usage,
+.canvas-node.is-selected .ai-card-usage {
+	display: block;
 }
 
 .ai-card-title {
@@ -1259,6 +1312,11 @@
 .augmented-canvas-settings .provider-capability-model {
 	max-width: 100%;
 	min-width: 0;
+}
+
+.provider-fetch-control {
+	flex-wrap: wrap;
+	justify-content: flex-end;
 }
 
 .provider-fetch-status {
