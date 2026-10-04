@@ -4985,9 +4985,9 @@ var computeGenerationCost = (usage, { inputCostPerMillion, outputCostPerMillion,
   var _a20;
   if (inputCostPerMillion == null || outputCostPerMillion == null)
     return void 0;
-  const cached2 = Math.min(Math.max((_a20 = usage.cachedInputTokens) != null ? _a20 : 0, 0), usage.inputTokens);
+  const cached3 = Math.min(Math.max((_a20 = usage.cachedInputTokens) != null ? _a20 : 0, 0), usage.inputTokens);
   const cachedRate = cachedInputCostPerMillion != null ? cachedInputCostPerMillion : inputCostPerMillion;
-  const input = (usage.inputTokens - cached2) * inputCostPerMillion + cached2 * cachedRate;
+  const input = (usage.inputTokens - cached3) * inputCostPerMillion + cached3 * cachedRate;
   return (input + usage.outputTokens * outputCostPerMillion) / 1e6;
 };
 var formatCost = (usd) => {
@@ -5469,8 +5469,8 @@ var buildUsageDetail = (usage, durationMs) => {
   if (!usage || !(usage.inputTokens > 0 || usage.outputTokens > 0))
     return "";
   const count = (n) => n.toLocaleString("en-US");
-  const cached2 = usage.cachedInputTokens > 0 ? ` (${count(usage.cachedInputTokens)} cached)` : "";
-  const parts = [`${count(usage.inputTokens)} in${cached2}`, `${count(usage.outputTokens)} out`];
+  const cached3 = usage.cachedInputTokens > 0 ? ` (${count(usage.cachedInputTokens)} cached)` : "";
+  const parts = [`${count(usage.inputTokens)} in${cached3}`, `${count(usage.outputTokens)} out`];
   if (typeof durationMs === "number" && durationMs > 0)
     parts.push(formatDuration(durationMs));
   return parts.join(" \xB7 ");
@@ -47349,9 +47349,9 @@ var fetchMCPTools = async (server) => {
   return tools;
 };
 var getMCPTools = async (server) => {
-  const cached2 = toolsCache.get(server.id);
-  if (cached2) {
-    return cached2;
+  const cached3 = toolsCache.get(server.id);
+  if (cached3) {
+    return cached3;
   }
   const tools = await fetchMCPTools(server);
   toolsCache.set(server.id, tools);
@@ -47801,6 +47801,40 @@ var streamCodexResponse = async (provider, messages, { model, providerParams, ti
 
 // src/utils/localCli.ts
 var import_obsidian5 = require("obsidian");
+
+// src/utils/shellEnv.ts
+var MARKER = "__AI_CANVAS_PATH__";
+var readMarkedPath = (stdout) => {
+  const match = stdout.match(new RegExp(`${MARKER}(.*)${MARKER}`));
+  return match && match[1].trim() ? match[1].trim() : null;
+};
+var cached2 = null;
+var getCliEnv = () => {
+  if (cached2)
+    return cached2;
+  cached2 = new Promise((resolve2) => {
+    var _a20;
+    const shell2 = process.platform !== "win32" ? process.env.SHELL : void 0;
+    if (!shell2) {
+      resolve2(process.env);
+      return;
+    }
+    const { execFile } = require("child_process");
+    const child = execFile(shell2, ["-ilc", `printf '\\n${MARKER}%s${MARKER}\\n' "$PATH"`], { timeout: 5e3, maxBuffer: 1024 * 1024 }, (error40, stdout) => {
+      const shellPath = readMarkedPath(stdout != null ? stdout : "");
+      if (!shellPath) {
+        logDebug("[CLI] could not read the shell PATH, using Obsidian's", error40 == null ? void 0 : error40.message);
+        resolve2(process.env);
+        return;
+      }
+      resolve2({ ...process.env, PATH: shellPath });
+    });
+    (_a20 = child.stdin) == null ? void 0 : _a20.end();
+  });
+  return cached2;
+};
+
+// src/utils/localCli.ts
 var CLI_DEFAULT_MODEL = "default";
 var parseClaudeCliEvent = (line) => {
   var _a20, _b19, _c, _d, _e, _f, _g;
@@ -47910,12 +47944,13 @@ var createPiJsonParser = () => {
   };
 };
 var parsePiModelList = (stdout) => stdout.split("\n").map((line) => line.trim().split(/\s+/)).filter(([provider, model]) => provider && model && provider !== "provider").map(([provider, model]) => `${provider}/${model}`);
-var listPiModels = (binary, timeoutMs = 3e4) => {
+var listPiModels = async (binary, timeoutMs = 3e4) => {
   const { execFile } = require("child_process");
   const os = require("os");
+  const env = await getCliEnv();
   return new Promise((resolve2) => {
     var _a20;
-    const child = execFile(binary, ["--list-models"], { cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 }, (error40, stdout) => {
+    const child = execFile(binary, ["--list-models"], { cwd: os.tmpdir(), env, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 }, (error40, stdout) => {
       if (error40) {
         logDebug("[Pi CLI] model list failed", error40.message);
         resolve2(null);
@@ -48041,11 +48076,12 @@ var streamLocalCliResponse = async (provider, messages, { model, timeoutMs, onCo
   const os = require("os");
   const fs = require("fs");
   const workingDirectory = adapter.runsInCanvasFolder && cwd && fs.existsSync(cwd) ? cwd : os.tmpdir();
+  const env = await getCliEnv();
   const runOnce = (runMessages, runFork, mayRetry, startedFresh) => new Promise((resolve2, reject) => {
     var _a21, _b19;
     const { args, stdin } = buildCliInvocation(adapter, { prompt: flattenMessages2(runMessages), model, extraArgs, forkSession: runFork });
     logDebug(`[${adapter.providerType}] spawning`, { binary, args });
-    const child = spawn(binary, args, { cwd: workingDirectory, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(binary, args, { cwd: workingDirectory, env, stdio: ["pipe", "pipe", "pipe"] });
     const timeout = timeoutMs != null ? timeoutMs : 3e5;
     let streamedText = "";
     let stderrTail = "";
@@ -48354,9 +48390,9 @@ var getVertexAccessToken = async (serviceAccountJson) => {
   if (!email3 || !privateKey) {
     throw new Error("Invalid service account JSON: missing client_email or private_key");
   }
-  const cached2 = tokenCache.get(email3);
-  if (cached2 && cached2.expiresAt > Date.now() + 6e4) {
-    return cached2.token;
+  const cached3 = tokenCache.get(email3);
+  if (cached3 && cached3.expiresAt > Date.now() + 6e4) {
+    return cached3.token;
   }
   const now2 = Math.floor(Date.now() / 1e3);
   const jwtPayload = {
@@ -52129,8 +52165,8 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
             if (fetchVersion !== this.modelFetchVersion)
               return;
             this.addToModelList(listed ? [...cliUi.models.filter((m) => m === CLI_DEFAULT_MODEL), ...listed] : cliUi.models);
-            connStatus == null ? void 0 : connStatus.setText(!detected ? `Not found. ${cliUi.hint}` : (listed == null ? void 0 : listed.length) === 0 ? NO_MODELS_RETURNED : listed ? foundModels(listed.length) : cliUi.listModels ? `Could not read the model list, showing ${cliUi.models.length} known models` : foundModels(cliUi.models.length));
-            const empty = !detected || (listed == null ? void 0 : listed.length) === 0;
+            connStatus == null ? void 0 : connStatus.setText(!detected ? `Not found. ${cliUi.hint}` : (listed == null ? void 0 : listed.length) === 0 ? NO_MODELS_RETURNED : listed ? foundModels(listed.length) : cliUi.listModels ? `Could not read the model list. Showing ${cliUi.models.length === 1 ? "the built-in model" : "the built-in models"}.` : foundModels(cliUi.models.length));
+            const empty = !detected || (listed == null ? void 0 : listed.length) === 0 || !listed && !!cliUi.listModels;
             connStatus == null ? void 0 : connStatus.toggleClass("mod-success", !empty);
             connStatus == null ? void 0 : connStatus.toggleClass("mod-warning", empty);
             this.renderModelList();
