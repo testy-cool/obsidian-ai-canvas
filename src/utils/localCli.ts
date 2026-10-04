@@ -41,6 +41,8 @@ export type CliAdapter = {
 	baseArgs: string[];
 	/** Left undefined when the command simply prints its answer. */
 	parseLine?: (line: string) => CliEvent;
+	/** Ask the command which models it can use. Null when it could not say. */
+	listModels?: (binary: string) => Promise<string[] | null>;
 	/** Like `parseLine`, for a CLI whose events only make sense in order. Called once per run. */
 	createParser?: () => (line: string) => CliEvent;
 	/** Work in the canvas's own folder, not a temporary one. For a CLI that acts on files and keeps its sessions per folder. */
@@ -172,6 +174,43 @@ export const createPiJsonParser = () => {
 	};
 };
 
+/**
+ * Read `pi --list-models`: a header row, then one model per row with its
+ * provider and id in the first two columns. Returned as `provider/id`, the
+ * form `--model` takes.
+ */
+export const parsePiModelList = (stdout: string): string[] =>
+	stdout
+		.split("\n")
+		.map(line => line.trim().split(/\s+/))
+		.filter(([provider, model]) => provider && model && provider !== "provider")
+		.map(([provider, model]) => `${provider}/${model}`);
+
+const listPiModels = (binary: string, timeoutMs = 30_000): Promise<string[] | null> => {
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
+	const { execFile } = require("child_process");
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
+	const os = require("os");
+	return new Promise(resolve => {
+		const child = execFile(
+			binary,
+			["--list-models"],
+			{ cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 },
+			(error: Error | null, stdout: string) => {
+				if (error) {
+					logDebug("[Pi CLI] model list failed", error.message);
+					resolve(null);
+					return;
+				}
+				const models = parsePiModelList(stdout);
+				resolve(models.length ? models : null);
+			}
+		);
+		// Pi waits for more input while stdin is open.
+		child.stdin?.end();
+	});
+};
+
 export const CLI_ADAPTERS: Record<string, CliAdapter> = {
 	claude: {
 		id: "claude",
@@ -196,6 +235,7 @@ export const CLI_ADAPTERS: Record<string, CliAdapter> = {
 		createParser: createPiJsonParser,
 		runsInCanvasFolder: true,
 		forkFlag: "--fork",
+		listModels: binary => listPiModels(binary),
 	},
 	hermes: {
 		id: "hermes",

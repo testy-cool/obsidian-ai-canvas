@@ -4,12 +4,41 @@ import {
 	CLI_ADAPTERS,
 	cliAdapterForProviderType,
 	parseClaudeCliEvent,
+	parsePiModelList,
 	buildCliInvocation,
 	streamLocalCliResponse,
 	CLI_DEFAULT_MODEL,
 } from "../src/utils/localCli";
+import fs from "fs";
+import os from "os";
+import path from "path";
 
 afterEach(() => { Platform.isDesktopApp = true; });
+
+// The first rows of `pi --list-models` from pi 1.0.1.
+const PI_MODEL_TABLE = [
+	"provider                model                                               context  max-out  thinking  images",
+	"azure-foundry-sfera     gpt-5.6-luna                                        272K     128K     yes       yes   ",
+	"azure-openai-responses  gpt-4.1                                             1.0M     32.8K    no        yes   ",
+	"",
+].join("\n");
+
+describe("Pi's model list", () => {
+	it("reads provider and model from each row, skipping the header", () => {
+		expect(parsePiModelList(PI_MODEL_TABLE)).toEqual(["azure-foundry-sfera/gpt-5.6-luna", "azure-openai-responses/gpt-4.1"]);
+	});
+
+	it("asks the command with its input closed, as pi waits for input otherwise", async () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fake-pi-"));
+		const script = path.join(dir, "pi");
+		fs.writeFileSync(script, `#!/bin/sh\ncat > /dev/null\ncat <<'TABLE'\n${PI_MODEL_TABLE}TABLE\n`, { mode: 0o755 });
+		try {
+			expect(await CLI_ADAPTERS.pi.listModels!(script)).toEqual(["azure-foundry-sfera/gpt-5.6-luna", "azure-openai-responses/gpt-4.1"]);
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});
 
 describe("choosing an adapter", () => {
 	it("maps each local CLI provider type to its adapter", () => {

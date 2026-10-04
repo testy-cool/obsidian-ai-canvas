@@ -6,7 +6,7 @@ import { fetchProviderModels } from "../utils/modelFetch";
 import { fetchPricingForModels } from "../utils/pricingFetch";
 import { getDefaultProviderParams, getParamsForModel, detectProviderLabel } from "../utils/providerParams";
 import { findCodexBinary, CODEX_MODELS, listCodexModels } from "../utils/codexCli";
-import { CLI_ADAPTERS, cliAdapterForProviderType, findCliBinary } from "../utils/localCli";
+import { CLI_ADAPTERS, CLI_DEFAULT_MODEL, cliAdapterForProviderType, findCliBinary } from "../utils/localCli";
 
 interface ProviderPreset {
   id: string;
@@ -85,7 +85,7 @@ function localCliUi(type: string) {
     placeholder: adapter.binary ? `/path/to/${adapter.binary} (optional override)` : "/path/to/command",
     models: [...adapter.models],
     detect: (override?: string) => findCliBinary(adapter, override),
-    listModels: undefined as ((binary: string) => Promise<string[] | null>) | undefined,
+    listModels: adapter.listModels,
     hint: adapter.installHint,
     takesArgs: true,
   };
@@ -318,7 +318,8 @@ export class UnifiedProviderModal extends Modal {
             const detected = cliUi.detect(this.provider.binaryPath);
             const listed = detected && cliUi.listModels ? await cliUi.listModels(detected) : null;
             if (fetchVersion !== this.modelFetchVersion) return;
-            this.addToModelList(listed ?? cliUi.models);
+            // Keep "default" first: it runs whatever the command is already set up for.
+            this.addToModelList(listed ? [...cliUi.models.filter((m) => m === CLI_DEFAULT_MODEL), ...listed] : cliUi.models);
             connStatus?.setText(
               !detected
                 ? `Not found. ${cliUi.hint}`
