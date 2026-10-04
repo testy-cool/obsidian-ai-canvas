@@ -296,7 +296,7 @@ const flattenMessages = (messages: ModelMessage[]): string =>
 export const streamLocalCliResponse = async (
 	provider: LLMProvider,
 	messages: ModelMessage[],
-	{ model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, forkSession, abortSignal }: StreamOptions,
+	{ model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, forkSession, fallbackMessages, abortSignal }: StreamOptions,
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ): Promise<void> => {
 	if (abortSignal?.aborted) throw new DOMException("Generation stopped", "AbortError");
@@ -311,9 +311,6 @@ export const streamLocalCliResponse = async (
 	if (!binary) throw new Error(`${adapter.providerType} not found. ${adapter.installHint}`);
 
 	const extraArgs = provider.cliArgs?.trim() ? provider.cliArgs.trim().split(/\s+/) : undefined;
-	const { args, stdin } = buildCliInvocation(adapter, { prompt: flattenMessages(messages), model, extraArgs, forkSession });
-	logDebug(`[${adapter.providerType}] spawning`, { binary, args });
-
 	// eslint-disable-next-line @typescript-eslint/no-var-requires
 	const { spawn } = require("child_process");
 	// eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -322,7 +319,19 @@ export const streamLocalCliResponse = async (
 	const fs = require("fs");
 	const workingDirectory = adapter.runsInCanvasFolder && cwd && fs.existsSync(cwd) ? cwd : os.tmpdir();
 
-	return new Promise<void>((resolve, reject) => {
+	/**
+	 * One run of the command. When `mayRetry` is set and the command fails
+	 * before it names a session, the run ends quietly as "retry" so the caller
+	 * can start again; any other failure rejects as usual.
+	 */
+	const runOnce = (
+		runMessages: ModelMessage[],
+		runFork: string | undefined,
+		mayRetry: boolean,
+		startedFresh: boolean
+	) => new Promise<"done" | "retry">((resolve, reject) => {
+		const { args, stdin } = buildCliInvocation(adapter, { prompt: flattenMessages(runMessages), model, extraArgs, forkSession: runFork });
+		logDebug(`[${adapter.providerType}] spawning`, { binary, args });
 		const child = spawn(binary, args, { cwd: workingDirectory, stdio: ["pipe", "pipe", "pipe"] });
 		const timeout = timeoutMs ?? 300_000;
 		let streamedText = "";
@@ -364,8 +373,9 @@ export const streamLocalCliResponse = async (
 				...(costUsd === undefined ? {} : { costUsd }),
 				...(reportedModel ? { model: reportedModel } : {}),
 				...(sessionId ? { sessionId } : {}),
+				...(startedFresh ? { startedFreshSession: true } : {}),
 			});
-			resolve();
+			resolve("done");
 		};
 
 		abortSignal?.addEventListener("abort", onAbort, { once: true });
@@ -416,6 +426,14 @@ export const streamLocalCliResponse = async (
 		child.on("error", (error: Error) => settle(new Error(`Could not run ${binary}: ${error.message}`)));
 		child.on("close", (code: number | null) => {
 			if (code === 0) return settle();
+			if (mayRetry && !sessionId && !settled) {
+				settled = true;
+				clearTimeout(timer);
+				abortSignal?.removeEventListener("abort", onAbort);
+				logDebug(`[${adapter.providerType}] the session to fork is gone, starting a fresh one`, { stderr: stderrTail.trim() });
+				resolve("retry");
+				return;
+			}
 			const detail = stderrTail.trim() || streamedText.trim() || "no output";
 			settle(new Error(`${adapter.providerType} exited with code ${code}: ${detail}`));
 		});
@@ -427,4 +445,11 @@ export const streamLocalCliResponse = async (
 			child.stdin.end();
 		}
 	});
+
+	const canRestart = !!forkSession && !!adapter.forkFlag && !!fallbackMessages;
+	const outcome = await runOnce(messages, forkSession, canRestart, false);
+	if (outcome === "retry") {
+		if (abortSignal?.aborted) throw new DOMException("Generation stopped", "AbortError");
+		await runOnce(fallbackMessages!, undefined, false, true);
+	}
 };

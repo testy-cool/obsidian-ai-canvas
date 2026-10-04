@@ -3,6 +3,9 @@ import { collectNodeAndAncestors, HasId, NodeAndAncestor } from "../obsidian/can
 /** Provider type of the Pi command line agent. */
 export const PI_PROVIDER_TYPE = "Pi CLI";
 
+/** Shown on a card when the Pi session it should have continued was gone. */
+export const PI_FRESH_SESSION_NOTE = "Started a fresh Pi session; the earlier one was not found.";
+
 /** Where a Pi answer card keeps the id of the Pi session that produced it. */
 export const PI_SESSION_KEY = "pi_session";
 

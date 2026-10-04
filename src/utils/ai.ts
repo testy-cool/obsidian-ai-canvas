@@ -377,6 +377,8 @@ export interface StreamOptions {
 		model?: string;
 		/** The provider's own id for this conversation, so a later request can pick it up. */
 		sessionId?: string;
+		/** The session asked for could not be found, so the request ran again from nothing. */
+		startedFreshSession?: boolean;
 	}) => void;
 	/** Swap the whole answer written so far for this text. Only some local CLIs rewrite what they streamed. */
 	onReplaceText?: (text: string) => void;
@@ -386,6 +388,8 @@ export interface StreamOptions {
 	cwd?: string;
 	/** Start from a copy of this session of a local CLI that keeps sessions, so the request carries only what is new. */
 	forkSession?: string;
+	/** What to send instead, in full, if the session to fork turns out to be gone. */
+	fallbackMessages?: ModelMessage[];
 }
 
 export type ToolEvent = {
@@ -413,6 +417,7 @@ export const streamResponse = async (
 		onPhase,
 		cwd,
 		forkSession,
+		fallbackMessages,
 		abortSignal,
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
@@ -422,7 +427,7 @@ export const streamResponse = async (
 	};
 	throwIfStopped();
 	if (cliAdapterForProviderType(provider.type)) {
-		return streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, forkSession, abortSignal }, cb);
+		return streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, forkSession, fallbackMessages, abortSignal }, cb);
 	}
 	if (provider.type === "Codex") {
 		return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete, abortSignal }, cb);

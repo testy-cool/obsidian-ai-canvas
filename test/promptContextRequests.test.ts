@@ -1132,6 +1132,33 @@ describe("a Pi card and its Pi session", () => {
 		expect(data.ai_model).toBe("gpt-5.6-sol");
 	});
 
+	it("hands over the whole chain for Pi to start fresh with if the session is gone", async () => {
+		const { app, settings } = piFixture({ oldest: "session-oldest" });
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentOptions().fallbackMessages.map((message: any) => message.content))
+			.toEqual(["SYSTEM", "OLDEST", "PARENT", "edge label", "CURRENT"]);
+	});
+
+	it("gives no fallback when there is no session to lose", async () => {
+		const { app, settings } = piFixture();
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(sentOptions().fallbackMessages).toBeUndefined();
+	});
+
+	it("notes on the card that a fresh Pi session was started", async () => {
+		const { app, settings, canvas } = piFixture({ oldest: "session-oldest" });
+		vi.mocked(streamResponse).mockImplementation(async (provider, messages, options, callback) => {
+			callback("ANSWER", null, null, null);
+			callback(null, { text: "ANSWER" }, null, null);
+			options?.onComplete?.({
+				inputTokens: 1, outputTokens: 1, totalText: "ANSWER", sessionId: "session-new", startedFreshSession: true,
+			});
+		});
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(canvas.nodes.get("response").getData().ai_notes)
+			.toEqual(["Started a fresh Pi session; the earlier one was not found."]);
+	});
+
 	it("forgets the old session of a card that is regenerated", async () => {
 		const { app, settings, canvas, prompt } = piFixture();
 		const existing = canvas.makeNode("existing", "old answer");

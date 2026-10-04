@@ -258,3 +258,100 @@ describe("Pi sessions", () => {
 		}
 	}, 30000);
 });
+
+describe("starting fresh when the Pi session is gone", () => {
+	const provider = (binaryPath: string) => ({
+		id: "pi", type: "Pi CLI", baseUrl: "", apiKey: "", enabled: true, binaryPath,
+	}) as any;
+	const onlyNew = [{ role: "user", content: "next question" }] as any;
+	const wholeChain = [{ role: "user", content: "first question" }, { role: "assistant", content: "first answer" }, { role: "user", content: "next question" }] as any;
+	const gone = "No session found matching 'old-session'";
+
+	it("runs again without --fork, with the whole chain, and says so", async () => {
+		const pi = makeFakePi({ script: "pi-answer.jsonl", failures: { 0: gone } });
+		try {
+			let completion: any;
+			let text = "";
+			await streamLocalCliResponse(
+				provider(pi.binary), onlyNew,
+				{ forkSession: "old-session", fallbackMessages: wholeChain, onComplete: result => { completion = result; } },
+				chunk => { if (chunk) text += chunk; },
+			);
+			const calls = pi.calls();
+			expect(calls).toHaveLength(2);
+			expect(calls[0].args.slice(-3)).toEqual(["--fork", "old-session", "user: next question"]);
+			expect(calls[1].args).toEqual(["-p", "--mode", "json", "user: first question\n\nassistant: first answer\n\nuser: next question"]);
+			expect(text).toBe("OK");
+			expect(completion.startedFreshSession).toBe(true);
+			expect(completion.sessionId).toBe("11111111-2222-4333-8444-555555555555");
+			expect(completion.error).toBeUndefined();
+		} finally {
+			pi.cleanup();
+		}
+	}, 30000);
+
+	it("does not start over when the fork worked", async () => {
+		const pi = makeFakePi({ script: "pi-fork.jsonl" });
+		try {
+			let completion: any;
+			await streamLocalCliResponse(
+				provider(pi.binary), onlyNew,
+				{ forkSession: "old-session", fallbackMessages: wholeChain, onComplete: result => { completion = result; } },
+				() => {},
+			);
+			expect(pi.calls()).toHaveLength(1);
+			expect(completion.startedFreshSession).toBeUndefined();
+		} finally {
+			pi.cleanup();
+		}
+	}, 30000);
+
+	it("reports a failure that came after the session started instead of starting over", async () => {
+		const pi = makeFakePi({ script: "pi-fork.jsonl", lateFailures: { 0: "provider exploded" } });
+		try {
+			await expect(streamLocalCliResponse(
+				provider(pi.binary), onlyNew, { forkSession: "old-session", fallbackMessages: wholeChain }, () => {},
+			)).rejects.toThrow(/provider exploded/);
+			expect(pi.calls()).toHaveLength(1);
+		} finally {
+			pi.cleanup();
+		}
+	}, 30000);
+
+	it("tries only once more", async () => {
+		const pi = makeFakePi({ script: "pi-answer.jsonl", failures: { 0: gone, 1: "Error: Model not found" } });
+		try {
+			await expect(streamLocalCliResponse(
+				provider(pi.binary), onlyNew, { forkSession: "old-session", fallbackMessages: wholeChain }, () => {},
+			)).rejects.toThrow(/Model not found/);
+			expect(pi.calls()).toHaveLength(2);
+		} finally {
+			pi.cleanup();
+		}
+	}, 30000);
+
+	it("has nothing to start over with when no full chain was given", async () => {
+		const pi = makeFakePi({ script: "pi-answer.jsonl", failures: { 0: gone } });
+		try {
+			await expect(streamLocalCliResponse(
+				provider(pi.binary), onlyNew, { forkSession: "old-session" }, () => {},
+			)).rejects.toThrow(/No session found/);
+			expect(pi.calls()).toHaveLength(1);
+		} finally {
+			pi.cleanup();
+		}
+	}, 30000);
+
+	it("does not retry a run that never asked for a fork", async () => {
+		const pi = makeFakePi({ script: "pi-answer.jsonl", failures: { 0: "Error: Model not found" } });
+		try {
+			await expect(streamLocalCliResponse(
+				provider(pi.binary), onlyNew, { fallbackMessages: wholeChain }, () => {},
+			)).rejects.toThrow(/Model not found/);
+			expect(pi.calls()).toHaveLength(1);
+		} finally {
+			pi.cleanup();
+		}
+	}, 30000);
+});
+

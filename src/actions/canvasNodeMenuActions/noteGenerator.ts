@@ -29,7 +29,7 @@ import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { createGenerationStatus } from "../../utils/generationStatus";
 import { costForModel } from "../../utils/cost";
 import { canvasFolderPath } from "../../utils/canvasFolder";
-import { PI_PROVIDER_TYPE, PI_SESSION_KEY, planPiContinuation } from "../../utils/piSessions";
+import { PI_FRESH_SESSION_NOTE, PI_PROVIDER_TYPE, PI_SESSION_KEY, planPiContinuation } from "../../utils/piSessions";
 import { CLI_DEFAULT_MODEL } from "../../utils/localCli";
 import { isImageModel } from "../../utils/modelKind";
 import { getAllMCPTools } from "../../utils/mcpClient";
@@ -658,6 +658,10 @@ export function noteGenerator(
 				continuing: !!piSession,
 			});
 			const contextCount = contributedNodeIds.size + (piSession?.coveredCount ?? 0);
+			// Should Pi no longer have that session, the whole chain starts a fresh one.
+			const fullChain = piSession
+				? await buildMessages(node, { prompt: trimmedQuestion ? question : undefined, selectedNodeIds })
+				: undefined;
 			const contextTotal = contextEntries.length;
 
 			if (isImageModel(provider.type, model)) {
@@ -671,6 +675,9 @@ export function noteGenerator(
 					parts: parts.length ? parts : undefined,
 				});
 				return;
+			}
+			if (!trimmedQuestion && fullChain?.messages[fullChain.messages.length - 1]?.role === "assistant") {
+				fullChain.messages.push({ role: "user", content: CONTINUE_PROMPT });
 			}
 			if (!trimmedQuestion && (messages[messages.length - 1]?.role === "assistant" || (piSession && !messages.length))) {
 				messages.push({ role: "user", content: CONTINUE_PROMPT });
@@ -851,6 +858,7 @@ export function noteGenerator(
 						abortSignal: controller.signal,
 						cwd: getCanvasFolder(),
 						forkSession: piSession?.sessionId,
+						fallbackMessages: fullChain?.messages.length ? fullChain.messages : undefined,
 						onComplete: usage => {
 							// Show what the card cost and how much came from the cache next
 							// to the model it used. Cost is undefined when the model has no
@@ -867,6 +875,7 @@ export function noteGenerator(
 								...(cost == null ? {} : { ai_cost: cost }),
 								...(shownModel === model.model ? {} : { ai_model: shownModel }),
 								...(usage.sessionId ? { [PI_SESSION_KEY]: usage.sessionId } : {}),
+								...(usage.startedFreshSession ? { ai_notes: [...(created.getData().ai_notes ?? []), PI_FRESH_SESSION_NOTE] } : {}),
 							});
 						},
 						onReplaceText: text => {
