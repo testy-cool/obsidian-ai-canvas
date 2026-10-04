@@ -328,10 +328,10 @@ export class UnifiedProviderModal extends Modal {
                 : listed
                   ? foundModels(listed.length)
                   : cliUi.listModels
-                    ? `Could not read the model list, showing ${cliUi.models.length} known models`
+                    ? `Could not read the model list. Showing ${cliUi.models.length === 1 ? "the built-in model" : "the built-in models"}.`
                     : foundModels(cliUi.models.length)
             );
-            const empty = !detected || listed?.length === 0;
+            const empty = !detected || listed?.length === 0 || (!listed && !!cliUi.listModels);
             connStatus?.toggleClass("mod-success", !empty);
             connStatus?.toggleClass("mod-warning", empty);
             this.renderModelList();
