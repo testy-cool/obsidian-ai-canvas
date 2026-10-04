@@ -43,6 +43,8 @@ const KIND_IDS = new Map<string, string[]>([
 
 const NO_MODELS_RETURNED = "No models returned. Type model names below.";
 
+const foundModels = (count: number) => `Found ${count} ${count === 1 ? "model" : "models"}`;
+
 function isGeminiType(type: string): boolean {
   return ["Gemini", "Google"].includes(type);
 }
@@ -323,10 +325,10 @@ export class UnifiedProviderModal extends Modal {
                 : listed?.length === 0
                   ? NO_MODELS_RETURNED
                 : listed
-                  ? `Found ${listed.length} models`
+                  ? foundModels(listed.length)
                   : cliUi.listModels
                     ? `Could not read the model list, showing ${cliUi.models.length} known models`
-                    : `Found ${cliUi.models.length} models`
+                    : foundModels(cliUi.models.length)
             );
             const empty = !detected || listed?.length === 0;
             connStatus?.toggleClass("mod-success", !empty);
@@ -339,7 +341,7 @@ export class UnifiedProviderModal extends Modal {
 					if (fetchVersion !== this.modelFetchVersion) return;
           this.addToModelList(models);
           this.renderLimit = UnifiedProviderModal.MODEL_PAGE_SIZE;
-          connStatus?.setText(models.length ? `Found ${models.length} models` : NO_MODELS_RETURNED);
+          connStatus?.setText(models.length ? foundModels(models.length) : NO_MODELS_RETURNED);
           connStatus?.toggleClass("mod-success", models.length > 0);
           connStatus?.toggleClass("mod-warning", models.length === 0);
 
