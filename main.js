@@ -47909,6 +47909,24 @@ var createPiJsonParser = () => {
     }
   };
 };
+var parsePiModelList = (stdout) => stdout.split("\n").map((line) => line.trim().split(/\s+/)).filter(([provider, model]) => provider && model && provider !== "provider").map(([provider, model]) => `${provider}/${model}`);
+var listPiModels = (binary, timeoutMs = 3e4) => {
+  const { execFile } = require("child_process");
+  const os = require("os");
+  return new Promise((resolve2) => {
+    var _a20;
+    const child = execFile(binary, ["--list-models"], { cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 }, (error40, stdout) => {
+      if (error40) {
+        logDebug("[Pi CLI] model list failed", error40.message);
+        resolve2(null);
+        return;
+      }
+      const models = parsePiModelList(stdout);
+      resolve2(models.length ? models : null);
+    });
+    (_a20 = child.stdin) == null ? void 0 : _a20.end();
+  });
+};
 var CLI_ADAPTERS = {
   claude: {
     id: "claude",
@@ -47932,7 +47950,8 @@ var CLI_ADAPTERS = {
     baseArgs: ["-p", "--mode", "json"],
     createParser: createPiJsonParser,
     runsInCanvasFolder: true,
-    forkFlag: "--fork"
+    forkFlag: "--fork",
+    listModels: (binary) => listPiModels(binary)
   },
   hermes: {
     id: "hermes",
@@ -51903,7 +51922,7 @@ function localCliUi(type) {
     placeholder: adapter.binary ? `/path/to/${adapter.binary} (optional override)` : "/path/to/command",
     models: [...adapter.models],
     detect: (override) => findCliBinary(adapter, override),
-    listModels: void 0,
+    listModels: adapter.listModels,
     hint: adapter.installHint,
     takesArgs: true
   };
@@ -52106,7 +52125,7 @@ var _UnifiedProviderModal = class extends import_obsidian18.Modal {
             const listed = detected && cliUi.listModels ? await cliUi.listModels(detected) : null;
             if (fetchVersion !== this.modelFetchVersion)
               return;
-            this.addToModelList(listed != null ? listed : cliUi.models);
+            this.addToModelList(listed ? [...cliUi.models.filter((m) => m === CLI_DEFAULT_MODEL), ...listed] : cliUi.models);
             connStatus == null ? void 0 : connStatus.setText(!detected ? `Not found. ${cliUi.hint}` : (listed == null ? void 0 : listed.length) === 0 ? NO_MODELS_RETURNED : listed ? foundModels(listed.length) : cliUi.listModels ? `Could not read the model list, showing ${cliUi.models.length} known models` : foundModels(cliUi.models.length));
             const empty = !detected || (listed == null ? void 0 : listed.length) === 0;
             connStatus == null ? void 0 : connStatus.toggleClass("mod-success", !empty);
