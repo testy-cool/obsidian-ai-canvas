@@ -47828,6 +47828,87 @@ var parseClaudeCliEvent = (line) => {
   }
   return null;
 };
+var piTextPhase = (part) => {
+  var _a20;
+  try {
+    return (_a20 = JSON.parse(part.textSignature)) == null ? void 0 : _a20.phase;
+  } catch (e) {
+    return void 0;
+  }
+};
+var createPiJsonParser = () => {
+  let written = "";
+  return (line) => {
+    var _a20, _b19, _c, _d, _e, _f, _g, _h, _i, _j;
+    let event;
+    try {
+      event = JSON.parse(line);
+    } catch (e) {
+      return null;
+    }
+    switch (event == null ? void 0 : event.type) {
+      case "session":
+        return typeof event.id === "string" ? { session: event.id } : null;
+      case "message_start": {
+        if (((_a20 = event.message) == null ? void 0 : _a20.role) !== "assistant" || !written)
+          return null;
+        written = "";
+        return { textReplace: "" };
+      }
+      case "message_update": {
+        const update = event.assistantMessageEvent;
+        if ((update == null ? void 0 : update.type) === "text_delta" && typeof update.delta === "string") {
+          written += update.delta;
+          return { textDelta: update.delta };
+        }
+        if ((update == null ? void 0 : update.type) === "thinking_start")
+          return { phase: "Thinking\u2026" };
+        if ((update == null ? void 0 : update.type) === "toolcall_start")
+          return { phase: `Using ${update.toolName || "tool"}\u2026` };
+        return null;
+      }
+      case "tool_execution_start":
+        return { phase: `Using ${event.toolName || "tool"}\u2026` };
+      case "tool_execution_end":
+        return { phase: "Generating\u2026" };
+      case "agent_end": {
+        const assistants = ((_b19 = event.messages) != null ? _b19 : []).filter((message) => (message == null ? void 0 : message.role) === "assistant");
+        const last = assistants[assistants.length - 1];
+        const parts = ((_c = last == null ? void 0 : last.content) != null ? _c : []).filter((part) => (part == null ? void 0 : part.type) === "text" && typeof part.text === "string");
+        const marked = parts.filter((part) => piTextPhase(part) === "final_answer");
+        const answer = (marked.length ? marked : parts).map((part) => part.text).join("");
+        let inputTokens = 0;
+        let outputTokens = 0;
+        let cachedInputTokens = 0;
+        let cost = 0;
+        let reported = false;
+        for (const message of assistants) {
+          const usage = message.usage;
+          if (!usage)
+            continue;
+          reported = true;
+          inputTokens += ((_d = usage.input) != null ? _d : 0) + ((_e = usage.cacheRead) != null ? _e : 0) + ((_f = usage.cacheWrite) != null ? _f : 0);
+          outputTokens += (_g = usage.output) != null ? _g : 0;
+          cachedInputTokens += (_h = usage.cacheRead) != null ? _h : 0;
+          cost += (_j = (_i = usage.cost) == null ? void 0 : _i.total) != null ? _j : 0;
+        }
+        const result = {};
+        if (answer !== written)
+          result.textReplace = answer;
+        written = answer;
+        if (reported) {
+          result.usage = { inputTokens, outputTokens, ...cachedInputTokens ? { cachedInputTokens } : {} };
+          result.cost = cost;
+        }
+        if (typeof (last == null ? void 0 : last.model) === "string")
+          result.model = last.model;
+        return Object.keys(result).length ? result : null;
+      }
+      default:
+        return null;
+    }
+  };
+};
 var CLI_ADAPTERS = {
   claude: {
     id: "claude",
@@ -47848,7 +47929,10 @@ var CLI_ADAPTERS = {
     installHint: "Install pi, or set the binary path in the provider settings.",
     modelFlag: "--model",
     promptVia: "arg",
-    baseArgs: ["-p", "--mode", "text"]
+    baseArgs: ["-p", "--mode", "json"],
+    createParser: createPiJsonParser,
+    runsInCanvasFolder: true,
+    forkFlag: "--fork"
   },
   hermes: {
     id: "hermes",
@@ -47872,10 +47956,12 @@ var CLI_ADAPTERS = {
   }
 };
 var cliAdapterForProviderType = (type) => Object.values(CLI_ADAPTERS).find((adapter) => adapter.providerType === type);
-var buildCliInvocation = (adapter, { prompt, model, extraArgs }) => {
+var buildCliInvocation = (adapter, { prompt, model, extraArgs, forkSession }) => {
   const args = [...adapter.baseArgs];
   if (model && model !== CLI_DEFAULT_MODEL && adapter.modelFlag)
     args.push(adapter.modelFlag, model);
+  if (forkSession && adapter.forkFlag)
+    args.push(adapter.forkFlag, forkSession);
   if (extraArgs == null ? void 0 : extraArgs.length)
     args.push(...extraArgs);
   if (adapter.promptVia === "flag" && adapter.promptFlag) {
@@ -47918,7 +48004,7 @@ var flattenMessages2 = (messages) => messages.map((message) => {
   const content = typeof message.content === "string" ? message.content : message.content.map((part) => part.type === "text" ? part.text : "").join("");
   return message.role === "system" ? content : `${message.role}: ${content}`;
 }).join("\n\n");
-var streamLocalCliResponse = async (provider, messages, { model, timeoutMs, onComplete, abortSignal }, cb) => {
+var streamLocalCliResponse = async (provider, messages, { model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, forkSession, fallbackMessages, abortSignal }, cb) => {
   var _a20;
   if (abortSignal == null ? void 0 : abortSignal.aborted)
     throw new DOMException("Generation stopped", "AbortError");
@@ -47932,16 +48018,23 @@ var streamLocalCliResponse = async (provider, messages, { model, timeoutMs, onCo
   if (!binary)
     throw new Error(`${adapter.providerType} not found. ${adapter.installHint}`);
   const extraArgs = ((_a20 = provider.cliArgs) == null ? void 0 : _a20.trim()) ? provider.cliArgs.trim().split(/\s+/) : void 0;
-  const { args, stdin } = buildCliInvocation(adapter, { prompt: flattenMessages2(messages), model, extraArgs });
-  logDebug(`[${adapter.providerType}] spawning`, { binary, args });
   const { spawn } = require("child_process");
   const os = require("os");
-  return new Promise((resolve2, reject) => {
-    const child = spawn(binary, args, { cwd: os.tmpdir(), stdio: ["pipe", "pipe", "pipe"] });
+  const fs = require("fs");
+  const workingDirectory = adapter.runsInCanvasFolder && cwd && fs.existsSync(cwd) ? cwd : os.tmpdir();
+  const runOnce = (runMessages, runFork, mayRetry, startedFresh) => new Promise((resolve2, reject) => {
+    var _a21, _b19;
+    const { args, stdin } = buildCliInvocation(adapter, { prompt: flattenMessages2(runMessages), model, extraArgs, forkSession: runFork });
+    logDebug(`[${adapter.providerType}] spawning`, { binary, args });
+    const child = spawn(binary, args, { cwd: workingDirectory, stdio: ["pipe", "pipe", "pipe"] });
     const timeout = timeoutMs != null ? timeoutMs : 3e5;
     let streamedText = "";
     let stderrTail = "";
     let usage;
+    let costUsd;
+    let reportedModel;
+    let sessionId;
+    const parseLine = (_b19 = (_a21 = adapter.createParser) == null ? void 0 : _a21.call(adapter)) != null ? _b19 : adapter.parseLine;
     let buffer = "";
     let settled = false;
     const timer = setTimeout(() => {
@@ -47953,7 +48046,7 @@ var streamLocalCliResponse = async (provider, messages, { model, timeoutMs, onCo
       settle(new DOMException("Generation stopped", "AbortError"));
     };
     const settle = (error40) => {
-      var _a21, _b19;
+      var _a26, _b20;
       if (settled)
         return;
       settled = true;
@@ -47966,31 +48059,35 @@ var streamLocalCliResponse = async (provider, messages, { model, timeoutMs, onCo
       }
       cb(null, { text: streamedText }, null, null);
       onComplete == null ? void 0 : onComplete({
-        inputTokens: (_a21 = usage == null ? void 0 : usage.inputTokens) != null ? _a21 : 0,
-        outputTokens: (_b19 = usage == null ? void 0 : usage.outputTokens) != null ? _b19 : 0,
+        inputTokens: (_a26 = usage == null ? void 0 : usage.inputTokens) != null ? _a26 : 0,
+        outputTokens: (_b20 = usage == null ? void 0 : usage.outputTokens) != null ? _b20 : 0,
         cachedInputTokens: usage == null ? void 0 : usage.cachedInputTokens,
-        totalText: streamedText
+        totalText: streamedText,
+        ...costUsd === void 0 ? {} : { costUsd },
+        ...reportedModel ? { model: reportedModel } : {},
+        ...sessionId ? { sessionId } : {},
+        ...startedFresh ? { startedFreshSession: true } : {}
       });
-      resolve2();
+      resolve2("done");
     };
     abortSignal == null ? void 0 : abortSignal.addEventListener("abort", onAbort, { once: true });
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
-      var _a21;
+      var _a26;
       if (settled)
         return;
-      if (!adapter.parseLine) {
+      if (!parseLine) {
         streamedText += chunk;
         cb(chunk, null, null, null);
         return;
       }
       buffer += chunk;
       const lines = buffer.split("\n");
-      buffer = (_a21 = lines.pop()) != null ? _a21 : "";
+      buffer = (_a26 = lines.pop()) != null ? _a26 : "";
       for (const line of lines) {
         if (!line.trim())
           continue;
-        const event = adapter.parseLine(line);
+        const event = parseLine(line);
         if (!event)
           continue;
         if (event.error) {
@@ -48000,6 +48097,18 @@ var streamLocalCliResponse = async (provider, messages, { model, timeoutMs, onCo
         }
         if (event.usage)
           usage = event.usage;
+        if (event.cost !== void 0)
+          costUsd = event.cost;
+        if (event.model)
+          reportedModel = event.model;
+        if (event.session)
+          sessionId = event.session;
+        if (event.phase)
+          onPhase == null ? void 0 : onPhase(event.phase);
+        if (event.textReplace !== void 0) {
+          streamedText = event.textReplace;
+          onReplaceText == null ? void 0 : onReplaceText(event.textReplace);
+        }
         if (event.reasoningDelta)
           cb(null, null, null, event.reasoningDelta);
         if (event.textDelta) {
@@ -48017,6 +48126,14 @@ var streamLocalCliResponse = async (provider, messages, { model, timeoutMs, onCo
     child.on("close", (code) => {
       if (code === 0)
         return settle();
+      if (mayRetry && !sessionId && !settled) {
+        settled = true;
+        clearTimeout(timer);
+        abortSignal == null ? void 0 : abortSignal.removeEventListener("abort", onAbort);
+        logDebug(`[${adapter.providerType}] the session to fork is gone, starting a fresh one`, { stderr: stderrTail.trim() });
+        resolve2("retry");
+        return;
+      }
       const detail = stderrTail.trim() || streamedText.trim() || "no output";
       settle(new Error(`${adapter.providerType} exited with code ${code}: ${detail}`));
     });
@@ -48027,6 +48144,13 @@ var streamLocalCliResponse = async (provider, messages, { model, timeoutMs, onCo
       child.stdin.end();
     }
   });
+  const canRestart = !!forkSession && !!adapter.forkFlag && !!fallbackMessages;
+  const outcome = await runOnce(messages, forkSession, canRestart, false);
+  if (outcome === "retry") {
+    if (abortSignal == null ? void 0 : abortSignal.aborted)
+      throw new DOMException("Generation stopped", "AbortError");
+    await runOnce(await fallbackMessages(), void 0, false, true);
+  }
 };
 
 // src/utils/providerCapabilities.ts
@@ -48356,6 +48480,11 @@ var streamResponse = async (provider, messages, {
   providerParams,
   timeoutMs,
   onComplete,
+  onReplaceText,
+  onPhase,
+  cwd,
+  forkSession,
+  fallbackMessages,
   abortSignal
 } = {}, cb) => {
   var _a20, _b19, _c, _d, _e, _f, _g, _h;
@@ -48365,7 +48494,7 @@ var streamResponse = async (provider, messages, {
   };
   throwIfStopped();
   if (cliAdapterForProviderType(provider.type)) {
-    return streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, abortSignal }, cb);
+    return streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, forkSession, fallbackMessages, abortSignal }, cb);
   }
   if (provider.type === "Codex") {
     return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete, abortSignal }, cb);
@@ -48599,7 +48728,9 @@ var getResponse = async (provider, messages, {
   const localCli = cliAdapterForProviderType(provider.type);
   if (localCli || provider.type === "Codex") {
     let text3 = "";
-    const run = localCli ? streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete }, (chunk) => {
+    const run = localCli ? streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, onReplaceText: (replaced) => {
+      text3 = replaced;
+    } }, (chunk) => {
       if (chunk)
         text3 += chunk;
     }) : streamCodexResponse(provider, messages, { model, providerParams, timeoutMs, onComplete }, (chunk) => {
@@ -49950,6 +50081,35 @@ function cancelActiveGenerations() {
     cancel();
 }
 
+// src/utils/canvasFolder.ts
+var canvasFolderPath = (basePath, folder) => {
+  const path = require("path");
+  return path.resolve(path.join(basePath, folder.replace(/^\/+/, "")));
+};
+
+// src/utils/piSessions.ts
+var PI_PROVIDER_TYPE = "Pi CLI";
+var PI_FRESH_SESSION_NOTE = "Started a fresh Pi session; the earlier one was not found.";
+var PI_SESSION_KEY = "pi_session";
+async function planPiContinuation(entries, selectedNodeIds, getData, getNodeParents) {
+  var _a20;
+  for (const { node } of entries) {
+    if (!selectedNodeIds.has(node.id))
+      continue;
+    const sessionId = (_a20 = getData(node)) == null ? void 0 : _a20[PI_SESSION_KEY];
+    if (typeof sessionId !== "string" || !sessionId)
+      continue;
+    const covered = new Set((await collectNodeAndAncestors(node, getNodeParents)).map((entry) => entry.node.id));
+    return {
+      sessionId,
+      sessionNodeId: node.id,
+      newNodeIds: new Set([...selectedNodeIds].filter((id) => !covered.has(id))),
+      coveredCount: [...selectedNodeIds].filter((id) => covered.has(id)).length
+    };
+  }
+  return void 0;
+}
+
 // src/utils/modelKind.ts
 var guessImageModel = (providerType, modelId) => {
   const normalizedType = providerType.toLowerCase();
@@ -50582,6 +50742,12 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
       return null;
     return settings2.apiKey || activeProvider.apiKey || null;
   };
+  const getCanvasFolder = () => {
+    var _a20, _b19, _c, _d, _e, _f;
+    const view = app.workspace.getActiveViewOfType(import_obsidian13.ItemView);
+    const basePath = (_c = (_b19 = (_a20 = app.vault) == null ? void 0 : _a20.adapter) == null ? void 0 : _b19.getBasePath) == null ? void 0 : _c.call(_b19);
+    return basePath ? canvasFolderPath(basePath, (_f = (_e = (_d = view == null ? void 0 : view.file) == null ? void 0 : _d.parent) == null ? void 0 : _e.path) != null ? _f : "") : void 0;
+  };
   const getActiveCanvas2 = () => {
     const maybeCanvasView = app.workspace.getActiveViewOfType(import_obsidian13.ItemView);
     return maybeCanvasView ? maybeCanvasView["canvas"] : null;
@@ -50611,7 +50777,8 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
   const buildMessages = async (node, {
     systemPrompt,
     prompt,
-    selectedNodeIds
+    selectedNodeIds,
+    continuing
   } = {}) => {
     const messages = [];
     const notes = [];
@@ -50632,6 +50799,8 @@ function noteGenerator(app, settings2, fromNode, toNode, customProvider, customM
     const canCountTokens = isGpt && typeof encodingForModel2 === "function";
     const modelName = (model == null ? void 0 : model.model) || settings2.apiModel;
     const resolvedSystemPrompt = systemPrompt ? { prompt: systemPrompt, sourceNodeId: void 0 } : await getSystemPrompt(node, selectedNodeIds);
+    if (continuing && !resolvedSystemPrompt.sourceNodeId)
+      resolvedSystemPrompt.prompt = "";
     if (canCountTokens) {
       const encoding = encodingForModel2(modelName);
       const systemPrompt22 = resolvedSystemPrompt.prompt;
@@ -50802,7 +50971,7 @@ ${nodeText}`);
     return { messages, tokenCount, notes, contributedNodeIds };
   };
   const generateNote = async (question, selectedNodeIds, chooseContext = false) => {
-    var _a20, _b19, _c, _d, _e, _f, _g, _h, _i;
+    var _a20, _b19, _c, _d, _e, _f, _g, _h, _i, _j, _k;
     const provider = resolveProvider();
     if (!provider) {
       new import_obsidian13.Notice("No active provider found. Please check your settings.");
@@ -50857,11 +51026,21 @@ ${nodeText}`);
       }
       const excludedNodeIds = contextEntries.filter(({ node: node2 }) => !selectedNodeIds.has(node2.id)).map(({ node: node2 }) => node2.id);
       const trimmedQuestion = question == null ? void 0 : question.trim();
+      const piSession = provider.type === PI_PROVIDER_TYPE ? await planPiContinuation(contextEntries, selectedNodeIds, (contextNode) => contextNode.getData()) : void 0;
       const { messages, tokenCount, notes, contributedNodeIds } = await buildMessages(node, {
         prompt: trimmedQuestion ? question : void 0,
-        selectedNodeIds
+        selectedNodeIds: (_b19 = piSession == null ? void 0 : piSession.newNodeIds) != null ? _b19 : selectedNodeIds,
+        continuing: !!piSession
       });
-      const contextCount = contributedNodeIds.size;
+      const contextCount = contributedNodeIds.size + ((_c = piSession == null ? void 0 : piSession.coveredCount) != null ? _c : 0);
+      const buildFullChain = piSession ? async () => {
+        var _a21;
+        const { messages: whole } = await buildMessages(node, { prompt: trimmedQuestion ? question : void 0, selectedNodeIds });
+        if (!trimmedQuestion && (!whole.length || ((_a21 = whole[whole.length - 1]) == null ? void 0 : _a21.role) === "assistant")) {
+          whole.push({ role: "user", content: CONTINUE_PROMPT });
+        }
+        return whole;
+      } : void 0;
       const contextTotal = contextEntries.length;
       if (isImageModel(provider.type, model)) {
         const promptOverride = buildImagePromptFromMessages(messages);
@@ -50875,7 +51054,7 @@ ${nodeText}`);
         });
         return;
       }
-      if (!trimmedQuestion && ((_b19 = messages[messages.length - 1]) == null ? void 0 : _b19.role) === "assistant") {
+      if (!trimmedQuestion && (((_d = messages[messages.length - 1]) == null ? void 0 : _d.role) === "assistant" || piSession && !messages.length)) {
         messages.push({ role: "user", content: CONTINUE_PROMPT });
       }
       if (!messages.length)
@@ -50917,7 +51096,8 @@ ${nodeText}`);
           ai_notes: notes,
           ai_cost: void 0,
           ai_usage: void 0,
-          ai_duration_ms: void 0
+          ai_duration_ms: void 0,
+          [PI_SESSION_KEY]: void 0
         });
         const initialDimensions = calculateNoteDimensions(initialText, 300, 500);
         created.moveAndResize({
@@ -50928,6 +51108,7 @@ ${nodeText}`);
         });
       }
       const controller = new AbortController();
+      let shownModel = model.model;
       let generationStatus;
       try {
         created.render();
@@ -50977,6 +51158,13 @@ ${nodeText}`);
         let firstDelta = true;
         let lastResizeAt = Date.now();
         const toolRefs = /* @__PURE__ */ new Map();
+        const startWriting = () => {
+          if (!firstDelta)
+            return;
+          created.setText("");
+          toolsContainer = created.contentEl.createEl("div", { cls: "mcp-tools-container" });
+          firstDelta = false;
+        };
         const hasMcpTools = mcpTools && Object.keys(mcpTools).length > 0;
         const mcpToolCount = hasMcpTools ? Object.keys(mcpTools).length : 0;
         const capabilities = getProviderCapabilities(provider, model == null ? void 0 : model.model);
@@ -51007,25 +51195,37 @@ ${nodeText}`);
           providerParams: model.providerParams,
           timeoutMs: model.timeoutMs,
           abortSignal: controller.signal,
+          cwd: getCanvasFolder(),
+          forkSession: piSession == null ? void 0 : piSession.sessionId,
+          fallbackMessages: buildFullChain,
           onComplete: (usage) => {
-            const cost = costForModel(settings2.models, provider.id, model.model, usage);
+            var _a21, _b20;
+            const cost = (_a21 = usage.costUsd) != null ? _a21 : costForModel(settings2.models, provider.id, model.model, usage);
             const { inputTokens, outputTokens, cachedInputTokens } = usage;
+            if (usage.model && model.model === CLI_DEFAULT_MODEL)
+              shownModel = usage.model;
             created.setData({
               ...created.getData(),
               ai_usage: { inputTokens, outputTokens, cachedInputTokens: cachedInputTokens != null ? cachedInputTokens : 0 },
               ai_duration_ms: Date.now() - requestStartedAt,
-              ...cost == null ? {} : { ai_cost: cost }
+              ...cost == null ? {} : { ai_cost: cost },
+              ...shownModel === model.model ? {} : { ai_model: shownModel },
+              ...usage.sessionId ? { [PI_SESSION_KEY]: usage.sessionId } : {},
+              ...usage.startedFreshSession ? { ai_notes: [...(_b20 = created.getData().ai_notes) != null ? _b20 : [], PI_FRESH_SESSION_NOTE] } : {}
             });
-          }
+          },
+          onReplaceText: (text2) => {
+            if (controller.signal.aborted)
+              return;
+            startWriting();
+            created.setText(text2);
+          },
+          onPhase: (phase) => generationStatus == null ? void 0 : generationStatus.setPhase(phase)
         }, (delta, final, tool3, reasoningDelta) => {
           var _a21, _b20, _c2, _d2, _e2, _f2, _g2, _h2, _i2;
           if (controller.signal.aborted)
             return;
-          if (firstDelta) {
-            created.setText("");
-            toolsContainer = created.contentEl.createEl("div", { cls: "mcp-tools-container" });
-            firstDelta = false;
-          }
+          startWriting();
           if (reasoningDelta) {
             generationStatus == null ? void 0 : generationStatus.setPhase("Thinking\u2026");
             if (!reasoningDetails) {
@@ -51135,7 +51335,7 @@ ${nodeText}`);
             created.contentEl.appendChild(featuresEl);
           if (!created.contentEl.contains(toolsContainer))
             created.contentEl.appendChild(toolsContainer);
-          setModelIndicatorText(created, providerLabel(provider), model.model, !final);
+          setModelIndicatorText(created, providerLabel(provider), shownModel, !final);
         });
         if (!controller.signal.aborted && !created.text.trim()) {
           created.setText("The model returned an empty answer.");
@@ -51156,25 +51356,25 @@ ${nodeText}`);
           if (!created.text.trim())
             created.setText("Generation stopped.");
           const data = created.getData();
-          created.setData({ ...data, ai_notes: [...(_c = data.ai_notes) != null ? _c : [], "Generation stopped"] });
+          created.setData({ ...data, ai_notes: [...(_e = data.ai_notes) != null ? _e : [], "Generation stopped"] });
         } else {
           let errorDetail = error40.message || String(error40);
-          if ((_d = error40.cause) == null ? void 0 : _d.message) {
+          if ((_f = error40.cause) == null ? void 0 : _f.message) {
             errorDetail = error40.cause.message;
           }
           if (error40.responseBody) {
             try {
               const body = typeof error40.responseBody === "string" ? JSON.parse(error40.responseBody) : error40.responseBody;
-              if ((_e = body == null ? void 0 : body.error) == null ? void 0 : _e.message) {
+              if ((_g = body == null ? void 0 : body.error) == null ? void 0 : _g.message) {
                 errorDetail = body.error.message;
               }
             } catch (e) {
             }
           }
-          if ((_g = (_f = error40.data) == null ? void 0 : _f.error) == null ? void 0 : _g.message) {
+          if ((_i = (_h = error40.data) == null ? void 0 : _h.error) == null ? void 0 : _i.message) {
             errorDetail = error40.data.error.message;
           }
-          if (error40.statusCode && ((_h = error40.message) == null ? void 0 : _h.startsWith(`HTTP ${error40.statusCode}:`))) {
+          if (error40.statusCode && ((_j = error40.message) == null ? void 0 : _j.startsWith(`HTTP ${error40.statusCode}:`))) {
             errorDetail = error40.message;
           }
           new import_obsidian13.Notice(`Error calling the AI: ${errorDetail}`, 1e4);
@@ -51195,9 +51395,9 @@ ${nodeText}`);
         }
       } finally {
         generationStatus == null ? void 0 : generationStatus.destroy();
-        (_i = created.nodeEl) == null ? void 0 : _i.removeClass("ai-generating");
+        (_k = created.nodeEl) == null ? void 0 : _k.removeClass("ai-generating");
         if (created.contentEl)
-          addModelIndicator(created, providerLabel(provider), model.model);
+          addModelIndicator(created, providerLabel(provider), shownModel);
       }
       await canvas.requestSave();
     }
