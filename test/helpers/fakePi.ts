@@ -2,7 +2,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-export const fixturePath = (name: string) => path.join(__dirname, "..", "fixtures", name);
+const fixturePath = (name: string) => path.join(__dirname, "..", "fixtures", name);
 
 export const fixtureLines = (name: string): string[] =>
 	fs.readFileSync(fixturePath(name), "utf8").split("\n").filter(line => line.trim());
