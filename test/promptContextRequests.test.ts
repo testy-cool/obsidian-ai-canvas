@@ -1021,3 +1021,27 @@ describe("in-card generation state", () => {
 		expect(indicator.parentElement).toBe(prompt.nodeEl);
 	});
 });
+
+describe("the folder a local CLI runs in", () => {
+	it("is the folder of the canvas file inside the vault", async () => {
+		const { app, canvas, settings } = fixture(false);
+		app.vault = { adapter: { getBasePath: () => "/home/me/Vault" } };
+		app.workspace.getActiveViewOfType = () => ({ canvas, file: { parent: { path: "Projects/Alpha" } } });
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(vi.mocked(streamResponse).mock.calls[0][2].cwd).toBe("/home/me/Vault/Projects/Alpha");
+	});
+
+	it("is the vault itself for a canvas at the vault root", async () => {
+		const { app, canvas, settings } = fixture(false);
+		app.vault = { adapter: { getBasePath: () => "/home/me/Vault" } };
+		app.workspace.getActiveViewOfType = () => ({ canvas, file: { parent: { path: "/" } } });
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(vi.mocked(streamResponse).mock.calls[0][2].cwd).toBe("/home/me/Vault");
+	});
+
+	it("is left out where the vault has no folder on disk", async () => {
+		const { app, settings } = fixture(false);
+		await run(() => noteGenerator(app, settings).generateNote());
+		expect(vi.mocked(streamResponse).mock.calls[0][2].cwd).toBeUndefined();
+	});
+});

@@ -1,6 +1,10 @@
 import { describe, it, expect, afterEach } from "vitest";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { Platform } from "obsidian";
-import { createPiJsonParser, streamLocalCliResponse, CliEvent } from "../src/utils/localCli";
+import { CLI_ADAPTERS, createPiJsonParser, streamLocalCliResponse, CliEvent } from "../src/utils/localCli";
+import { canvasFolderPath } from "../src/utils/canvasFolder";
 import { fixtureLines, makeFakePi } from "./helpers/fakePi";
 
 afterEach(() => { Platform.isDesktopApp = true; });
@@ -145,4 +149,63 @@ describe("running Pi through the plugin", () => {
 			pi.cleanup();
 		}
 	}, 30000);
+});
+
+describe("where a CLI runs", () => {
+	const provider = (type: string, binaryPath: string, cliArgs?: string) => ({
+		id: "cli", type, baseUrl: "", apiKey: "", enabled: true, binaryPath, cliArgs,
+	}) as any;
+
+	it("runs Pi in the folder of the canvas", async () => {
+		const pi = makeFakePi({ script: "pi-answer.jsonl" });
+		const folder = fs.mkdtempSync(path.join(os.tmpdir(), "canvas-folder-"));
+		try {
+			await streamLocalCliResponse(
+				provider("Pi CLI", pi.binary), [{ role: "user", content: "x" }] as any, { cwd: folder }, () => {},
+			);
+			expect(fs.realpathSync(pi.calls()[0].cwd)).toBe(fs.realpathSync(folder));
+		} finally {
+			pi.cleanup();
+			fs.rmSync(folder, { recursive: true, force: true });
+		}
+	}, 30000);
+
+	it("falls back to a temporary folder when the canvas folder is not there", async () => {
+		const pi = makeFakePi({ script: "pi-answer.jsonl" });
+		try {
+			await streamLocalCliResponse(
+				provider("Pi CLI", pi.binary), [{ role: "user", content: "x" }] as any,
+				{ cwd: path.join(os.tmpdir(), "no-such-canvas-folder") }, () => {},
+			);
+			expect(fs.realpathSync(pi.calls()[0].cwd)).toBe(fs.realpathSync(os.tmpdir()));
+		} finally {
+			pi.cleanup();
+		}
+	}, 30000);
+
+	it("keeps every other CLI in a temporary folder", async () => {
+		expect(Object.values(CLI_ADAPTERS).filter(adapter => adapter.runsInCanvasFolder).map(adapter => adapter.id)).toEqual(["pi"]);
+		const folder = fs.mkdtempSync(path.join(os.tmpdir(), "canvas-folder-"));
+		try {
+			let printed = "";
+			await streamLocalCliResponse(
+				provider("Local command", process.execPath, "-e process.stdout.write(process.cwd())"),
+				[{ role: "user", content: "x" }] as any, { cwd: folder }, chunk => { if (chunk) printed += chunk; },
+			);
+			expect(fs.realpathSync(printed)).toBe(fs.realpathSync(os.tmpdir()));
+		} finally {
+			fs.rmSync(folder, { recursive: true, force: true });
+		}
+	}, 30000);
+});
+
+describe("the canvas folder", () => {
+	it("joins the vault folder and the folder of the canvas file", () => {
+		expect(canvasFolderPath("/home/me/Vault", "Projects/Alpha")).toBe("/home/me/Vault/Projects/Alpha");
+	});
+
+	it("is the vault folder itself for a canvas at the vault root", () => {
+		expect(canvasFolderPath("/home/me/Vault", "/")).toBe("/home/me/Vault");
+		expect(canvasFolderPath("/home/me/Vault", "")).toBe("/home/me/Vault");
+	});
 });

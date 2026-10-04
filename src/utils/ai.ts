@@ -380,6 +380,8 @@ export interface StreamOptions {
 	onReplaceText?: (text: string) => void;
 	/** What the provider is doing, for the card's status line. */
 	onPhase?: (phase: string) => void;
+	/** The folder a local CLI that works on files should run in. Other providers ignore it. */
+	cwd?: string;
 }
 
 export type ToolEvent = {
@@ -405,6 +407,7 @@ export const streamResponse = async (
 		onComplete,
 		onReplaceText,
 		onPhase,
+		cwd,
 		abortSignal,
 	}: StreamOptions = {},
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
@@ -414,7 +417,7 @@ export const streamResponse = async (
 	};
 	throwIfStopped();
 	if (cliAdapterForProviderType(provider.type)) {
-		return streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, onReplaceText, onPhase, abortSignal }, cb);
+		return streamLocalCliResponse(provider, messages, { model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, abortSignal }, cb);
 	}
 	if (provider.type === "Codex") {
 		return streamCodexResponse(provider, messages, { max_tokens, model, temperature, providerParams, timeoutMs, onComplete, abortSignal }, cb);

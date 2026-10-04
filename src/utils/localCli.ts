@@ -41,6 +41,8 @@ export type CliAdapter = {
 	parseLine?: (line: string) => CliEvent;
 	/** Like `parseLine`, for a CLI whose events only make sense in order. Called once per run. */
 	createParser?: () => (line: string) => CliEvent;
+	/** Work in the canvas's own folder, not a temporary one. For a CLI that acts on files and keeps its sessions per folder. */
+	runsInCanvasFolder?: boolean;
 };
 
 /**
@@ -186,6 +188,7 @@ export const CLI_ADAPTERS: Record<string, CliAdapter> = {
 		promptVia: "arg",
 		baseArgs: ["-p", "--mode", "json"],
 		createParser: createPiJsonParser,
+		runsInCanvasFolder: true,
 	},
 	hermes: {
 		id: "hermes",
@@ -285,7 +288,7 @@ const flattenMessages = (messages: ModelMessage[]): string =>
 export const streamLocalCliResponse = async (
 	provider: LLMProvider,
 	messages: ModelMessage[],
-	{ model, timeoutMs, onComplete, onReplaceText, onPhase, abortSignal }: StreamOptions,
+	{ model, timeoutMs, onComplete, onReplaceText, onPhase, cwd, abortSignal }: StreamOptions,
 	cb: (chunk: string | null, final: any, tool: ToolEvent | null, reasoningDelta: any) => void
 ): Promise<void> => {
 	if (abortSignal?.aborted) throw new DOMException("Generation stopped", "AbortError");
@@ -307,9 +310,12 @@ export const streamLocalCliResponse = async (
 	const { spawn } = require("child_process");
 	// eslint-disable-next-line @typescript-eslint/no-var-requires
 	const os = require("os");
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
+	const fs = require("fs");
+	const workingDirectory = adapter.runsInCanvasFolder && cwd && fs.existsSync(cwd) ? cwd : os.tmpdir();
 
 	return new Promise<void>((resolve, reject) => {
-		const child = spawn(binary, args, { cwd: os.tmpdir(), stdio: ["pipe", "pipe", "pipe"] });
+		const child = spawn(binary, args, { cwd: workingDirectory, stdio: ["pipe", "pipe", "pipe"] });
 		const timeout = timeoutMs ?? 300_000;
 		let streamedText = "";
 		let stderrTail = "";

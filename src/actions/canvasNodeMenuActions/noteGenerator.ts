@@ -28,6 +28,7 @@ import { addModelIndicator, setModelIndicatorText, getYouTubeVideoId } from "../
 import { maybeAutoGenerateCardTitle } from "./titleGenerator";
 import { createGenerationStatus } from "../../utils/generationStatus";
 import { costForModel } from "../../utils/cost";
+import { canvasFolderPath } from "../../utils/canvasFolder";
 import { CLI_DEFAULT_MODEL } from "../../utils/localCli";
 import { isImageModel } from "../../utils/modelKind";
 import { getAllMCPTools } from "../../utils/mcpClient";
@@ -266,6 +267,13 @@ export function noteGenerator(
 		return settings.apiKey || activeProvider.apiKey || null;
 	};
 	
+	/** Where the canvas file lives on disk, so a CLI that works on files runs next to it. Desktop only. */
+	const getCanvasFolder = (): string | undefined => {
+		const view = app.workspace.getActiveViewOfType(ItemView) as { file?: { parent?: { path?: string } | null } } | null;
+		const basePath = (app.vault?.adapter as { getBasePath?: () => string } | undefined)?.getBasePath?.();
+		return basePath ? canvasFolderPath(basePath, view?.file?.parent?.path ?? "") : undefined;
+	};
+
 	const getActiveCanvas = () => {
 		const maybeCanvasView = app.workspace.getActiveViewOfType(
 			ItemView
@@ -829,6 +837,7 @@ export function noteGenerator(
 						providerParams: model.providerParams,
 						timeoutMs: model.timeoutMs,
 						abortSignal: controller.signal,
+						cwd: getCanvasFolder(),
 						onComplete: usage => {
 							// Show what the card cost and how much came from the cache next
 							// to the model it used. Cost is undefined when the model has no
