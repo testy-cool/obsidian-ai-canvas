@@ -3,6 +3,7 @@ import { ModelMessage } from "@ai-sdk/provider-utils";
 import { LLMProvider } from "../settings/AugmentedCanvasSettings";
 import { logDebug } from "../logDebug";
 import type { StreamOptions, ToolEvent } from "./ai";
+import { getCliEnv } from "./shellEnv";
 
 /** Model id meaning "whatever the CLI is already configured for". */
 export const CLI_DEFAULT_MODEL = "default";
@@ -186,16 +187,17 @@ export const parsePiModelList = (stdout: string): string[] =>
 		.filter(([provider, model]) => provider && model && provider !== "provider")
 		.map(([provider, model]) => `${provider}/${model}`);
 
-const listPiModels = (binary: string, timeoutMs = 30_000): Promise<string[] | null> => {
+const listPiModels = async (binary: string, timeoutMs = 30_000): Promise<string[] | null> => {
 	// eslint-disable-next-line @typescript-eslint/no-var-requires
 	const { execFile } = require("child_process");
 	// eslint-disable-next-line @typescript-eslint/no-var-requires
 	const os = require("os");
+	const env = await getCliEnv();
 	return new Promise(resolve => {
 		const child = execFile(
 			binary,
 			["--list-models"],
-			{ cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 },
+			{ cwd: os.tmpdir(), env, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 },
 			(error: Error | null, stdout: string) => {
 				if (error) {
 					logDebug("[Pi CLI] model list failed", error.message);
@@ -358,6 +360,7 @@ export const streamLocalCliResponse = async (
 	// eslint-disable-next-line @typescript-eslint/no-var-requires
 	const fs = require("fs");
 	const workingDirectory = adapter.runsInCanvasFolder && cwd && fs.existsSync(cwd) ? cwd : os.tmpdir();
+	const env = await getCliEnv();
 
 	/**
 	 * One run of the command. When `mayRetry` is set and the command fails
@@ -372,7 +375,7 @@ export const streamLocalCliResponse = async (
 	) => new Promise<"done" | "retry">((resolve, reject) => {
 		const { args, stdin } = buildCliInvocation(adapter, { prompt: flattenMessages(runMessages), model, extraArgs, forkSession: runFork });
 		logDebug(`[${adapter.providerType}] spawning`, { binary, args });
-		const child = spawn(binary, args, { cwd: workingDirectory, stdio: ["pipe", "pipe", "pipe"] });
+		const child = spawn(binary, args, { cwd: workingDirectory, env, stdio: ["pipe", "pipe", "pipe"] });
 		const timeout = timeoutMs ?? 300_000;
 		let streamedText = "";
 		let stderrTail = "";
