@@ -4,6 +4,7 @@ import { visitNodeAndAncestors } from "../../obsidian/canvasUtil";
 import { readNodeContent } from "../../obsidian/fileUtil";
 import { AugmentedCanvasSettings } from "../../settings/AugmentedCanvasSettings";
 import { getResponse } from "../../utils/llm";
+import { getCanvasCardTitle, setCanvasCardTitle } from "../../utils/cardTitles";
 import { providerLabel } from "../../utils/providerCapabilities";
 
 const CARD_TITLE_SYSTEM_PROMPT_FALLBACK = `
@@ -51,58 +52,6 @@ const sanitizeTitle = (value: string) => {
 
 	combined = combined.replace(/\s+/g, " ");
 	return combined;
-};
-
-const getCardTitle = (node: CanvasNode) => {
-	const data = node.getData() as { ai_card_title?: string };
-	return data?.ai_card_title?.trim() || "";
-};
-
-const ensureCardTitleElement = (node: CanvasNode) => {
-	const host = node.nodeEl || node.containerEl || node.contentEl;
-	if (!host) return null;
-	const existing = host.querySelector(".ai-card-title") as HTMLElement | null;
-	if (existing) return existing;
-	const titleEl = document.createElement("div");
-	titleEl.className = "ai-card-title";
-	host.appendChild(titleEl);
-	return titleEl;
-};
-
-const applyCardTitle = async (node: CanvasNode, title: string) => {
-	const data = node.getData() as { label?: string; ai_card_title?: string };
-	const { label: _label, ...rest } = data;
-	node.setData({ ...rest, ai_card_title: title });
-	if (node.nodeEl) {
-		node.nodeEl.classList.add("ai-card-title-host");
-	}
-	if (node.labelEl) {
-		node.labelEl.setText("");
-		node.labelEl.style.display = "none";
-	}
-	const titleEl = ensureCardTitleElement(node);
-	if (titleEl) {
-		titleEl.setText(title);
-	}
-	if (node.canvas) {
-		await node.canvas.requestSave();
-		await node.canvas.requestFrame();
-	}
-};
-
-const applyGroupLabel = async (node: CanvasNode, label: string) => {
-	const data = node.getData() as { label?: string };
-	node.setData({ ...data, label });
-	if (node.labelEl) {
-		node.labelEl.setText(label);
-	}
-	if ("label" in node) {
-		(node as any).label = label;
-	}
-	if (node.canvas) {
-		await node.canvas.requestSave();
-		await node.canvas.requestFrame();
-	}
 };
 
 const resolveNamingModel = (
@@ -259,7 +208,7 @@ export const generateCardTitle = async (
 		return;
 	}
 
-	const existingTitle = getCardTitle(node);
+	const existingTitle = getCanvasCardTitle(node);
 	if (existingTitle && !force) {
 		return;
 	}
@@ -305,7 +254,7 @@ export const generateCardTitle = async (
 		const title = sanitizeTitle(String(response || ""));
 		if (!title) return;
 
-		await applyCardTitle(node, title);
+		setCanvasCardTitle(node, title);
 		if (showNotices) {
 			new Notice(`Card title set: ${title}`);
 		}
@@ -373,7 +322,7 @@ export const generateGroupName = async (
 		const title = sanitizeTitle(String(response || ""));
 		if (!title) return;
 
-		await applyGroupLabel(node, title);
+		setCanvasCardTitle(node, title);
 		new Notice(`Group name set: ${title}`);
 	} catch (error) {
 		new Notice(`Error generating group name: ${error.message || error}`);

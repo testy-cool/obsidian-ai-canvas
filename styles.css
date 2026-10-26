@@ -637,33 +637,21 @@
 	display: block;
 }
 
-.ai-card-title {
-	position: absolute;
-	top: -20px;
-	left: 8px;
-	right: auto;
+.canvas-node-label.canvas-card-title {
+	pointer-events: auto;
+	cursor: grab;
+	font-size: max(12px, var(--font-ui-small));
+	opacity: 1;
 	max-width: calc(100% - 16px);
-	padding: 2px 6px;
-	border-radius: 6px;
-	font-size: 12px;
-	font-weight: 600;
-	line-height: 1.3;
-	color: var(--text-normal);
-	background: var(--background-primary);
-	box-shadow: var(--shadow-s);
-	pointer-events: none;
-	white-space: normal;
+	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	word-break: break-word;
-	display: -webkit-box;
-	-webkit-line-clamp: 2;
-	-webkit-box-orient: vertical;
-	z-index: 2;
 }
 
-.ai-card-title-host {
-	overflow: visible !important;
+.canvas-card-title-input {
+	font-size: max(14px, var(--font-ui-small));
+	width: 100%;
+	min-width: 160px;
 }
 
 .canvas-node:hover .ai-model-indicator {

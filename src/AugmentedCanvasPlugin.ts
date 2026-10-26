@@ -49,6 +49,7 @@ import { closeAllMCPClients } from "./utils/mcpClient";
 import { insertMcpContent } from "./actions/commands/insertMcpContent";
 import { configureLLMObservability } from "./utils/llmObservability";
 import { getImageGenerationPrompt } from "./utils/imageGenerationPrompt";
+import { CanvasCardTitles, getCanvasCardTitle, setCanvasCardTitle } from "./utils/cardTitles";
 import { HttpRequestCards } from "./utils/httpRequestCards";
 import { getHttpRequest } from "./utils/httpRequest";
 
@@ -61,6 +62,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	private cleanupIndicatorPersistence?: () => void;
 	private cleanupHtmlPreviewPersistence?: () => void;
 	private httpRequestCards?: HttpRequestCards;
+	private cardTitles?: CanvasCardTitles;
 	observabilityClient: ObservabilityClient | null = null;
 
 	settings: AugmentedCanvasSettings;
@@ -95,6 +97,8 @@ export default class AugmentedCanvasPlugin extends Plugin {
 			this.patchCanvasSelectionMenu();
 			this.httpRequestCards = new HttpRequestCards(this.app);
 			this.httpRequestCards.start();
+			this.cardTitles = new CanvasCardTitles(this.app);
+			this.cardTitles.start();
 
 			// Set up persistent model indicators
 			this.cleanupIndicatorPersistence = setupCanvasIndicatorPersistence(this.app);
@@ -147,6 +151,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	}
 
 	onunload() {
+		this.cardTitles?.dispose();
 		this.httpRequestCards?.dispose();
 		cancelActiveGenerations();
 		// Local MCP servers are child processes; a reload must not leave them behind.
@@ -453,6 +458,16 @@ export default class AugmentedCanvasPlugin extends Plugin {
 				const nodeData = canvasNode.getData() as Record<string, unknown>;
 				const imagePrompt = getImageGenerationPrompt(nodeData);
 				menu.addSeparator();
+				menu.addItem(item => item.setTitle(getCanvasCardTitle(canvasNode) ? "Edit card title" : "Set card title")
+					.setIcon("lucide-type").setDisabled(!!canvasNode.canvas.readonly)
+					.onClick(() => this.cardTitles?.edit(canvasNode)));
+				if (getCanvasCardTitle(canvasNode)) {
+					menu.addItem(item => item.setTitle("Clear card title").setIcon("lucide-eraser")
+						.setDisabled(!!canvasNode.canvas.readonly).onClick(() => {
+							try { setCanvasCardTitle(canvasNode, ""); }
+							catch (error) { new Notice(error instanceof Error ? error.message : String(error)); }
+						}));
+				}
 				if (getHttpRequest(nodeData)) {
 					menu.addItem(item => item.setTitle("Edit HTTP request").setIcon("lucide-settings-2")
 						.onClick(() => this.httpRequestCards?.edit(canvasNode.canvas, canvasNode)));

@@ -555,6 +555,7 @@ describe("context picker request paths", () => {
 				title: "", click: () => {},
 				setTitle(title: string) { this.title = title; return this; },
 				setIcon() { return this; },
+				setDisabled() { return this; },
 				onClick(click: () => void) { this.click = click; return this; },
 			};
 			callback(item);
@@ -563,6 +564,7 @@ describe("context picker request paths", () => {
 		canvas.selection.clear(); // The right-clicked card need not be selected.
 		events.get("canvas:node-menu")!(menu, prompt);
 		expect(items.map(item => item.title)).toEqual([
+			"Set card title",
 			"Ask AI with chosen context…",
 			"Generate card title",
 			"Copy node ID",
@@ -573,8 +575,8 @@ describe("context picker request paths", () => {
 	});
 
 	it.each([
-		[true, ["Ask AI with chosen context…", "Copy node ID"]],
-		[false, ["Ask AI with chosen context…"]],
+		[true, ["Set card title", "Ask AI with chosen context…", "Copy node ID"]],
+		[false, ["Set card title", "Ask AI with chosen context…"]],
 	] as const)("shows Copy node ID only when debug is %s", (debug, expectedTitles) => {
 		const { app, settings, prompt, events } = fixture(false);
 		settings.debug = debug;
@@ -589,6 +591,7 @@ describe("context picker request paths", () => {
 				const item = {
 					setTitle(title: string) { titles.push(title); return this; },
 					setIcon() { return this; },
+				setDisabled() { return this; },
 					onClick() { return this; },
 				};
 				callback(item);
