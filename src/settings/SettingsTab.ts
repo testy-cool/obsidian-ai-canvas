@@ -156,6 +156,18 @@ export default class SettingsTab extends PluginSettingTab {
     private renderGeneralSettings(containerEl: HTMLElement) {
         new Setting(containerEl).setHeading().setName("General Settings");
 
+		this.addIntegerInput(
+			new Setting(containerEl).setName("HTTP result note threshold")
+				.setDesc("Save HTTP results longer than this many characters as Markdown notes in the vault's attachment folder, embedded in the canvas. Shorter results stay inline. Set 0 to keep every result inline."),
+			this.plugin.settings.httpResultNoteThreshold,
+			"Enter a whole number of characters, 0 or greater. Default: 5000.",
+			value => value >= 0,
+			async value => {
+				this.plugin.settings.httpResultNoteThreshold = value;
+				await this.plugin.saveSettings();
+			}
+		);
+
         new Setting(containerEl)
             .setName("Default Provider")
             .setDesc("Select the default AI provider for all actions.")

@@ -380,6 +380,9 @@ export interface AugmentedCanvasSettings {
 	 */
 	mcpRequireApproval: boolean;
 
+	/** HTTP results above this character count become attachment notes; 0 disables it. */
+	httpResultNoteThreshold: number;
+
 	/**
 	 * Whether fenced HTML cards open in Render mode by default
 	 */
@@ -571,6 +574,7 @@ export const DEFAULT_SETTINGS: AugmentedCanvasSettings = {
 	mcpEnabled: true,
 	mcpMaxSteps: 5,
 	mcpRequireApproval: false,
+	httpResultNoteThreshold: 5000,
 	autoPreviewHtml: true,
 	lastImageGenDurations: {}
 };

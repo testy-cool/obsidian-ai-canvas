@@ -95,7 +95,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 			this.addCommands();
 			this.patchNoteContextMenu();
 			this.patchCanvasSelectionMenu();
-			this.httpRequestCards = new HttpRequestCards(this.app);
+			this.httpRequestCards = new HttpRequestCards(this.app, undefined, () => this.settings.httpResultNoteThreshold);
 			this.httpRequestCards.start();
 			this.cardTitles = new CanvasCardTitles(this.app);
 			this.cardTitles.start();

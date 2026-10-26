@@ -51962,6 +51962,7 @@ var DEFAULT_SETTINGS = {
   mcpEnabled: true,
   mcpMaxSteps: 5,
   mcpRequireApproval: false,
+  httpResultNoteThreshold: 5e3,
   autoPreviewHtml: true,
   lastImageGenDurations: {}
 };
@@ -53061,6 +53062,10 @@ var SettingsTab = class extends import_obsidian20.PluginSettingTab {
   renderGeneralSettings(containerEl) {
     var _a20, _b19, _c, _d;
     new import_obsidian20.Setting(containerEl).setHeading().setName("General Settings");
+    this.addIntegerInput(new import_obsidian20.Setting(containerEl).setName("HTTP result note threshold").setDesc("Save HTTP results longer than this many characters as Markdown notes in the vault's attachment folder, embedded in the canvas. Shorter results stay inline. Set 0 to keep every result inline."), this.plugin.settings.httpResultNoteThreshold, "Enter a whole number of characters, 0 or greater. Default: 5000.", (value) => value >= 0, async (value) => {
+      this.plugin.settings.httpResultNoteThreshold = value;
+      await this.plugin.saveSettings();
+    });
     new import_obsidian20.Setting(containerEl).setName("Default Provider").setDesc("Select the default AI provider for all actions.").addDropdown((dropdown) => {
       this.plugin.settings.providers.forEach((provider) => {
         dropdown.addOption(provider.id, providerLabel(provider));
@@ -55739,6 +55744,50 @@ var insertMcpContent = async (app, settings2) => {
 // src/utils/httpRequestCards.ts
 var import_obsidian30 = require("obsidian");
 
+// src/utils/resultNotes.ts
+var DEFAULT_RESULT_NOTE_THRESHOLD = 5e3;
+function shouldSaveResultNote(text2, threshold = DEFAULT_RESULT_NOTE_THRESHOLD) {
+  return Number.isFinite(threshold) && threshold > 0 && text2.length > threshold;
+}
+async function createResultNote(app, text2, sourcePath, prefix = "Canvas result") {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const path = await app.fileManager.getAvailablePathForAttachment(`${prefix}-${timestamp}.md`, sourcePath);
+  return app.vault.create(path, text2);
+}
+function resultNoteData(data, path) {
+  const { text: _text, url: _url2, subpath: _subpath, ...rest } = data;
+  return { ...rest, type: "file", file: path, result_note: true };
+}
+function replaceResultCard(node, data) {
+  const canvas = node.canvas;
+  if (!Array.from(canvas.nodes.values()).includes(node))
+    return;
+  const before = canvas.getData();
+  const selected = canvas.selection.has(node);
+  const next = { ...before, nodes: before.nodes.map((current) => current.id === node.id ? data : current) };
+  canvas.removeNode(node);
+  try {
+    canvas.importData(next);
+  } catch (error40) {
+    const partial2 = Array.from(canvas.nodes.values()).find((current) => current.id === node.id);
+    if (partial2)
+      canvas.removeNode(partial2);
+    canvas.importData(before);
+    const restored = Array.from(canvas.nodes.values()).find((current) => current.id === node.id);
+    if (selected && restored)
+      canvas.select(restored);
+    void canvas.requestSave();
+    void canvas.requestFrame();
+    throw error40;
+  }
+  const replacement = Array.from(canvas.nodes.values()).find((current) => current.id === node.id);
+  if (selected && replacement)
+    canvas.select(replacement);
+  void canvas.requestSave();
+  void canvas.requestFrame();
+  return replacement;
+}
+
 // src/utils/httpRequestEditor.ts
 var import_obsidian29 = require("obsidian");
 
@@ -56008,9 +56057,10 @@ var HttpRequestEditor = class {
 var nodesIn2 = (canvas) => Array.from(canvas.nodes.values());
 var contains = (node) => nodesIn2(node.canvas).includes(node);
 var HttpRequestCards = class {
-  constructor(app, execute = executeHttpRequest) {
+  constructor(app, execute = executeHttpRequest, noteThreshold = () => DEFAULT_RESULT_NOTE_THRESHOLD) {
     this.app = app;
     this.execute = execute;
+    this.noteThreshold = noteThreshold;
     this.disposed = false;
     this.active = /* @__PURE__ */ new Map();
     this.fileKeys = /* @__PURE__ */ new WeakMap();
@@ -56141,20 +56191,81 @@ ${httpCodeBlock(message)}`, { requestNodeId: node.id, state: "failed" });
     }
   }
   async writeResponse(output, file2, text2, metadata) {
-    var _a20, _b19, _c, _d, _e;
-    const targets = /* @__PURE__ */ new Set();
-    let hasLoadedView = false;
+    await this.writeInlineResponse(output, file2, text2, metadata);
+    if (this.disposed || !shouldSaveResultNote(text2, this.noteThreshold()))
+      return;
+    try {
+      await this.saveResponseNote(output, file2, text2, metadata);
+    } catch (error40) {
+      new import_obsidian30.Notice(`Could not save the response as a note. The result is still in the canvas: ${error40 instanceof Error ? error40.message : String(error40)}`);
+    }
+  }
+  responseLocation(output, file2) {
+    var _a20, _b19, _c;
+    const nodes = [];
+    let loaded = false;
     for (const leaf of this.app.workspace.getLeavesOfType("canvas")) {
       if (((_a20 = leaf.view) == null ? void 0 : _a20._loaded) === false)
         continue;
       const canvas = (_b19 = leaf.view) == null ? void 0 : _b19.canvas;
       if (!canvas || (file2 ? ((_c = canvas.view) == null ? void 0 : _c.file) !== file2 : canvas !== output.canvas))
         continue;
-      hasLoadedView = true;
+      loaded = true;
       const node = nodesIn2(canvas).find((node2) => node2.id === output.id);
-      if (node && ((_d = node.getData().http_response) == null ? void 0 : _d.requestNodeId) === metadata.requestNodeId)
-        targets.add(node);
+      if (node)
+        nodes.push(node);
     }
+    return { nodes, loaded };
+  }
+  async saveResponseNote(output, file2, text2, metadata) {
+    var _a20;
+    const eligible = (data) => {
+      var _a21, _b19;
+      return (data == null ? void 0 : data.id) === output.id && data.type === "text" && data.text === text2 && ((_a21 = data.http_response) == null ? void 0 : _a21.requestNodeId) === metadata.requestNodeId && ((_b19 = data.http_response) == null ? void 0 : _b19.state) === metadata.state;
+    };
+    const first = this.responseLocation(output, file2);
+    if (first.loaded) {
+      if (!first.nodes.some((node) => eligible(node.getData())))
+        return;
+    } else {
+      if (!file2 || this.app.vault.getAbstractFileByPath(file2.path) !== file2)
+        return;
+      const data = JSON.parse(await this.app.vault.read(file2));
+      if (!((_a20 = data.nodes) == null ? void 0 : _a20.some(eligible)))
+        return;
+    }
+    if (this.disposed)
+      return;
+    const note = await createResultNote(this.app, text2, file2 == null ? void 0 : file2.path, "HTTP response");
+    if (this.disposed)
+      return;
+    const current = this.responseLocation(output, file2);
+    if (current.loaded) {
+      for (const node of current.nodes) {
+        if (eligible(node.getData()))
+          replaceResultCard(node, resultNoteData(node.getData(), note.path));
+      }
+    } else if (file2 && this.app.vault.getAbstractFileByPath(file2.path) === file2) {
+      await this.app.vault.process(file2, (contents) => {
+        var _a21;
+        if (this.disposed)
+          return contents;
+        const data = JSON.parse(contents);
+        const index = (_a21 = data.nodes) == null ? void 0 : _a21.findIndex(eligible);
+        if (index == null || index < 0)
+          return contents;
+        data.nodes[index] = resultNoteData(data.nodes[index], note.path);
+        return JSON.stringify(data, null, "	");
+      });
+    }
+  }
+  async writeInlineResponse(output, file2, text2, metadata) {
+    var _a20;
+    const location = this.responseLocation(output, file2);
+    const targets = new Set(location.nodes.filter((node) => {
+      var _a21;
+      return ((_a21 = node.getData().http_response) == null ? void 0 : _a21.requestNodeId) === metadata.requestNodeId;
+    }));
     if (targets.size) {
       for (const node of targets) {
         void node.setText(text2);
@@ -56163,9 +56274,9 @@ ${httpCodeBlock(message)}`, { requestNodeId: node.id, state: "failed" });
       }
       return;
     }
-    if (hasLoadedView)
+    if (location.loaded)
       return;
-    if (!file2 || ((_e = this.app.vault) == null ? void 0 : _e.getAbstractFileByPath(file2.path)) !== file2)
+    if (!file2 || ((_a20 = this.app.vault) == null ? void 0 : _a20.getAbstractFileByPath(file2.path)) !== file2)
       return;
     try {
       await this.app.vault.process(file2, (contents) => {
@@ -56174,8 +56285,8 @@ ${httpCodeBlock(message)}`, { requestNodeId: node.id, state: "failed" });
           return contents;
         const data = JSON.parse(contents);
         const node = (_a21 = data.nodes) == null ? void 0 : _a21.find((node2) => {
-          var _a26, _b20, _c2;
-          return node2.id === output.id && ((_a26 = node2.http_response) == null ? void 0 : _a26.requestNodeId) === metadata.requestNodeId && ((_b20 = node2.http_response) == null ? void 0 : _b20.sessionId) === this.sessionId && ((_c2 = node2.http_response) == null ? void 0 : _c2.state) === "pending";
+          var _a26, _b19, _c;
+          return node2.id === output.id && ((_a26 = node2.http_response) == null ? void 0 : _a26.requestNodeId) === metadata.requestNodeId && ((_b19 = node2.http_response) == null ? void 0 : _b19.sessionId) === this.sessionId && ((_c = node2.http_response) == null ? void 0 : _c.state) === "pending";
         });
         if (!node)
           return contents;
@@ -56303,9 +56414,12 @@ ${httpCodeBlock(message)}`, { requestNodeId: node.id, state: "failed" });
     schedule();
   }
   markInterrupted(output) {
+    var _a20;
     if (!contains(output))
       return;
     const data = output.getData();
+    if (((_a20 = data.http_response) == null ? void 0 : _a20.state) !== "pending")
+      return;
     output.setData({
       ...data,
       text: "## HTTP request interrupted\n\nThe plugin was unloaded before a response was recorded. The request may still have reached the server. Check before sending it again.",
@@ -56534,7 +56648,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian31.Plugin {
       this.addCommands();
       this.patchNoteContextMenu();
       this.patchCanvasSelectionMenu();
-      this.httpRequestCards = new HttpRequestCards(this.app);
+      this.httpRequestCards = new HttpRequestCards(this.app, void 0, () => this.settings.httpResultNoteThreshold);
       this.httpRequestCards.start();
       this.cardTitles = new CanvasCardTitles(this.app);
       this.cardTitles.start();
