@@ -55769,7 +55769,15 @@ function replaceResultCard(node, data) {
   try {
     canvas.importData(next);
   } catch (error40) {
+    const partial2 = Array.from(canvas.nodes.values()).find((current) => current.id === node.id);
+    if (partial2)
+      canvas.removeNode(partial2);
     canvas.importData(before);
+    const restored = Array.from(canvas.nodes.values()).find((current) => current.id === node.id);
+    if (selected && restored)
+      canvas.select(restored);
+    void canvas.requestSave();
+    void canvas.requestFrame();
     throw error40;
   }
   const replacement = Array.from(canvas.nodes.values()).find((current) => current.id === node.id);
@@ -56229,33 +56237,26 @@ ${httpCodeBlock(message)}`, { requestNodeId: node.id, state: "failed" });
     if (this.disposed)
       return;
     const note = await createResultNote(this.app, text2, file2 == null ? void 0 : file2.path, "HTTP response");
-    let attached = false;
-    try {
-      if (this.disposed)
-        return;
-      const current = this.responseLocation(output, file2);
-      if (current.loaded) {
-        for (const node of current.nodes) {
-          if (eligible(node.getData()) && replaceResultCard(node, resultNoteData(node.getData(), note.path)))
-            attached = true;
-        }
-      } else if (file2 && this.app.vault.getAbstractFileByPath(file2.path) === file2) {
-        await this.app.vault.process(file2, (contents) => {
-          var _a21;
-          if (this.disposed)
-            return contents;
-          const data = JSON.parse(contents);
-          const index = (_a21 = data.nodes) == null ? void 0 : _a21.findIndex(eligible);
-          if (index == null || index < 0)
-            return contents;
-          data.nodes[index] = resultNoteData(data.nodes[index], note.path);
-          attached = true;
-          return JSON.stringify(data, null, "	");
-        });
+    if (this.disposed)
+      return;
+    const current = this.responseLocation(output, file2);
+    if (current.loaded) {
+      for (const node of current.nodes) {
+        if (eligible(node.getData()))
+          replaceResultCard(node, resultNoteData(node.getData(), note.path));
       }
-    } finally {
-      if (!attached && this.app.vault.getAbstractFileByPath(note.path) === note && await this.app.vault.read(note) === text2)
-        await this.app.vault.delete(note);
+    } else if (file2 && this.app.vault.getAbstractFileByPath(file2.path) === file2) {
+      await this.app.vault.process(file2, (contents) => {
+        var _a21;
+        if (this.disposed)
+          return contents;
+        const data = JSON.parse(contents);
+        const index = (_a21 = data.nodes) == null ? void 0 : _a21.findIndex(eligible);
+        if (index == null || index < 0)
+          return contents;
+        data.nodes[index] = resultNoteData(data.nodes[index], note.path);
+        return JSON.stringify(data, null, "	");
+      });
     }
   }
   async writeInlineResponse(output, file2, text2, metadata) {

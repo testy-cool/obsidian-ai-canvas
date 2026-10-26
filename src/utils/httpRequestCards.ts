@@ -149,29 +149,23 @@ export class HttpRequestCards {
 		}
 		if (this.disposed) return;
 		const note = await createResultNote(this.app, text, file?.path, "HTTP response");
-		let attached = false;
-		try {
-			if (this.disposed) return;
-			// Note creation is async: the card may now be deleted, edited or in a fresh view.
-			const current = this.responseLocation(output, file);
-			if (current.loaded) {
-				for (const node of current.nodes) {
-					if (eligible(node.getData()) && replaceResultCard(node, resultNoteData(node.getData(), note.path))) attached = true;
-				}
-			} else if (file && this.app.vault.getAbstractFileByPath(file.path) === file) {
-				await this.app.vault.process(file as TFile, contents => {
-					if (this.disposed) return contents;
-					const data = JSON.parse(contents);
-					const index = data.nodes?.findIndex(eligible);
-					if (index == null || index < 0) return contents;
-					data.nodes[index] = resultNoteData(data.nodes[index], note.path);
-					attached = true;
-					return JSON.stringify(data, null, "\t");
-				});
+		// The note is an ordinary vault file from here on. Keep it even if its
+		// card is deleted or conversion fails; the user may already be editing it.
+		if (this.disposed) return;
+		const current = this.responseLocation(output, file);
+		if (current.loaded) {
+			for (const node of current.nodes) {
+				if (eligible(node.getData())) replaceResultCard(node, resultNoteData(node.getData(), note.path));
 			}
-		} finally {
-			// Remove only an unchanged note created here, never a user's existing file.
-			if (!attached && this.app.vault.getAbstractFileByPath(note.path) === note && await this.app.vault.read(note) === text) await this.app.vault.delete(note);
+		} else if (file && this.app.vault.getAbstractFileByPath(file.path) === file) {
+			await this.app.vault.process(file as TFile, contents => {
+				if (this.disposed) return contents;
+				const data = JSON.parse(contents);
+				const index = data.nodes?.findIndex(eligible);
+				if (index == null || index < 0) return contents;
+				data.nodes[index] = resultNoteData(data.nodes[index], note.path);
+				return JSON.stringify(data, null, "\t");
+			});
 		}
 	}
 

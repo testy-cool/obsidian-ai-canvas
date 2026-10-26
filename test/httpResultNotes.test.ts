@@ -114,8 +114,52 @@ describe("HTTP result attachment notes", () => {
 		const output = [...f.canvas.nodes.values()][1];
 		f.canvas.removeNode(output); release(); await pending;
 		expect(f.canvas.nodes.has(output.id)).toBe(false);
-		expect(f.notes()).toHaveLength(0);
-		expect(f.app.vault.delete).toHaveBeenCalledOnce();
+		expect(f.notes()).toHaveLength(1);
+		expect(f.app.vault.delete).not.toHaveBeenCalled();
+		cards.dispose();
+	});
+
+	it("restores the inline result and its connections after a partially applied native import fails", async () => {
+		const f = fixture();
+		let finish!: (value: typeof large) => void;
+		const cards = new HttpRequestCards(f.app, () => new Promise(resolve => { finish = resolve; }));
+		const source = cards.save(f.canvas, request);
+		const pending = cards.send(source);
+		const output = [...f.canvas.nodes.values()][1];
+		f.canvas.selection.add(output);
+		const edges = f.canvas.getData().edges;
+		const original = f.canvas.importData;
+		vi.spyOn(f.canvas, "importData").mockImplementationOnce((data: any) => { original(data); throw Error("Native import failed after creating file node"); });
+		finish(large); await pending;
+		const restored = f.canvas.nodes.get(output.id);
+		expect(restored.getData()).toMatchObject({ id: output.id, type: "text", http_response: { state: "complete" } });
+		expect(restored.getData().text).toContain('"body": "xxx');
+		expect(restored.getData()).not.toHaveProperty("file");
+		expect(f.canvas.getData().edges).toEqual(edges);
+		expect(f.canvas.selection.has(restored)).toBe(true);
+		cards.dispose();
+	});
+
+	it("retains attachment edits even when a pending cleanup read would return old contents", async () => {
+		const f = fixture();
+		const create = f.app.vault.create.getMockImplementation();
+		const read = f.app.vault.read;
+		let entered!: () => void, release!: () => void, readEntered!: () => void, readRelease!: () => void;
+		const ready = new Promise<void>(r => { entered = r; });
+		const gate = new Promise<void>(r => { release = r; });
+		const reading = new Promise<void>(r => { readEntered = r; });
+		const readGate = new Promise<void>(r => { readRelease = r; });
+		f.app.vault.create.mockImplementation(async (...args: any[]) => { const note = await create(...args); entered(); await gate; return note; });
+		f.app.vault.read = async (file: TFile) => { const snapshot = await read(file); if (file.path.endsWith(".md")) { readEntered(); await readGate; } return snapshot; };
+		const cards = new HttpRequestCards(f.app, async () => large);
+		const pending = cards.send(cards.save(f.canvas, request)); await ready;
+		f.canvas.removeNode([...f.canvas.nodes.values()][1]); release();
+		await Promise.race([reading, pending]);
+		const note = f.notes()[0];
+		f.contents.set(note, "User changed the saved attachment"); readRelease(); await pending;
+		expect(f.notes()).toEqual([note]);
+		expect(f.contents.get(note)).toBe("User changed the saved attachment");
+		expect(f.app.vault.delete).not.toHaveBeenCalled();
 		cards.dispose();
 	});
 
@@ -132,7 +176,7 @@ describe("HTTP result attachment notes", () => {
 		await output.setText("User edited this result"); release(); await pending;
 		expect(output.text).toBe("User edited this result");
 		expect(output.getData().type).toBe("text");
-		expect(f.notes()).toHaveLength(0);
+		expect(f.notes()).toHaveLength(1);
 		cards.dispose();
 	});
 });

@@ -29,8 +29,15 @@ export function replaceResultCard(node: CanvasNode, data: Record<string, any>): 
 	try {
 		canvas.importData(next);
 	} catch (error) {
-		// Keep the original readable result and connections if native import fails.
+		// A failed import may already have created a file node with this ID.
+		// Remove it first: importing over an existing ID keeps its node class.
+		const partial = Array.from(canvas.nodes.values()).find(current => current.id === node.id);
+		if (partial) canvas.removeNode(partial);
 		canvas.importData(before);
+		const restored = Array.from(canvas.nodes.values()).find(current => current.id === node.id);
+		if (selected && restored) (canvas as any).select(restored);
+		void canvas.requestSave();
+		void canvas.requestFrame();
 		throw error;
 	}
 	const replacement = Array.from(canvas.nodes.values()).find(current => current.id === node.id);
