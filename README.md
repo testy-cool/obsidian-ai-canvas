@@ -34,7 +34,7 @@ Traditional AI chat sidebars trap your thinking in a narrow, linear scroll. Ques
 ## Core Superpowers
 
 ### HTTP Request Cards
-Open a canvas and run **AI Canvas: Add HTTP request** from the command palette (or **Add HTTP request…** from the canvas selection menu).
+Open a canvas and run **Obsidian AI Canvas: Add HTTP request** from the command palette (or **Add HTTP request…** from the canvas selection menu).
 Configure a method, URL, query parameters, headers, optional bearer token, and raw body. Save the card, then click **Send**. Use **Edit request** or double-click the request card to change it.
 
 Each send creates a separate connected response card showing the HTTP status, elapsed time, response headers and formatted JSON or plain text. HTTP errors such as 404 and 422 remain readable responses; network failures appear on the output card. Requests run only when sent explicitly and are never automatically retried.

@@ -26,7 +26,9 @@ suppression, lifecycle cleanup and toolbar restoration. Configuration is edited
 with native Obsidian controls in `src/Modals/HttpRequestModal.ts`. Request nodes
 store `http_request`; output nodes store `http_response` with their source node ID
 and run state. Edges have `isGenerated: false`, so AI regeneration never resends
-an HTTP request. HTTP cards are excluded from HTML previews because payloads are
+an HTTP request. Pending runs share a key across panes of the same canvas file;
+session metadata distinguishes current runs from requests interrupted by reload.
+Edit, save and send respect the Canvas read-only lock. HTTP cards are excluded from HTML previews because payloads are
 raw data. No AI provider, naming call or generation pipeline participates.
 
 ```
