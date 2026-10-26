@@ -19,6 +19,16 @@ The plugin interacts with Obsidian's internal Canvas APIs using [`monkey-around`
 
 ## 2. Directory & Module Map (Fast Lookup)
 
+Standalone HTTP cards use `src/utils/httpRequest.ts` for validation, Obsidian
+`requestUrl` execution and safe Markdown formatting. `src/utils/httpRequestCards.ts`
+owns request/output node creation, native Send/Edit controls, duplicate-send
+suppression, lifecycle cleanup and toolbar restoration. Configuration is edited
+with native Obsidian controls in `src/Modals/HttpRequestModal.ts`. Request nodes
+store `http_request`; output nodes store `http_response` with their source node ID
+and run state. Edges have `isGenerated: false`, so AI regeneration never resends
+an HTTP request. HTTP cards are excluded from HTML previews because payloads are
+raw data. No AI provider, naming call or generation pipeline participates.
+
 ```
 obsidian-ai-canvas/
 ├── src/

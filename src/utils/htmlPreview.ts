@@ -304,6 +304,11 @@ export function restoreHtmlPreviewForNode(node: CanvasNode, defaultRender = fals
 	}
 	if (preview?.visible) resumePreview(preview);
 	const nodeData = node.getData?.();
+	// HTTP payloads are raw data, even when a server returns an HTML fence.
+	if ((nodeData as any)?.http_request || (nodeData as any)?.http_response) {
+		removeHtmlPreviewFromNode(node);
+		return;
+	}
 	if (nodeData?.type === "text") {
 		const text = node.text || "";
 		if (lastScannedText.get(node) !== text) {

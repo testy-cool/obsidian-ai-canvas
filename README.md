@@ -33,6 +33,14 @@ Traditional AI chat sidebars trap your thinking in a narrow, linear scroll. Ques
 
 ## Core Superpowers
 
+### HTTP Request Cards
+Open a canvas and run **AI Canvas: Add HTTP request** from the command palette (or **Add HTTP request…** from the canvas selection menu).
+Configure a method, URL, query parameters, headers, optional bearer token, and raw body. Save the card, then click **Send**. Use **Edit request** or double-click the request card to change it.
+
+Each send creates a separate connected response card showing the HTTP status, elapsed time, response headers and formatted JSON or plain text. HTTP errors such as 404 and 422 remain readable responses; network failures appear on the output card. Requests run only when sent explicitly and are never automatically retried.
+
+These cards work independently of AI providers. Their readable text can be used through the normal canvas context controls if you choose. Request settings, including tokens, are saved in the canvas file; common authentication headers are masked in card text. GET and HEAD omit the body; other methods send it verbatim, so set `Content-Type` in Headers when needed.
+
 ### 🎨 Generate Images on Canvas
 Turn prompts and ideas into striking illustrations and diagrams directly on your canvas.
 * Right-click any note or prompt card → **Generate image**.

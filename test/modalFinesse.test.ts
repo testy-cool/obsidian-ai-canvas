@@ -6,6 +6,7 @@ import { UnifiedProviderModal } from "../src/Modals/UnifiedProviderModal";
 import { PromptContextModal } from "../src/Modals/PromptContextModal";
 import SystemPromptsModal from "../src/Modals/SystemPromptsModal";
 import { DEFAULT_SETTINGS } from "../src/settings/AugmentedCanvasSettings";
+import { HttpRequestModal } from "../src/Modals/HttpRequestModal";
 
 class Element {
 	children: Element[] = [];
@@ -78,6 +79,32 @@ describe("modal focus", () => {
 		const modal = new UnifiedProviderModal({} as any, vi.fn(), { id: "vertex", type: "Vertex", enabled: true });
 		modal.onOpen();
 		expect((modal.contentEl as any as Element).querySelector("textarea")!.style.fontSize).toBe("12px");
+	});
+});
+
+describe("HTTP request configuration", () => {
+	it("validates before saving and does not send on Enter in a multiline field", () => {
+		const save = vi.fn();
+		const modal = new HttpRequestModal({} as any, undefined, save);
+		modal.onOpen();
+		const root = modal.contentEl as any as Element;
+		const form = root.querySelector("form")!;
+		form.listeners.get("submit")!({ preventDefault: vi.fn() });
+		expect(save).not.toHaveBeenCalled();
+		expect(root.querySelector(".http-request-error")!.textContent).toContain("URL");
+		const url = root.querySelector("input")!;
+		url.value = "https://example.com/items";
+		url.listeners.get("input")!();
+		const method = root.querySelector("select")!;
+		method.value = "POST";
+		method.listeners.get("change")!();
+		const body = root.querySelectorAll("textarea")[2];
+		body.value = '{"example":true}';
+		body.listeners.get("input")!();
+		expect(body.disabled).toBe(false);
+		expect(save).not.toHaveBeenCalled();
+		form.listeners.get("submit")!({ preventDefault: vi.fn() });
+		expect(save).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", url: url.value, body: body.value }));
 	});
 });
 

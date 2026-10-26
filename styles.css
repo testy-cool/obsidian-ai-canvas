@@ -1005,6 +1005,94 @@
 	min-width: 0;
 }
 
+/* Standalone HTTP request cards and native Obsidian configuration controls. */
+.http-request-card .canvas-node-content {
+	position: relative;
+	padding-top: 48px;
+	box-sizing: border-box;
+}
+
+.http-request-toolbar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	height: 44px;
+	padding: 6px 10px;
+	box-sizing: border-box;
+	background: var(--background-primary);
+	z-index: 2;
+}
+
+.http-request-toolbar [role="status"] {
+	margin-right: auto;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.http-request-toolbar button,
+.http-request-modal button,
+.http-request-modal input,
+.http-request-modal select,
+.http-request-modal textarea {
+	font-size: 14px;
+}
+
+.http-request-modal .setting-item-description,
+.http-request-storage-note {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.http-request-modal .setting-item {
+	border: 0;
+	padding: 10px 0 6px;
+}
+
+.http-request-modal input[type="text"],
+.http-request-modal input[type="password"],
+.http-request-modal textarea {
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+}
+
+.http-request-modal .setting-item:has(input) {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 8px;
+}
+
+.http-request-modal textarea {
+	display: block;
+	min-height: 72px;
+	resize: vertical;
+	font-family: var(--font-monospace);
+}
+
+.http-request-modal textarea[aria-label="Body"] {
+	min-height: 120px;
+}
+
+.http-request-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.http-request-error {
+	font-size: 14px;
+	color: var(--text-error);
+}
+
+.http-request-error:empty {
+	display: none;
+}
+
 /* HTML Preview */
 .html-preview-card {
 	position: relative;
