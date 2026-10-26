@@ -9,6 +9,7 @@ class Element {
 	value = "";
 	disabled = false;
 	type = "";
+	hidden = false;
 	attributes = new Map<string, string>();
 	listeners = new Map<string, Array<(event: any) => unknown>>();
 	parentElement: Element | null = null;
@@ -24,6 +25,9 @@ class Element {
 	createDiv(options?: any) { return this.createEl("div", options); }
 	createSpan(options?: any) { return this.createEl("span", options); }
 	setText(text: string) { this.textContent = text; }
+	closest(selector: string): Element | null {
+		return selector.split(",").map(value => value.trim()).includes(this.tagName) ? this : this.parentElement?.closest(selector) ?? null;
+	}
 	addClass(name: string) { this.className += ` ${name}`; }
 	setAttribute(name: string, value: string) { this.attributes.set(name, value); }
 	addEventListener(name: string, fn: (event: any) => unknown) { this.listeners.set(name, [...(this.listeners.get(name) ?? []), fn]); }
@@ -38,6 +42,23 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const field = (root: Element, name: string) => root.all().find(el => el.attributes.get("aria-label") === name)!;
 
 describe("inline HTTP request editing", () => {
+	it("lets Canvas select and drag the heading and labels while protecting editable controls", async () => {
+		const host = new Element();
+		const editor = new HttpRequestEditor(host as any, DEFAULT_HTTP_REQUEST, vi.fn(), vi.fn());
+		const heading = host.all().find(el => el.tagName === "h3")!;
+		const label = host.all().find(el => el.className.includes("setting-item-name"))!;
+		for (const target of [heading, label]) {
+			const stop = vi.fn();
+			await (editor.root as any as Element).emit("pointerdown", { target, stopPropagation: stop });
+			expect(stop).not.toHaveBeenCalled();
+		}
+		for (const target of [field(host, "Request URL"), field(host, "Headers"), field(host, "HTTP method")]) {
+			const stop = vi.fn();
+			await (editor.root as any as Element).emit("pointerdown", { target, stopPropagation: stop });
+			expect(stop).toHaveBeenCalledOnce();
+		}
+	});
+
 	it("edits a draft directly inside the card without sending, and sends the latest complete values explicitly", async () => {
 		const host = new Element();
 		const save = vi.fn();

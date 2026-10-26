@@ -10,11 +10,15 @@ export class HttpRequestEditor {
 	private error: HTMLElement;
 	private send: HTMLButtonElement;
 	private disabled = false;
+	private bodySection: HTMLElement;
 
 	constructor(host: HTMLElement, initial: HttpRequestConfig, private onChange: (config: HttpRequestConfig) => void, onSend: () => unknown) {
 		this.config = { ...initial };
 		this.root = host.createDiv({ cls: "http-request-editor" });
-		for (const name of ["pointerdown", "mousedown", "dblclick", "keydown"]) this.root.addEventListener(name, event => event.stopPropagation());
+		for (const name of ["pointerdown", "mousedown", "dblclick", "keydown"]) this.root.addEventListener(name, event => {
+			// Canvas needs heading/label/padding events for selection and dragging.
+			if ((event.target as Element)?.closest?.("input, textarea, select, button")) event.stopPropagation();
+		});
 		this.root.addEventListener("wheel", event => event.stopPropagation(), { passive: true });
 		const form = this.root.createEl("form");
 		// Enter in a field only edits the request; sending requires the Send button.
@@ -33,7 +37,7 @@ export class HttpRequestEditor {
 			.onChange(value => this.change("url", value));
 		url.inputEl.setAttribute("aria-label", "Request URL");
 		this.fields.set("url", url.inputEl);
-		this.send = new ButtonComponent(address).setButtonText("Send").setCta().onClick(() => {
+		this.send = new ButtonComponent(address).setButtonText("Send").onClick(() => {
 			if (this.send.disabled) return;
 			try { buildHttpRequest(this.config); }
 			catch (error) { this.setError(error instanceof Error ? error.message : String(error)); return; }
@@ -43,25 +47,26 @@ export class HttpRequestEditor {
 		this.send.type = "button";
 		this.error = form.createEl("p", { cls: "http-request-error" });
 		this.error.setAttribute("role", "alert");
-		const area = (name: "query" | "headers" | "body", label: string, description: string, placeholder: string) => {
-			new Setting(form).setName(label).setDesc(description).addTextArea(input => {
+		const area = (name: "query" | "headers" | "body", label: string, placeholder: string) => {
+			const setting = new Setting(form).setName(label).addTextArea(input => {
 				input.setValue(initial[name]).setPlaceholder(placeholder).onChange(value => this.change(name, value));
 				input.inputEl.setAttribute("aria-label", label);
 				input.inputEl.spellcheck = false;
 				this.fields.set(name, input.inputEl);
 			});
+			return setting.settingEl;
 		};
-		area("query", "Query parameters", "URL-encoded name=value pairs, one per line.", "limit=10\nq=hello+world");
-		area("headers", "Headers", "One Name: value per line.", "Content-Type: application/json");
-		new Setting(form).setName("Bearer token").setDesc("Optional. Overrides an Authorization header.").addText(input => {
-			input.setValue(initial.bearerToken).onChange(value => this.change("bearerToken", value));
+		area("query", "Query parameters", "limit=10\nq=hello+world");
+		area("headers", "Headers", "Content-Type: application/json");
+		new Setting(form).setName("Bearer token").addText(input => {
+			input.setValue(initial.bearerToken).setPlaceholder("Optional").onChange(value => this.change("bearerToken", value));
 			input.inputEl.type = "password";
 			input.inputEl.autocomplete = "off";
 			input.inputEl.setAttribute("aria-label", "Bearer token");
 			this.fields.set("bearerToken", input.inputEl);
 		});
-		area("body", "Body", "Sent verbatim. GET and HEAD have no body.", '{"name": "example"}');
-		form.createEl("p", { cls: "http-request-storage-note", text: "Changes save automatically in this canvas, including headers and tokens. Common authentication headers are hidden from card text." });
+		this.bodySection = area("body", "Body", '{"name": "example"}');
+		form.createEl("p", { cls: "http-request-storage-note", text: "Credentials are saved in this canvas." });
 		this.update(initial, false, "");
 	}
 
@@ -86,6 +91,7 @@ export class HttpRequestEditor {
 			input.disabled = disabled || (name === "body" && ["GET", "HEAD"].includes(config.method));
 		}
 		this.send.disabled = disabled;
+		this.bodySection.hidden = ["GET", "HEAD"].includes(config.method);
 		this.status.setText(status);
 	}
 

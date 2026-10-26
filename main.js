@@ -55671,7 +55671,11 @@ var HttpRequestEditor = class {
     this.config = { ...initial };
     this.root = host.createDiv({ cls: "http-request-editor" });
     for (const name20 of ["pointerdown", "mousedown", "dblclick", "keydown"])
-      this.root.addEventListener(name20, (event) => event.stopPropagation());
+      this.root.addEventListener(name20, (event) => {
+        var _a20, _b19;
+        if ((_b19 = (_a20 = event.target) == null ? void 0 : _a20.closest) == null ? void 0 : _b19.call(_a20, "input, textarea, select, button"))
+          event.stopPropagation();
+      });
     this.root.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
     const form = this.root.createEl("form");
     form.addEventListener("submit", (event) => event.preventDefault());
@@ -55689,7 +55693,7 @@ var HttpRequestEditor = class {
     const url2 = new import_obsidian28.TextComponent(address).setValue(initial.url).setPlaceholder("https://api.example.com/items").onChange((value) => this.change("url", value));
     url2.inputEl.setAttribute("aria-label", "Request URL");
     this.fields.set("url", url2.inputEl);
-    this.send = new import_obsidian28.ButtonComponent(address).setButtonText("Send").setCta().onClick(() => {
+    this.send = new import_obsidian28.ButtonComponent(address).setButtonText("Send").onClick(() => {
       if (this.send.disabled)
         return;
       try {
@@ -55704,25 +55708,26 @@ var HttpRequestEditor = class {
     this.send.type = "button";
     this.error = form.createEl("p", { cls: "http-request-error" });
     this.error.setAttribute("role", "alert");
-    const area = (name20, label, description, placeholder) => {
-      new import_obsidian28.Setting(form).setName(label).setDesc(description).addTextArea((input) => {
+    const area = (name20, label, placeholder) => {
+      const setting = new import_obsidian28.Setting(form).setName(label).addTextArea((input) => {
         input.setValue(initial[name20]).setPlaceholder(placeholder).onChange((value) => this.change(name20, value));
         input.inputEl.setAttribute("aria-label", label);
         input.inputEl.spellcheck = false;
         this.fields.set(name20, input.inputEl);
       });
+      return setting.settingEl;
     };
-    area("query", "Query parameters", "URL-encoded name=value pairs, one per line.", "limit=10\nq=hello+world");
-    area("headers", "Headers", "One Name: value per line.", "Content-Type: application/json");
-    new import_obsidian28.Setting(form).setName("Bearer token").setDesc("Optional. Overrides an Authorization header.").addText((input) => {
-      input.setValue(initial.bearerToken).onChange((value) => this.change("bearerToken", value));
+    area("query", "Query parameters", "limit=10\nq=hello+world");
+    area("headers", "Headers", "Content-Type: application/json");
+    new import_obsidian28.Setting(form).setName("Bearer token").addText((input) => {
+      input.setValue(initial.bearerToken).setPlaceholder("Optional").onChange((value) => this.change("bearerToken", value));
       input.inputEl.type = "password";
       input.inputEl.autocomplete = "off";
       input.inputEl.setAttribute("aria-label", "Bearer token");
       this.fields.set("bearerToken", input.inputEl);
     });
-    area("body", "Body", "Sent verbatim. GET and HEAD have no body.", '{"name": "example"}');
-    form.createEl("p", { cls: "http-request-storage-note", text: "Changes save automatically in this canvas, including headers and tokens. Common authentication headers are hidden from card text." });
+    this.bodySection = area("body", "Body", '{"name": "example"}');
+    form.createEl("p", { cls: "http-request-storage-note", text: "Credentials are saved in this canvas." });
     this.update(initial, false, "");
   }
   change(name20, value) {
@@ -55748,6 +55753,7 @@ var HttpRequestEditor = class {
       input.disabled = disabled || name20 === "body" && ["GET", "HEAD"].includes(config2.method);
     }
     this.send.disabled = disabled;
+    this.bodySection.hidden = ["GET", "HEAD"].includes(config2.method);
     this.status.setText(status);
   }
   focus() {
@@ -55818,8 +55824,8 @@ var HttpRequestCards = class {
     if (existing && !contains(existing))
       throw new Error("The request card was removed.");
     const node = existing != null ? existing : canvas.createTextNode({
-      pos: position != null ? position : { x: canvas.x - 300, y: canvas.y - 340 },
-      size: { width: 600, height: 680 },
+      pos: position != null ? position : { x: canvas.x - 280, y: canvas.y - 260 },
+      size: { width: 560, height: 520 },
       text: text2,
       focus: false
     });
@@ -55916,17 +55922,17 @@ ${httpCodeBlock(message)}`);
         startEditing: () => () => this.edit(node.canvas, node)
       }));
     }
-    if (!node.contentEl || !node.nodeEl)
+    if (!node.contentEl || !node.nodeEl || !node.containerEl)
       return;
     const existing = this.editors.get(node);
-    if ((existing == null ? void 0 : existing.root.parentElement) === node.nodeEl) {
+    if ((existing == null ? void 0 : existing.root.parentElement) === node.containerEl) {
       this.updateToolbar(node);
       return;
     }
     existing == null ? void 0 : existing.destroy();
     node.nodeEl.addClass("http-request-card");
     const config2 = getHttpRequest(node.getData());
-    const editor = new HttpRequestEditor(node.nodeEl, config2, (value) => this.save(node.canvas, value, node), () => {
+    const editor = new HttpRequestEditor(node.containerEl, config2, (value) => this.save(node.canvas, value, node), () => {
       void this.send(node);
     });
     this.editors.set(node, editor);

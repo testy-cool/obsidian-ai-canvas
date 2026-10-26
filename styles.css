@@ -1019,9 +1019,9 @@
 	box-sizing: border-box;
 	overflow: auto;
 	border-radius: var(--radius-m);
-	background: var(--background-primary);
 	color: var(--text-normal);
-	font-size: 14px;
+	font-family: var(--font-interface);
+	font-size: max(12px, var(--font-ui-small));
 	text-align: left;
 }
 
@@ -1039,12 +1039,14 @@
 
 .http-request-heading {
 	justify-content: space-between;
-	margin-bottom: 12px;
+	margin-bottom: 8px;
+	cursor: grab;
 }
 
 .http-request-heading h3 {
 	margin: 0;
-	font-size: 16px;
+	font-size: max(14px, var(--font-ui-medium));
+	font-weight: var(--font-semibold);
 	line-height: 24px;
 }
 
@@ -1070,12 +1072,15 @@
 	width: 88px;
 }
 
-.http-request-editor button,
+.http-request-editor button {
+	font-size: max(14px, var(--font-ui-small));
+}
+
 .http-request-editor input,
 .http-request-editor select,
 .http-request-editor textarea,
 .http-request-editor .setting-item-name {
-	font-size: 14px;
+	font-size: max(12px, var(--font-ui-small));
 }
 
 .http-request-editor .setting-item-description,
@@ -1088,10 +1093,21 @@
 .http-request-editor .setting-item {
 	flex-direction: column;
 	align-items: stretch;
-	gap: 4px;
+	gap: 6px;
 	border: 0;
+	border-radius: 0;
+	background: transparent;
 	box-shadow: none;
-	padding: 12px 0 0;
+	padding: 8px 0;
+}
+
+.http-request-editor .setting-item[hidden],
+.http-request-editor .setting-item-description:empty {
+	display: none;
+}
+
+.http-request-editor .setting-item-info {
+	margin: 0;
 }
 
 .http-request-editor .setting-item-control,
@@ -1104,13 +1120,13 @@
 
 .http-request-editor textarea {
 	display: block;
-	min-height: 60px;
+	min-height: 44px;
 	resize: vertical;
 	font-family: var(--font-monospace);
 }
 
 .http-request-editor textarea[aria-label="Body"] {
-	min-height: 100px;
+	min-height: 80px;
 }
 
 .http-request-error {

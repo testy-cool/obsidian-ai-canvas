@@ -51,8 +51,8 @@ export class HttpRequestCards {
 		const text = formatHttpRequest(config);
 		if (existing && !contains(existing)) throw new Error("The request card was removed.");
 		const node = existing ?? canvas.createTextNode({
-			pos: position ?? { x: (canvas as any).x - 300, y: (canvas as any).y - 340 },
-			size: { width: 600, height: 680 }, text, focus: false,
+			pos: position ?? { x: (canvas as any).x - 280, y: (canvas as any).y - 260 },
+			size: { width: 560, height: 520 }, text, focus: false,
 		});
 		if (!existing) canvas.addNode(node);
 		node.setData({ ...node.getData(), text, http_request: { ...config } } as any);
@@ -128,13 +128,13 @@ export class HttpRequestCards {
 				startEditing: () => () => this.edit(node.canvas, node),
 			}));
 		}
-		if (!node.contentEl || !node.nodeEl) return;
+		if (!node.contentEl || !node.nodeEl || !node.containerEl) return;
 		const existing = this.editors.get(node);
-		if (existing?.root.parentElement === node.nodeEl) { this.updateToolbar(node); return; }
+		if (existing?.root.parentElement === node.containerEl) { this.updateToolbar(node); return; }
 		existing?.destroy();
 		node.nodeEl.addClass("http-request-card");
 		const config = getHttpRequest(node.getData() as any)!;
-		const editor = new HttpRequestEditor(node.nodeEl, config,
+		const editor = new HttpRequestEditor(node.containerEl, config,
 			value => this.save(node.canvas, value, node), () => { void this.send(node); });
 		this.editors.set(node, editor);
 		this.updateToolbar(node);
