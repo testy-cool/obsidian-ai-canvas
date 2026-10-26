@@ -38,6 +38,8 @@ Right-click any card and choose **Set card title** (or **Edit card title**). Typ
 
 Titles work on text, HTTP request and response, file, image, web page and group cards. They save in the canvas without changing the card content, filename or URL. Naming a card does not call an AI provider. Groups use their native label.
 
+![Editable text and HTTP card titles in Obsidian](assets/canvas-card-titles.png)
+
 ### HTTP Request Cards
 Right-click an empty area of a canvas and choose **Add HTTP request**. A request card appears at that spot, with the method, URL, query parameters, headers, optional bearer token, and body editable directly inside it. Changes save automatically, including unfinished drafts. Click **Send** when ready. The command palette also offers **Obsidian AI Canvas: Add HTTP request**.
 

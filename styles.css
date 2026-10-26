@@ -638,6 +638,8 @@
 }
 
 .canvas-node-label.canvas-card-title {
+	color: var(--text-normal);
+	font-weight: 500;
 	pointer-events: auto;
 	cursor: grab;
 	font-size: max(12px, var(--font-ui-small));
