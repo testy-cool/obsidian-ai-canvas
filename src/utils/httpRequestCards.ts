@@ -3,6 +3,7 @@ import { around } from "monkey-around";
 import { Canvas, CanvasNode } from "../obsidian/canvas-internal";
 import { addEdge } from "../obsidian/canvas-patches";
 import { randomHexString } from "../utils";
+import { createResultNote, DEFAULT_RESULT_NOTE_THRESHOLD, replaceResultCard, resultNoteData, shouldSaveResultNote } from "./resultNotes";
 import { HttpRequestEditor } from "./httpRequestEditor";
 import { buildHttpRequest, DEFAULT_HTTP_REQUEST, executeHttpRequest, formatHttpRequest, formatHttpResponse, getHttpRequest, httpCodeBlock, HttpRequestConfig } from "./httpRequest";
 
@@ -20,7 +21,7 @@ export class HttpRequestCards {
 	private editPatches = new Map<CanvasNode, () => void>();
 	private cleanups: Array<() => void> = [];
 
-	constructor(private app: App, private execute = executeHttpRequest) {}
+	constructor(private app: App, private execute = executeHttpRequest, private noteThreshold = () => DEFAULT_RESULT_NOTE_THRESHOLD) {}
 
 	private requestKey(canvas: Canvas, nodeId: string): string {
 		// Panes share their TFile object, which survives renames; paths do not.
@@ -112,19 +113,73 @@ export class HttpRequestCards {
 	}
 
 	private async writeResponse(output: CanvasNode, file: { path: string } | null | undefined, text: string, metadata: Record<string, unknown>) {
-		// Views and node objects are replaced on navigation. Resolve the output
-		// again by stable file identity and node ID instead of using an orphan.
-		const targets = new Set<CanvasNode>();
-		let hasLoadedView = false;
+		await this.writeInlineResponse(output, file, text, metadata);
+		if (this.disposed || !shouldSaveResultNote(text, this.noteThreshold())) return;
+		try {
+			await this.saveResponseNote(output, file, text, metadata);
+		} catch (error) {
+			new Notice(`Could not save the response as a note. The result is still in the canvas: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	private responseLocation(output: CanvasNode, file: { path: string } | null | undefined) {
+		const nodes: CanvasNode[] = [];
+		let loaded = false;
 		for (const leaf of this.app.workspace.getLeavesOfType("canvas")) {
-			// A closing leaf can remain indexed after its Canvas has been cleared.
 			if ((leaf.view as any)?._loaded === false) continue;
 			const canvas = (leaf.view as any)?.canvas as Canvas | undefined;
 			if (!canvas || (file ? canvas.view?.file !== file : canvas !== output.canvas)) continue;
-			hasLoadedView = true;
+			loaded = true;
 			const node = nodesIn(canvas).find(node => node.id === output.id);
-			if (node && (node.getData() as any).http_response?.requestNodeId === metadata.requestNodeId) targets.add(node);
+			if (node) nodes.push(node);
 		}
+		return { nodes, loaded };
+	}
+
+	private async saveResponseNote(output: CanvasNode, file: { path: string } | null | undefined, text: string, metadata: Record<string, unknown>) {
+		const eligible = (data: any) => data?.id === output.id && data.type === "text" && data.text === text
+			&& data.http_response?.requestNodeId === metadata.requestNodeId && data.http_response?.state === metadata.state;
+		const first = this.responseLocation(output, file);
+		if (first.loaded) {
+			if (!first.nodes.some(node => eligible(node.getData()))) return;
+		} else {
+			if (!file || this.app.vault.getAbstractFileByPath(file.path) !== file) return;
+			const data = JSON.parse(await this.app.vault.read(file as TFile));
+			if (!data.nodes?.some(eligible)) return;
+		}
+		if (this.disposed) return;
+		const note = await createResultNote(this.app, text, file?.path, "HTTP response");
+		let attached = false;
+		try {
+			if (this.disposed) return;
+			// Note creation is async: the card may now be deleted, edited or in a fresh view.
+			const current = this.responseLocation(output, file);
+			if (current.loaded) {
+				for (const node of current.nodes) {
+					if (eligible(node.getData()) && replaceResultCard(node, resultNoteData(node.getData(), note.path))) attached = true;
+				}
+			} else if (file && this.app.vault.getAbstractFileByPath(file.path) === file) {
+				await this.app.vault.process(file as TFile, contents => {
+					if (this.disposed) return contents;
+					const data = JSON.parse(contents);
+					const index = data.nodes?.findIndex(eligible);
+					if (index == null || index < 0) return contents;
+					data.nodes[index] = resultNoteData(data.nodes[index], note.path);
+					attached = true;
+					return JSON.stringify(data, null, "\t");
+				});
+			}
+		} finally {
+			// Remove only an unchanged note created here, never a user's existing file.
+			if (!attached && this.app.vault.getAbstractFileByPath(note.path) === note && await this.app.vault.read(note) === text) await this.app.vault.delete(note);
+		}
+	}
+
+	private async writeInlineResponse(output: CanvasNode, file: { path: string } | null | undefined, text: string, metadata: Record<string, unknown>) {
+		// Views and node objects are replaced on navigation. Resolve the output
+		// again by stable file identity and node ID instead of using an orphan.
+		const location = this.responseLocation(output, file);
+		const targets = new Set(location.nodes.filter(node => (node.getData() as any).http_response?.requestNodeId === metadata.requestNodeId));
 		if (targets.size) {
 			for (const node of targets) {
 				void node.setText(text);
@@ -133,7 +188,7 @@ export class HttpRequestCards {
 			}
 			return;
 		}
-		if (hasLoadedView) return; // The output was deleted in the live document.
+		if (location.loaded) return; // The output was deleted in the live document.
 		// All views may be closed. Update only the original pending output in
 		// the file; never recreate a deleted card or overwrite unrelated edits.
 		if (!file || this.app.vault?.getAbstractFileByPath(file.path) !== file) return;
@@ -260,6 +315,7 @@ export class HttpRequestCards {
 	private markInterrupted(output: CanvasNode) {
 		if (!contains(output)) return;
 		const data = output.getData() as any;
+		if (data.http_response?.state !== "pending") return;
 		output.setData({ ...data,
 			text: "## HTTP request interrupted\n\nThe plugin was unloaded before a response was recorded. The request may still have reached the server. Check before sending it again.",
 			http_response: { ...data.http_response, state: "interrupted" },

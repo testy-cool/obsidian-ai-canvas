@@ -45,7 +45,9 @@ Right-click an empty area of a canvas and choose **Add HTTP request**. A request
 
 Each send creates a separate connected response card showing the HTTP status, elapsed time, response headers and formatted JSON or plain text. HTTP errors such as 404 and 422 remain readable responses; network failures appear on the output card. Requests run only when sent explicitly and are never automatically retried.
 
-You can switch notes or close the canvas tab while a request runs. Its response is saved back into the same canvas.
+Results over 5,000 characters are saved as Markdown notes in the vault's configured attachment folder and embedded in the same response card. Smaller results stay inline. Adjust **Settings → AI Canvas → General → HTTP result note threshold**; set it to **0** to keep every result inline. Titles, card positions and connections are preserved, and the note can be opened and edited normally. If a note cannot be saved, the full response stays in the canvas.
+
+You can switch notes or close the canvas tab while a request runs. Its response is saved back into the same canvas, including the embedded note for long results.
 
 These cards work independently of AI providers. Their readable text can be used through the normal canvas context controls if you choose. Request settings, including tokens, are saved in the canvas file; common authentication headers are masked in card text. A bearer token overrides any Authorization header. GET and HEAD hide and omit the body; other methods send it verbatim, so set `Content-Type` in Headers when needed. Drag the card by its heading or labels; controls keep normal text selection and editing.
 
