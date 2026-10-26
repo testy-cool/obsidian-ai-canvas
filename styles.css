@@ -1005,83 +1005,112 @@
 	min-width: 0;
 }
 
-/* Standalone HTTP request cards and native Obsidian configuration controls. */
+/* Standalone HTTP cards use native Obsidian form controls. */
 .http-request-card .canvas-node-content {
-	position: relative;
-	padding-top: 48px;
-	box-sizing: border-box;
+	visibility: hidden;
+	pointer-events: none;
 }
 
-.http-request-toolbar {
+.http-request-editor {
 	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
+	inset: 1px;
+	z-index: 2;
+	padding: 16px;
+	box-sizing: border-box;
+	overflow: auto;
+	border-radius: var(--radius-m);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 14px;
+	text-align: left;
+}
+
+.http-request-editor form {
+	margin: 0;
+	min-width: 0;
+}
+
+.http-request-heading,
+.http-request-address {
 	display: flex;
 	align-items: center;
-	justify-content: flex-end;
 	gap: 8px;
-	height: 44px;
-	padding: 6px 10px;
-	box-sizing: border-box;
-	background: var(--background-primary);
-	z-index: 2;
 }
 
-.http-request-toolbar [role="status"] {
-	margin-right: auto;
+.http-request-heading {
+	justify-content: space-between;
+	margin-bottom: 12px;
+}
+
+.http-request-heading h3 {
+	margin: 0;
+	font-size: 16px;
+	line-height: 24px;
+}
+
+.http-request-heading [role="status"] {
 	font-size: 12px;
 	color: var(--text-muted);
 }
 
-.http-request-toolbar button,
-.http-request-modal button,
-.http-request-modal input,
-.http-request-modal select,
-.http-request-modal textarea {
+.http-request-address > input {
+	flex: 1;
+	min-width: 0;
+}
+
+.http-request-address {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	padding: 4px 0;
+	background: var(--background-primary);
+}
+
+.http-request-address > select {
+	width: 88px;
+}
+
+.http-request-editor button,
+.http-request-editor input,
+.http-request-editor select,
+.http-request-editor textarea,
+.http-request-editor .setting-item-name {
 	font-size: 14px;
 }
 
-.http-request-modal .setting-item-description,
+.http-request-editor .setting-item-description,
 .http-request-storage-note {
 	font-size: 12px;
+	line-height: 1.5;
 	color: var(--text-muted);
 }
 
-.http-request-modal .setting-item {
+.http-request-editor .setting-item {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 4px;
 	border: 0;
-	padding: 10px 0 6px;
+	box-shadow: none;
+	padding: 12px 0 0;
 }
 
-.http-request-modal input[type="text"],
-.http-request-modal input[type="password"],
-.http-request-modal textarea {
+.http-request-editor .setting-item-control,
+.http-request-editor .setting-item input,
+.http-request-editor textarea {
 	width: 100%;
 	min-width: 0;
 	box-sizing: border-box;
 }
 
-.http-request-modal .setting-item:has(input) {
-	flex-direction: column;
-	align-items: stretch;
-	gap: 8px;
-}
-
-.http-request-modal textarea {
+.http-request-editor textarea {
 	display: block;
-	min-height: 72px;
+	min-height: 60px;
 	resize: vertical;
 	font-family: var(--font-monospace);
 }
 
-.http-request-modal textarea[aria-label="Body"] {
-	min-height: 120px;
-}
-
-.http-request-actions {
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
+.http-request-editor textarea[aria-label="Body"] {
+	min-height: 100px;
 }
 
 .http-request-error {

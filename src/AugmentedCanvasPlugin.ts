@@ -454,7 +454,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 				const imagePrompt = getImageGenerationPrompt(nodeData);
 				menu.addSeparator();
 				if (getHttpRequest(nodeData)) {
-					menu.addItem(item => item.setTitle("Edit HTTP request…").setIcon("lucide-settings-2")
+					menu.addItem(item => item.setTitle("Edit HTTP request").setIcon("lucide-settings-2")
 						.onClick(() => this.httpRequestCards?.edit(canvasNode.canvas, canvasNode)));
 					menu.addItem(item => item.setTitle("Send HTTP request").setIcon("lucide-send")
 						.onClick(() => this.httpRequestCards?.send(canvasNode)));
@@ -555,7 +555,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on("canvas:selection-menu", (menu, canvas) => {
 				menu.addSeparator();
-				menu.addItem(item => item.setTitle("Add HTTP request…").setIcon("lucide-globe")
+				menu.addItem(item => item.setTitle("Add HTTP request").setIcon("lucide-globe")
 					.onClick(() => this.httpRequestCards?.edit(canvas as unknown as import("./obsidian/canvas-internal").Canvas)));
 				menu.addItem((item) => {
 					item.setTitle("Generate image")

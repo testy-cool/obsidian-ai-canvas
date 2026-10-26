@@ -1,10 +1,10 @@
-import { App, ButtonComponent, Notice } from "obsidian";
+import { App, Notice } from "obsidian";
 import { around } from "monkey-around";
 import { Canvas, CanvasNode } from "../obsidian/canvas-internal";
 import { addEdge } from "../obsidian/canvas-patches";
 import { randomHexString } from "../utils";
-import { HttpRequestModal } from "../Modals/HttpRequestModal";
-import { buildHttpRequest, executeHttpRequest, formatHttpRequest, formatHttpResponse, getHttpRequest, httpCodeBlock, HttpRequestConfig } from "./httpRequest";
+import { HttpRequestEditor } from "./httpRequestEditor";
+import { buildHttpRequest, DEFAULT_HTTP_REQUEST, executeHttpRequest, formatHttpRequest, formatHttpResponse, getHttpRequest, httpCodeBlock, HttpRequestConfig } from "./httpRequest";
 
 const nodesIn = (canvas: Canvas): CanvasNode[] => Array.from(canvas.nodes.values());
 const contains = (node: CanvasNode) => nodesIn(node.canvas).includes(node);
@@ -15,7 +15,8 @@ export class HttpRequestCards {
 	private active = new Map<string, { output: CanvasNode; started: number; timer: ReturnType<typeof setInterval> }>();
 	private fileKeys = new WeakMap<object, string>();
 	private sessionId = randomHexString(16);
-	private toolbars = new Map<CanvasNode, HTMLElement>();
+	private editors = new Map<CanvasNode, HttpRequestEditor>();
+	private creationMenuPatched = false;
 	private editPatches = new Map<CanvasNode, () => void>();
 	private cleanups: Array<() => void> = [];
 
@@ -32,18 +33,26 @@ export class HttpRequestCards {
 	edit(canvas: Canvas, node?: CanvasNode) {
 		if (this.disposed || (node && this.active.has(this.requestKey(canvas, node.id)))) return;
 		if (canvas.readonly) { new Notice("This canvas is read-only."); return; }
-		const initial = node ? getHttpRequest(node.getData() as unknown as Record<string, unknown>) : undefined;
-		new HttpRequestModal(this.app, initial ?? undefined, config => this.save(canvas, config, node)).open();
+		if (!node) { this.create(canvas); return; }
+		this.mount(node);
+		this.editors.get(node)?.focus();
 	}
 
-	save(canvas: Canvas, config: HttpRequestConfig, existing?: CanvasNode): CanvasNode {
+	create(canvas: Canvas, position?: { x: number; y: number }): CanvasNode {
+		const node = this.save(canvas, { ...DEFAULT_HTTP_REQUEST }, undefined, position);
+		canvas.selectOnly(node, false);
+		this.editors.get(node)?.focus();
+		return node;
+	}
+
+	save(canvas: Canvas, config: HttpRequestConfig, existing?: CanvasNode, position?: { x: number; y: number }): CanvasNode {
 		if (this.disposed) throw new Error("The HTTP request editor was unloaded. Open it again.");
 		if (canvas.readonly) throw new Error("This canvas is read-only.");
 		const text = formatHttpRequest(config);
 		if (existing && !contains(existing)) throw new Error("The request card was removed.");
 		const node = existing ?? canvas.createTextNode({
-			pos: { x: (canvas as any).x, y: (canvas as any).y },
-			size: { width: 480, height: 400 }, text, focus: false,
+			pos: position ?? { x: (canvas as any).x - 300, y: (canvas as any).y - 340 },
+			size: { width: 600, height: 680 }, text, focus: false,
 		});
 		if (!existing) canvas.addNode(node);
 		node.setData({ ...node.getData(), text, http_request: { ...config } } as any);
@@ -59,7 +68,12 @@ export class HttpRequestCards {
 		const config = getHttpRequest(node.getData() as unknown as Record<string, unknown>);
 		if (!config) return;
 		try { buildHttpRequest(config); }
-		catch (error) { new Notice(error instanceof Error ? error.message : String(error)); return; }
+		catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const editor = this.editors.get(node);
+			if (editor) editor.setError(message); else new Notice(message);
+			return;
+		}
 		const canvas = node.canvas;
 		const siblings = canvas.getEdgesForNode(node).filter(edge => edge.from.node.id === node.id).map(edge => edge.to.node).filter(Boolean);
 		const top = Math.max(node.y, ...siblings.map(sibling => sibling.y + sibling.height + 30));
@@ -95,16 +109,16 @@ export class HttpRequestCards {
 	}
 
 	private updateRequestToolbars(key: string) {
-		for (const node of this.toolbars.keys()) if (this.requestKey(node.canvas, node.id) === key) this.updateToolbar(node);
+		for (const node of this.editors.keys()) if (this.requestKey(node.canvas, node.id) === key) this.updateToolbar(node);
 	}
 
 	private updateToolbar(node: CanvasNode) {
-		const toolbar = this.toolbars.get(node);
-		if (!toolbar) return;
+		const editor = this.editors.get(node);
+		const config = getHttpRequest(node.getData() as any);
+		if (!editor || !config) return;
 		const state = this.active.get(this.requestKey(node.canvas, node.id));
-		toolbar.querySelectorAll("button").forEach(button => { button.disabled = !!state || !!node.canvas.readonly; });
-		const status = toolbar.querySelector<HTMLElement>("[role=status]");
-		if (status) status.setText(state ? `Sending… ${Math.floor((Date.now() - state.started) / 1000)}s` : "");
+		editor.update(config, !!state || !!node.canvas.readonly,
+			state ? `Sending… ${Math.floor((Date.now() - state.started) / 1000)}s` : "");
 	}
 
 	mount(node: CanvasNode) {
@@ -114,19 +128,32 @@ export class HttpRequestCards {
 				startEditing: () => () => this.edit(node.canvas, node),
 			}));
 		}
-		if (!node.contentEl) return;
-		const existing = this.toolbars.get(node);
-		if (existing?.parentElement === node.contentEl) { this.updateToolbar(node); return; }
-		existing?.remove();
+		if (!node.contentEl || !node.nodeEl) return;
+		const existing = this.editors.get(node);
+		if (existing?.root.parentElement === node.nodeEl) { this.updateToolbar(node); return; }
+		existing?.destroy();
 		node.nodeEl.addClass("http-request-card");
-		const toolbar = node.contentEl.createDiv({ cls: "http-request-toolbar" });
-		for (const name of ["pointerdown", "mousedown", "dblclick", "keydown"]) toolbar.addEventListener(name, event => event.stopPropagation());
-		const status = toolbar.createSpan();
-		status.setAttribute("role", "status");
-		new ButtonComponent(toolbar).setButtonText("Edit request").onClick(() => this.edit(node.canvas, node));
-		new ButtonComponent(toolbar).setButtonText("Send").setCta().onClick(() => { void this.send(node); });
-		this.toolbars.set(node, toolbar);
+		const config = getHttpRequest(node.getData() as any)!;
+		const editor = new HttpRequestEditor(node.nodeEl, config,
+			value => this.save(node.canvas, value, node), () => { void this.send(node); });
+		this.editors.set(node, editor);
 		this.updateToolbar(node);
+	}
+
+	private patchCreationMenu(canvas: Canvas) {
+		if (this.creationMenuPatched) return;
+		const proto = Object.getPrototypeOf(canvas);
+		if (typeof proto?.showCreationMenu !== "function") return;
+		const create = this.create.bind(this);
+		this.cleanups.push(around(proto, {
+			showCreationMenu: (next: any) => function (this: Canvas, menu: any, position: { x: number; y: number }, ...args: any[]) {
+				const result = next.call(this, menu, position, ...args);
+				menu.addItem((item: any) => item.setTitle("Add HTTP request").setSection("create").setIcon("lucide-globe")
+					.onClick(() => { if (!this.readonly) create(this, position); }));
+				return result;
+			},
+		}));
+		this.creationMenuPatched = true;
 	}
 
 	start() {
@@ -138,12 +165,13 @@ export class HttpRequestCards {
 			lockObserver?.disconnect();
 			const view = this.app.workspace.activeLeaf?.view as any;
 			const canvas: Canvas | undefined = view?.getViewType?.() === "canvas" ? view.canvas : undefined;
-			const openCanvases = this.app.workspace.getLeavesOfType("canvas").map(leaf => (leaf.view as any).canvas);
-			for (const [node, toolbar] of this.toolbars) {
+			const openCanvases: Canvas[] = this.app.workspace.getLeavesOfType("canvas").map(leaf => (leaf.view as any).canvas).filter(Boolean);
+			openCanvases.forEach(open => this.patchCreationMenu(open));
+			for (const [node, editor] of this.editors) {
 				if (!openCanvases.includes(node.canvas) || !contains(node) || !getHttpRequest(node.getData() as unknown as Record<string, unknown>)) {
-					toolbar.remove();
+					editor.destroy();
 					node.nodeEl?.removeClass("http-request-card");
-					this.toolbars.delete(node);
+					this.editors.delete(node);
 				}
 			}
 			for (const [node, unpatch] of this.editPatches) {
@@ -161,9 +189,9 @@ export class HttpRequestCards {
 			if (!canvas.wrapperEl) return;
 			observer = new MutationObserver(records => {
 				// Ignore markdown streaming and toolbar changes. Restore only when
-				// Canvas adds/remounts a node or removes one of our toolbars.
+				// Canvas adds/remounts a node or removes one of our editors.
 				const relevant = records.some(record => [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)]
-					.some(element => element.nodeType === 1 && ((element as Element).matches(".canvas-node, .canvas-node-content, .http-request-toolbar") || !!(element as Element).querySelector(".canvas-node"))));
+					.some(element => element.nodeType === 1 && ((element as Element).matches(".canvas-node, .canvas-node-content, .http-request-editor") || !!(element as Element).querySelector(".canvas-node"))));
 				if (relevant) schedule();
 			});
 			observer.observe(canvas.wrapperEl, { childList: true, subtree: true });
@@ -199,11 +227,11 @@ export class HttpRequestCards {
 			this.markInterrupted(state.output);
 		}
 		this.active.clear();
-		for (const [node, toolbar] of this.toolbars) {
-			toolbar.remove();
+		for (const [node, editor] of this.editors) {
+			editor.destroy();
 			node.nodeEl?.removeClass("http-request-card");
 		}
-		this.toolbars.clear();
+		this.editors.clear();
 		this.editPatches.forEach(unpatch => unpatch());
 		this.editPatches.clear();
 		this.cleanups.forEach(cleanup => cleanup());

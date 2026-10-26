@@ -88,7 +88,21 @@ export function httpCodeBlock(text: string, language = "text"): string {
 }
 
 export function formatHttpRequest(config: HttpRequestConfig): string {
-	const request = buildHttpRequest(config);
+	let request: RequestUrlParam;
+	try { request = buildHttpRequest(config); }
+	catch {
+		// Drafts must survive incomplete URLs and header lines while being edited.
+		const headers = config.headers.split(/\r?\n/).map(line => {
+			const colon = line.indexOf(":");
+			return colon > 0 && sensitiveHeader.test(line.slice(0, colon).trim()) ? `${line.slice(0, colon)}: [redacted]` : line;
+		}).join("\n");
+		const lines = ["## HTTP request", httpCodeBlock(`${config.method} ${config.url || "(URL not set)"}`)];
+		if (config.query) lines.push("### Query parameters", httpCodeBlock(config.query));
+		if (headers) lines.push("### Headers", httpCodeBlock(headers));
+		if (config.bearerToken) lines.push("Bearer authentication configured (token hidden).");
+		if (config.body && !["GET", "HEAD"].includes(config.method)) lines.push("### Body", httpCodeBlock(config.body));
+		return lines.join("\n\n");
+	}
 	const lines = [`## HTTP request`, httpCodeBlock(`${config.method} ${request.url}`)];
 	if (Object.keys(request.headers ?? {}).length) lines.push("### Headers", httpCodeBlock(formatHeaders(request.headers!)));
 	if (request.body) lines.push("### Body", httpCodeBlock(String(request.body)));

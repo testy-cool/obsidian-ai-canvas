@@ -55505,7 +55505,7 @@ var insertMcpContent = async (app, settings2) => {
 // src/utils/httpRequestCards.ts
 var import_obsidian29 = require("obsidian");
 
-// src/Modals/HttpRequestModal.ts
+// src/utils/httpRequestEditor.ts
 var import_obsidian28 = require("obsidian");
 
 // src/utils/httpRequest.ts
@@ -55592,7 +55592,25 @@ ${fence}`;
 }
 function formatHttpRequest(config2) {
   var _a20;
-  const request = buildHttpRequest(config2);
+  let request;
+  try {
+    request = buildHttpRequest(config2);
+  } catch (e) {
+    const headers = config2.headers.split(/\r?\n/).map((line) => {
+      const colon = line.indexOf(":");
+      return colon > 0 && sensitiveHeader.test(line.slice(0, colon).trim()) ? `${line.slice(0, colon)}: [redacted]` : line;
+    }).join("\n");
+    const lines2 = ["## HTTP request", httpCodeBlock(`${config2.method} ${config2.url || "(URL not set)"}`)];
+    if (config2.query)
+      lines2.push("### Query parameters", httpCodeBlock(config2.query));
+    if (headers)
+      lines2.push("### Headers", httpCodeBlock(headers));
+    if (config2.bearerToken)
+      lines2.push("Bearer authentication configured (token hidden).");
+    if (config2.body && !["GET", "HEAD"].includes(config2.method))
+      lines2.push("### Body", httpCodeBlock(config2.body));
+    return lines2.join("\n\n");
+  }
   const lines = [`## HTTP request`, httpCodeBlock(`${config2.method} ${request.url}`)];
   if (Object.keys((_a20 = request.headers) != null ? _a20 : {}).length)
     lines.push("### Headers", httpCodeBlock(formatHeaders(request.headers)));
@@ -55644,76 +55662,103 @@ ${"  ".repeat(depth)}`;
   ].join("\n\n");
 }
 
-// src/Modals/HttpRequestModal.ts
-var HttpRequestModal = class extends import_obsidian28.Modal {
-  constructor(app, initial, onSave) {
-    super(app);
-    this.onSave = onSave;
-    this.config = { ...initial != null ? initial : DEFAULT_HTTP_REQUEST };
-  }
-  onOpen() {
-    this.setTitle("HTTP request");
-    this.contentEl.addClass("http-request-modal");
-    const form = this.contentEl.createEl("form");
-    let urlInput;
-    new import_obsidian28.Setting(form).setName("Method").addDropdown((dropdown) => {
-      for (const method of HTTP_METHODS)
-        dropdown.addOption(method, method);
-      dropdown.setValue(this.config.method).onChange((value) => {
-        this.config.method = value;
-        bodyInput.disabled = ["GET", "HEAD"].includes(value);
-      });
-      dropdown.selectEl.setAttribute("aria-label", "HTTP method");
-    });
-    new import_obsidian28.Setting(form).setName("URL").addText((input) => {
-      input.setValue(this.config.url).setPlaceholder("https://api.example.com/items").onChange((value) => {
-        this.config.url = value;
-      });
-      urlInput = input.inputEl;
-      urlInput.setAttribute("aria-label", "Request URL");
-    });
-    const addArea = (label, name20, description, placeholder) => {
-      new import_obsidian28.Setting(form).setName(label).setDesc(description);
-      const input = new import_obsidian28.TextAreaComponent(form).setValue(this.config[name20]).setPlaceholder(placeholder).onChange((value) => {
-        this.config[name20] = value;
-      });
-      input.inputEl.setAttribute("aria-label", label);
-      input.inputEl.spellcheck = false;
-      return input.inputEl;
-    };
-    addArea("Query parameters", "query", "URL-encoded name=value pairs, one per line. Added to any parameters in the URL.", "limit=10\nq=hello+world");
-    addArea("Headers", "headers", "One Name: value per line. Use Authorization here for other authentication schemes.", "Content-Type: application/json");
-    new import_obsidian28.Setting(form).setName("Bearer token").setDesc("Optional. Overrides an Authorization header.");
-    const token = new import_obsidian28.TextComponent(form).setValue(this.config.bearerToken).onChange((value) => {
-      this.config.bearerToken = value;
-    }).inputEl;
-    token.type = "password";
-    token.setAttribute("aria-label", "Bearer token");
-    token.autocomplete = "off";
-    const bodyInput = addArea("Body", "body", "Sent verbatim. Set Content-Type in Headers when needed. GET and HEAD have no body.", '{"name": "example"}');
-    bodyInput.disabled = ["GET", "HEAD"].includes(this.config.method);
-    form.createEl("p", { cls: "http-request-storage-note", text: "Saved in this canvas file, including headers and tokens. Common authentication headers are hidden from card text." });
-    const error40 = form.createEl("p", { cls: "http-request-error" });
-    error40.setAttribute("role", "alert");
-    const actions = form.createDiv({ cls: "http-request-actions" });
-    const cancel = new import_obsidian28.ButtonComponent(actions).setButtonText("Cancel").onClick(() => this.close());
-    cancel.buttonEl.type = "button";
-    const save = new import_obsidian28.ButtonComponent(actions).setButtonText("Save request").setCta();
-    save.buttonEl.type = "submit";
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
+// src/utils/httpRequestEditor.ts
+var HttpRequestEditor = class {
+  constructor(host, initial, onChange, onSend) {
+    this.onChange = onChange;
+    this.fields = /* @__PURE__ */ new Map();
+    this.disabled = false;
+    this.config = { ...initial };
+    this.root = host.createDiv({ cls: "http-request-editor" });
+    for (const name20 of ["pointerdown", "mousedown", "dblclick", "keydown"])
+      this.root.addEventListener(name20, (event) => event.stopPropagation());
+    this.root.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+    const form = this.root.createEl("form");
+    form.addEventListener("submit", (event) => event.preventDefault());
+    const heading = form.createDiv({ cls: "http-request-heading" });
+    heading.createEl("h3", { text: "HTTP request" });
+    this.status = heading.createSpan();
+    this.status.setAttribute("role", "status");
+    const address = form.createDiv({ cls: "http-request-address" });
+    const method = new import_obsidian28.DropdownComponent(address);
+    for (const value of HTTP_METHODS)
+      method.addOption(value, value);
+    method.setValue(initial.method).onChange((value) => this.change("method", value));
+    method.selectEl.setAttribute("aria-label", "HTTP method");
+    this.fields.set("method", method.selectEl);
+    const url2 = new import_obsidian28.TextComponent(address).setValue(initial.url).setPlaceholder("https://api.example.com/items").onChange((value) => this.change("url", value));
+    url2.inputEl.setAttribute("aria-label", "Request URL");
+    this.fields.set("url", url2.inputEl);
+    this.send = new import_obsidian28.ButtonComponent(address).setButtonText("Send").setCta().onClick(() => {
+      if (this.send.disabled)
+        return;
       try {
         buildHttpRequest(this.config);
-        this.onSave({ ...this.config });
-        this.close();
-      } catch (cause) {
-        error40.setText(cause instanceof Error ? cause.message : String(cause));
+      } catch (error40) {
+        this.setError(error40 instanceof Error ? error40.message : String(error40));
+        return;
       }
+      this.setError("");
+      onSend();
+    }).buttonEl;
+    this.send.type = "button";
+    const area = (name20, label, description, placeholder) => {
+      new import_obsidian28.Setting(form).setName(label).setDesc(description).addTextArea((input) => {
+        input.setValue(initial[name20]).setPlaceholder(placeholder).onChange((value) => this.change(name20, value));
+        input.inputEl.setAttribute("aria-label", label);
+        input.inputEl.spellcheck = false;
+        this.fields.set(name20, input.inputEl);
+      });
+    };
+    area("query", "Query parameters", "URL-encoded name=value pairs, one per line.", "limit=10\nq=hello+world");
+    area("headers", "Headers", "One Name: value per line.", "Content-Type: application/json");
+    new import_obsidian28.Setting(form).setName("Bearer token").setDesc("Optional. Overrides an Authorization header.").addText((input) => {
+      input.setValue(initial.bearerToken).onChange((value) => this.change("bearerToken", value));
+      input.inputEl.type = "password";
+      input.inputEl.autocomplete = "off";
+      input.inputEl.setAttribute("aria-label", "Bearer token");
+      this.fields.set("bearerToken", input.inputEl);
     });
-    urlInput.focus();
+    area("body", "Body", "Sent verbatim. GET and HEAD have no body.", '{"name": "example"}');
+    form.createEl("p", { cls: "http-request-storage-note", text: "Changes save automatically in this canvas, including headers and tokens. Common authentication headers are hidden from card text." });
+    this.error = form.createEl("p", { cls: "http-request-error" });
+    this.error.setAttribute("role", "alert");
+    this.update(initial, false, "");
   }
-  onClose() {
-    this.contentEl.empty();
+  change(name20, value) {
+    var _a20, _b19;
+    if (this.disabled)
+      return;
+    this.setError("");
+    const next = { ...this.config, [name20]: value };
+    try {
+      this.onChange(next);
+      this.update(next, this.disabled, (_a20 = this.status.textContent) != null ? _a20 : "");
+    } catch (error40) {
+      this.update(this.config, this.disabled, (_b19 = this.status.textContent) != null ? _b19 : "");
+      this.setError(error40 instanceof Error ? error40.message : String(error40));
+    }
+  }
+  update(config2, disabled, status) {
+    this.disabled = disabled;
+    this.config = { ...config2 };
+    for (const [name20, input] of this.fields) {
+      if (input.value !== config2[name20])
+        input.value = config2[name20];
+      input.disabled = disabled || name20 === "body" && ["GET", "HEAD"].includes(config2.method);
+    }
+    this.send.disabled = disabled;
+    this.status.setText(status);
+  }
+  focus() {
+    var _a20;
+    (_a20 = this.fields.get("url")) == null ? void 0 : _a20.focus();
+  }
+  setError(message) {
+    this.error.setText(message);
+  }
+  destroy() {
+    this.root.remove();
   }
 };
 
@@ -55728,7 +55773,8 @@ var HttpRequestCards = class {
     this.active = /* @__PURE__ */ new Map();
     this.fileKeys = /* @__PURE__ */ new WeakMap();
     this.sessionId = randomHexString(16);
-    this.toolbars = /* @__PURE__ */ new Map();
+    this.editors = /* @__PURE__ */ new Map();
+    this.creationMenuPatched = false;
     this.editPatches = /* @__PURE__ */ new Map();
     this.cleanups = [];
   }
@@ -55740,16 +55786,28 @@ var HttpRequestCards = class {
     return JSON.stringify([key, nodeId]);
   }
   edit(canvas, node) {
+    var _a20;
     if (this.disposed || node && this.active.has(this.requestKey(canvas, node.id)))
       return;
     if (canvas.readonly) {
       new import_obsidian29.Notice("This canvas is read-only.");
       return;
     }
-    const initial = node ? getHttpRequest(node.getData()) : void 0;
-    new HttpRequestModal(this.app, initial != null ? initial : void 0, (config2) => this.save(canvas, config2, node)).open();
+    if (!node) {
+      this.create(canvas);
+      return;
+    }
+    this.mount(node);
+    (_a20 = this.editors.get(node)) == null ? void 0 : _a20.focus();
   }
-  save(canvas, config2, existing) {
+  create(canvas, position) {
+    var _a20;
+    const node = this.save(canvas, { ...DEFAULT_HTTP_REQUEST }, void 0, position);
+    canvas.selectOnly(node, false);
+    (_a20 = this.editors.get(node)) == null ? void 0 : _a20.focus();
+    return node;
+  }
+  save(canvas, config2, existing, position) {
     if (this.disposed)
       throw new Error("The HTTP request editor was unloaded. Open it again.");
     if (canvas.readonly)
@@ -55758,8 +55816,8 @@ var HttpRequestCards = class {
     if (existing && !contains(existing))
       throw new Error("The request card was removed.");
     const node = existing != null ? existing : canvas.createTextNode({
-      pos: { x: canvas.x, y: canvas.y },
-      size: { width: 480, height: 400 },
+      pos: position != null ? position : { x: canvas.x - 300, y: canvas.y - 340 },
+      size: { width: 600, height: 680 },
       text: text2,
       focus: false
     });
@@ -55784,7 +55842,12 @@ var HttpRequestCards = class {
     try {
       buildHttpRequest(config2);
     } catch (error40) {
-      new import_obsidian29.Notice(error40 instanceof Error ? error40.message : String(error40));
+      const message = error40 instanceof Error ? error40.message : String(error40);
+      const editor = this.editors.get(node);
+      if (editor)
+        editor.setError(message);
+      else
+        new import_obsidian29.Notice(message);
       return;
     }
     const canvas = node.canvas;
@@ -55831,21 +55894,17 @@ ${httpCodeBlock(message)}`);
     }
   }
   updateRequestToolbars(key) {
-    for (const node of this.toolbars.keys())
+    for (const node of this.editors.keys())
       if (this.requestKey(node.canvas, node.id) === key)
         this.updateToolbar(node);
   }
   updateToolbar(node) {
-    const toolbar = this.toolbars.get(node);
-    if (!toolbar)
+    const editor = this.editors.get(node);
+    const config2 = getHttpRequest(node.getData());
+    if (!editor || !config2)
       return;
     const state = this.active.get(this.requestKey(node.canvas, node.id));
-    toolbar.querySelectorAll("button").forEach((button) => {
-      button.disabled = !!state || !!node.canvas.readonly;
-    });
-    const status = toolbar.querySelector("[role=status]");
-    if (status)
-      status.setText(state ? `Sending\u2026 ${Math.floor((Date.now() - state.started) / 1e3)}s` : "");
+    editor.update(config2, !!state || !!node.canvas.readonly, state ? `Sending\u2026 ${Math.floor((Date.now() - state.started) / 1e3)}s` : "");
   }
   mount(node) {
     if (this.disposed || !getHttpRequest(node.getData()))
@@ -55855,26 +55914,40 @@ ${httpCodeBlock(message)}`);
         startEditing: () => () => this.edit(node.canvas, node)
       }));
     }
-    if (!node.contentEl)
+    if (!node.contentEl || !node.nodeEl)
       return;
-    const existing = this.toolbars.get(node);
-    if ((existing == null ? void 0 : existing.parentElement) === node.contentEl) {
+    const existing = this.editors.get(node);
+    if ((existing == null ? void 0 : existing.root.parentElement) === node.nodeEl) {
       this.updateToolbar(node);
       return;
     }
-    existing == null ? void 0 : existing.remove();
+    existing == null ? void 0 : existing.destroy();
     node.nodeEl.addClass("http-request-card");
-    const toolbar = node.contentEl.createDiv({ cls: "http-request-toolbar" });
-    for (const name20 of ["pointerdown", "mousedown", "dblclick", "keydown"])
-      toolbar.addEventListener(name20, (event) => event.stopPropagation());
-    const status = toolbar.createSpan();
-    status.setAttribute("role", "status");
-    new import_obsidian29.ButtonComponent(toolbar).setButtonText("Edit request").onClick(() => this.edit(node.canvas, node));
-    new import_obsidian29.ButtonComponent(toolbar).setButtonText("Send").setCta().onClick(() => {
+    const config2 = getHttpRequest(node.getData());
+    const editor = new HttpRequestEditor(node.nodeEl, config2, (value) => this.save(node.canvas, value, node), () => {
       void this.send(node);
     });
-    this.toolbars.set(node, toolbar);
+    this.editors.set(node, editor);
     this.updateToolbar(node);
+  }
+  patchCreationMenu(canvas) {
+    if (this.creationMenuPatched)
+      return;
+    const proto = Object.getPrototypeOf(canvas);
+    if (typeof (proto == null ? void 0 : proto.showCreationMenu) !== "function")
+      return;
+    const create = this.create.bind(this);
+    this.cleanups.push(around(proto, {
+      showCreationMenu: (next) => function(menu, position, ...args) {
+        const result = next.call(this, menu, position, ...args);
+        menu.addItem((item) => item.setTitle("Add HTTP request").setSection("create").setIcon("lucide-globe").onClick(() => {
+          if (!this.readonly)
+            create(this, position);
+        }));
+        return result;
+      }
+    }));
+    this.creationMenuPatched = true;
   }
   start() {
     let observer;
@@ -55886,12 +55959,13 @@ ${httpCodeBlock(message)}`);
       lockObserver == null ? void 0 : lockObserver.disconnect();
       const view = (_a20 = this.app.workspace.activeLeaf) == null ? void 0 : _a20.view;
       const canvas = ((_b19 = view == null ? void 0 : view.getViewType) == null ? void 0 : _b19.call(view)) === "canvas" ? view.canvas : void 0;
-      const openCanvases = this.app.workspace.getLeavesOfType("canvas").map((leaf) => leaf.view.canvas);
-      for (const [node, toolbar] of this.toolbars) {
+      const openCanvases = this.app.workspace.getLeavesOfType("canvas").map((leaf) => leaf.view.canvas).filter(Boolean);
+      openCanvases.forEach((open) => this.patchCreationMenu(open));
+      for (const [node, editor] of this.editors) {
         if (!openCanvases.includes(node.canvas) || !contains(node) || !getHttpRequest(node.getData())) {
-          toolbar.remove();
+          editor.destroy();
           (_c = node.nodeEl) == null ? void 0 : _c.removeClass("http-request-card");
-          this.toolbars.delete(node);
+          this.editors.delete(node);
         }
       }
       for (const [node, unpatch] of this.editPatches) {
@@ -55911,7 +55985,7 @@ ${httpCodeBlock(message)}`);
       if (!canvas.wrapperEl)
         return;
       observer = new MutationObserver((records) => {
-        const relevant = records.some((record2) => [...Array.from(record2.addedNodes), ...Array.from(record2.removedNodes)].some((element) => element.nodeType === 1 && (element.matches(".canvas-node, .canvas-node-content, .http-request-toolbar") || !!element.querySelector(".canvas-node"))));
+        const relevant = records.some((record2) => [...Array.from(record2.addedNodes), ...Array.from(record2.removedNodes)].some((element) => element.nodeType === 1 && (element.matches(".canvas-node, .canvas-node-content, .http-request-editor") || !!element.querySelector(".canvas-node"))));
         if (relevant)
           schedule();
       });
@@ -55953,11 +56027,11 @@ ${httpCodeBlock(message)}`);
       this.markInterrupted(state.output);
     }
     this.active.clear();
-    for (const [node, toolbar] of this.toolbars) {
-      toolbar.remove();
+    for (const [node, editor] of this.editors) {
+      editor.destroy();
       (_a20 = node.nodeEl) == null ? void 0 : _a20.removeClass("http-request-card");
     }
-    this.toolbars.clear();
+    this.editors.clear();
     this.editPatches.forEach((unpatch) => unpatch());
     this.editPatches.clear();
     this.cleanups.forEach((cleanup) => cleanup());
@@ -56365,7 +56439,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian30.Plugin {
       const imagePrompt = getImageGenerationPrompt(nodeData);
       menu.addSeparator();
       if (getHttpRequest(nodeData)) {
-        menu.addItem((item) => item.setTitle("Edit HTTP request\u2026").setIcon("lucide-settings-2").onClick(() => {
+        menu.addItem((item) => item.setTitle("Edit HTTP request").setIcon("lucide-settings-2").onClick(() => {
           var _a20;
           return (_a20 = this.httpRequestCards) == null ? void 0 : _a20.edit(canvasNode.canvas, canvasNode);
         }));
@@ -56455,7 +56529,7 @@ var AugmentedCanvasPlugin = class extends import_obsidian30.Plugin {
     };
     this.registerEvent(this.app.workspace.on("canvas:selection-menu", (menu, canvas) => {
       menu.addSeparator();
-      menu.addItem((item) => item.setTitle("Add HTTP request\u2026").setIcon("lucide-globe").onClick(() => {
+      menu.addItem((item) => item.setTitle("Add HTTP request").setIcon("lucide-globe").onClick(() => {
         var _a20;
         return (_a20 = this.httpRequestCards) == null ? void 0 : _a20.edit(canvas);
       }));

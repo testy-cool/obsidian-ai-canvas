@@ -21,9 +21,12 @@ The plugin interacts with Obsidian's internal Canvas APIs using [`monkey-around`
 
 Standalone HTTP cards use `src/utils/httpRequest.ts` for validation, Obsidian
 `requestUrl` execution and safe Markdown formatting. `src/utils/httpRequestCards.ts`
-owns request/output node creation, native Send/Edit controls, duplicate-send
-suppression, lifecycle cleanup and toolbar restoration. Configuration is edited
-with native Obsidian controls in `src/Modals/HttpRequestModal.ts`. Request nodes
+owns request/output node creation, the canvas background creation-menu action,
+duplicate-send suppression, lifecycle cleanup and editor restoration.
+`src/utils/httpRequestEditor.ts` mounts native Obsidian controls directly inside
+the card. Draft changes save without requiring a valid URL or headers; validation
+happens on Send. The editor is separate from the Markdown renderer so typing keeps
+its focus and cursor while readable context text stays up to date. Request nodes
 store `http_request`; output nodes store `http_response` with their source node ID
 and run state. Edges have `isGenerated: false`, so AI regeneration never resends
 an HTTP request. Pending runs share a key across panes of the same canvas file;

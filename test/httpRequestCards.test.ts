@@ -33,6 +33,45 @@ const response = { status: 200, headers: { "content-type": "application/json" },
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("standalone canvas HTTP interactions", () => {
+	it("adds the HTTP action to the native background creation menu and removes the patch on unload", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal("MutationObserver", class { observe() {} disconnect() {} });
+		class CanvasWithMenu { showCreationMenu(menu: any) { menu.addItem((item: any) => item.setTitle("Add card")); } }
+		const { app, canvas } = fixture();
+		Object.setPrototypeOf(canvas, CanvasWithMenu.prototype);
+		app.workspace.getLeavesOfType = () => [{ view: { canvas } }];
+		const cards = new HttpRequestCards(app);
+		const items: any[] = [];
+		const menu = { addItem(callback: (item: any) => void) {
+			const item = { title: "", click: () => {}, setTitle(value: string) { this.title = value; return this; }, setSection() { return this; }, setIcon() { return this; }, onClick(fn: () => void) { this.click = fn; return this; } };
+			callback(item); items.push(item); return this;
+		} };
+		cards.start();
+		await vi.advanceTimersByTimeAsync(100);
+		canvas.showCreationMenu(menu, { x: 120, y: 250 });
+		expect(items.map(item => item.title)).toEqual(["Add card", "Add HTTP request"]);
+		items[1].click();
+		expect(canvas.createTextNode.mock.calls[0][0].pos).toEqual({ x: 120, y: 250 });
+		cards.dispose();
+		items.length = 0;
+		canvas.showCreationMenu(menu, { x: 0, y: 0 });
+		expect(items.map(item => item.title)).toEqual(["Add card"]);
+	});
+
+	it("adds an unfinished request card immediately at the chosen position without a modal or network call", () => {
+		const { app, canvas } = fixture();
+		const send = vi.fn();
+		const cards = new HttpRequestCards(app, send);
+		const node = cards.create(canvas, { x: 100, y: 200 });
+		expect(node.getData().http_request).toEqual(DEFAULT_HTTP_REQUEST);
+		expect(canvas.createTextNode.mock.calls[0][0].pos).toEqual({ x: 100, y: 200 });
+		expect(node.getData().text).toContain("HTTP request");
+		expect(send).not.toHaveBeenCalled();
+		cards.save(canvas, { ...DEFAULT_HTTP_REQUEST, url: "https://", headers: "X-Partial" }, node);
+		expect(node.getData().http_request.headers).toBe("X-Partial");
+		cards.dispose();
+	});
+
 	it("saving a card does not send it; send creates an ordinary response edge and readable output", async () => {
 		const { app, canvas } = fixture();
 		const send = vi.fn(async () => response);
