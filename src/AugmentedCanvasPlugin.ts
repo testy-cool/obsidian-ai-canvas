@@ -49,6 +49,8 @@ import { closeAllMCPClients } from "./utils/mcpClient";
 import { insertMcpContent } from "./actions/commands/insertMcpContent";
 import { configureLLMObservability } from "./utils/llmObservability";
 import { getImageGenerationPrompt } from "./utils/imageGenerationPrompt";
+import { HttpRequestCards } from "./utils/httpRequestCards";
+import { getHttpRequest } from "./utils/httpRequest";
 
 // @ts-expect-error
 import promptsCsvText from "./data/prompts.csv.txt";
@@ -58,6 +60,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	patchSucceed = false;
 	private cleanupIndicatorPersistence?: () => void;
 	private cleanupHtmlPreviewPersistence?: () => void;
+	private httpRequestCards?: HttpRequestCards;
 	observabilityClient: ObservabilityClient | null = null;
 
 	settings: AugmentedCanvasSettings;
@@ -90,6 +93,8 @@ export default class AugmentedCanvasPlugin extends Plugin {
 			this.addCommands();
 			this.patchNoteContextMenu();
 			this.patchCanvasSelectionMenu();
+			this.httpRequestCards = new HttpRequestCards(this.app);
+			this.httpRequestCards.start();
 
 			// Set up persistent model indicators
 			this.cleanupIndicatorPersistence = setupCanvasIndicatorPersistence(this.app);
@@ -142,6 +147,7 @@ export default class AugmentedCanvasPlugin extends Plugin {
 	}
 
 	onunload() {
+		this.httpRequestCards?.dispose();
 		cancelActiveGenerations();
 		// Local MCP servers are child processes; a reload must not leave them behind.
 		void closeAllMCPClients();
@@ -447,6 +453,12 @@ export default class AugmentedCanvasPlugin extends Plugin {
 				const nodeData = canvasNode.getData() as Record<string, unknown>;
 				const imagePrompt = getImageGenerationPrompt(nodeData);
 				menu.addSeparator();
+				if (getHttpRequest(nodeData)) {
+					menu.addItem(item => item.setTitle("Edit HTTP request").setIcon("lucide-settings-2")
+						.onClick(() => this.httpRequestCards?.edit(canvasNode.canvas, canvasNode)));
+					menu.addItem(item => item.setTitle("Send HTTP request").setIcon("lucide-send")
+						.onClick(() => this.httpRequestCards?.send(canvasNode)));
+				}
 				if (imagePrompt) {
 					menu.addItem((item) => {
 						item.setTitle("View image prompt")
@@ -543,6 +555,8 @@ export default class AugmentedCanvasPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on("canvas:selection-menu", (menu, canvas) => {
 				menu.addSeparator();
+				menu.addItem(item => item.setTitle("Add HTTP request").setIcon("lucide-globe")
+					.onClick(() => this.httpRequestCards?.edit(canvas as unknown as import("./obsidian/canvas-internal").Canvas)));
 				menu.addItem((item) => {
 					item.setTitle("Generate image")
 						.setIcon("lucide-image")
@@ -576,6 +590,15 @@ export default class AugmentedCanvasPlugin extends Plugin {
 
 	addCommands() {
 		const app = this.app;
+		this.addCommand({
+			id: "add-http-request",
+			name: "Add HTTP request",
+			checkCallback: (checking: boolean) => {
+				const canvas = getActiveCanvas(app);
+				if (checking) return !!canvas;
+				if (canvas) this.httpRequestCards?.edit(canvas as unknown as import("./obsidian/canvas-internal").Canvas);
+			},
+		});
 
 		// * Website to MD
 		// this.addCommand({

@@ -19,6 +19,24 @@ The plugin interacts with Obsidian's internal Canvas APIs using [`monkey-around`
 
 ## 2. Directory & Module Map (Fast Lookup)
 
+Standalone HTTP cards use `src/utils/httpRequest.ts` for validation, Obsidian
+`requestUrl` execution and safe Markdown formatting. `src/utils/httpRequestCards.ts`
+owns request/output node creation, the canvas background creation-menu action,
+duplicate-send suppression, lifecycle cleanup and editor restoration.
+`src/utils/httpRequestEditor.ts` mounts native Obsidian controls directly inside
+the card. Draft changes save without requiring a valid URL or headers; validation
+happens on Send. The editor is separate from the Markdown renderer so typing keeps
+its focus and cursor while readable context text stays up to date. Request nodes
+store `http_request`; output nodes store `http_response` with their source node ID
+and run state. Edges have `isGenerated: false`, so AI regeneration never resends
+an HTTP request. Pending runs share a key across panes of the same canvas file;
+session metadata distinguishes current runs from requests interrupted by reload.
+Completion resolves the output against current views by file identity and node ID.
+If no view remains, `Vault.process` updates just that pending output in the canvas
+file; deleted outputs and unrelated edits are preserved.
+Edit, save and send respect the Canvas read-only lock. HTTP cards are excluded from HTML previews because payloads are
+raw data. No AI provider, naming call or generation pipeline participates.
+
 ```
 obsidian-ai-canvas/
 ├── src/

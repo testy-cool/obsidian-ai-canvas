@@ -56,6 +56,8 @@ export interface CanvasEdge {
 }
 
 export interface Canvas {
+	readonly?: boolean;
+	view?: { file?: { path: string } | null };
 	edges: CanvasEdge[];
 	selection: Set<CanvasNode>;
 	nodes: CanvasNode[];
