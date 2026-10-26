@@ -1,4 +1,4 @@
-import { App, Notice } from "obsidian";
+import { App, Notice, TFile } from "obsidian";
 import { around } from "monkey-around";
 import { Canvas, CanvasNode } from "../obsidian/canvas-internal";
 import { addEdge } from "../obsidian/canvas-patches";
@@ -75,6 +75,7 @@ export class HttpRequestCards {
 			return;
 		}
 		const canvas = node.canvas;
+		const file = canvas.view?.file;
 		const siblings = canvas.getEdgesForNode(node).filter(edge => edge.from.node.id === node.id).map(edge => edge.to.node).filter(Boolean);
 		const top = Math.max(node.y, ...siblings.map(sibling => sibling.y + sibling.height + 30));
 		const output = canvas.createTextNode({
@@ -90,14 +91,16 @@ export class HttpRequestCards {
 		void canvas.requestSave();
 		try {
 			const response = await this.execute(config);
-			if (this.disposed || !contains(output)) return;
-			await output.setText(formatHttpResponse(response));
-			output.setData({ ...output.getData(), http_response: { requestNodeId: node.id, state: "complete", status: response.status, elapsedMs: response.elapsedMs } } as any);
+			if (this.disposed) return;
+			await this.writeResponse(output, file, formatHttpResponse(response), {
+				requestNodeId: node.id, state: "complete", status: response.status, elapsedMs: response.elapsedMs,
+			});
 		} catch (error) {
-			if (this.disposed || !contains(output)) return;
+			if (this.disposed) return;
 			const message = error instanceof Error ? error.message : String(error);
-			await output.setText(`## HTTP request failed\n\n${Date.now() - state.started} ms\n\n${httpCodeBlock(message)}`);
-			output.setData({ ...output.getData(), http_response: { requestNodeId: node.id, state: "failed" } } as any);
+			await this.writeResponse(output, file,
+				`## HTTP request failed\n\n${Date.now() - state.started} ms\n\n${httpCodeBlock(message)}`,
+				{ requestNodeId: node.id, state: "failed" });
 		} finally {
 			clearInterval(state.timer);
 			this.active.delete(key);
@@ -105,6 +108,48 @@ export class HttpRequestCards {
 				this.updateRequestToolbars(key);
 				if (contains(output)) void canvas.requestSave();
 			}
+		}
+	}
+
+	private async writeResponse(output: CanvasNode, file: { path: string } | null | undefined, text: string, metadata: Record<string, unknown>) {
+		// Views and node objects are replaced on navigation. Resolve the output
+		// again by stable file identity and node ID instead of using an orphan.
+		const targets = new Set<CanvasNode>();
+		let hasLoadedView = false;
+		for (const leaf of this.app.workspace.getLeavesOfType("canvas")) {
+			const canvas = (leaf.view as any)?.canvas as Canvas | undefined;
+			if (!canvas || (file ? canvas.view?.file !== file : canvas !== output.canvas)) continue;
+			hasLoadedView = true;
+			const node = nodesIn(canvas).find(node => node.id === output.id);
+			if (node && (node.getData() as any).http_response?.requestNodeId === metadata.requestNodeId) targets.add(node);
+		}
+		if (targets.size) {
+			for (const node of targets) {
+				void node.setText(text);
+				node.setData({ ...node.getData(), text, http_response: metadata } as any);
+				void node.canvas.requestSave();
+			}
+			return;
+		}
+		if (hasLoadedView) return; // The output was deleted in the live document.
+		// All views may be closed. Update only the original pending output in
+		// the file; never recreate a deleted card or overwrite unrelated edits.
+		if (!file || this.app.vault?.getAbstractFileByPath(file.path) !== file) return;
+		try {
+			await this.app.vault.process(file as TFile, contents => {
+				if (this.disposed) return contents;
+				const data = JSON.parse(contents);
+				const node = data.nodes?.find((node: any) => node.id === output.id
+					&& node.http_response?.requestNodeId === metadata.requestNodeId
+					&& node.http_response?.sessionId === this.sessionId
+					&& node.http_response?.state === "pending");
+				if (!node) return contents;
+				node.text = text;
+				node.http_response = metadata;
+				return JSON.stringify(data, null, "\t");
+			});
+		} catch (error) {
+			new Notice(`HTTP request finished, but its response could not be saved: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 

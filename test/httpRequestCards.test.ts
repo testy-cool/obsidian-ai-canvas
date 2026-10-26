@@ -25,7 +25,7 @@ function fixture() {
 		getData: () => ({ nodes: [...nodes.values()].map(node => node.getData()), edges }),
 		importData: (next: any) => { edges = next.edges; },
 	};
-	const app: any = { workspace: { activeLeaf: { view: { canvas, getViewType: () => "canvas" } }, on: vi.fn(), offref: vi.fn(), getLeavesOfType: () => [] } };
+	const app: any = { workspace: { activeLeaf: { view: { canvas, getViewType: () => "canvas" } }, on: vi.fn(), offref: vi.fn(), getLeavesOfType: () => [{ view: { canvas } }] } };
 	return { app, canvas, nodes };
 }
 const request = { ...DEFAULT_HTTP_REQUEST, url: "https://example.com/items" };
@@ -116,6 +116,76 @@ describe("standalone canvas HTTP interactions", () => {
 		expect(canvas.getData().nodes[1].text).toContain("Connection refused");
 		await cards.send(node);
 		expect(canvas.getData().nodes[2].text).toContain("HTTP 200");
+		cards.dispose();
+	});
+
+	it("records a pending response on the new node objects after switching away and reopening the canvas", async () => {
+		const first = fixture();
+		const second = fixture();
+		const file = { path: "requests.canvas" };
+		first.canvas.view = second.canvas.view = { file };
+		let finish!: (value: typeof response) => void;
+		const cards = new HttpRequestCards(first.app, () => new Promise<typeof response>(resolve => { finish = resolve; }));
+		const node = cards.save(first.canvas, request);
+		const pending = cards.send(node);
+		const snapshot = first.canvas.getData();
+		for (const data of snapshot.nodes) {
+			const copy = second.canvas.createTextNode({ text: data.text, pos: { x: data.x, y: data.y }, size: { width: data.width, height: data.height } });
+			copy.setData(data);
+		}
+		first.nodes.clear();
+		first.app.workspace.getLeavesOfType = () => [{ view: { canvas: second.canvas } }];
+		finish(response);
+		await pending;
+		const output = [...second.nodes.values()].find(n => n.getData().http_response);
+		expect(output.getData().http_response).toMatchObject({ state: "complete", status: 200 });
+		expect(output.text).toContain('"ok": true');
+		cards.dispose();
+	});
+
+	it("does not restore a deleted output from stale disk content while its canvas is still open", async () => {
+		const { app, canvas, nodes } = fixture();
+		const file = { path: "requests.canvas" };
+		canvas.view = { file };
+		let contents = "";
+		app.vault = { getAbstractFileByPath: () => file, process: vi.fn(async (_file: any, update: (text: string) => string) => { contents = update(contents); }) };
+		let finish!: (value: typeof response) => void;
+		const cards = new HttpRequestCards(app, () => new Promise<typeof response>(resolve => { finish = resolve; }));
+		const source = cards.save(canvas, request);
+		const pending = cards.send(source);
+		contents = JSON.stringify(canvas.getData());
+		const output = [...nodes.values()].find(n => n.getData().http_response);
+		nodes.delete(output.id);
+		finish(response);
+		await pending;
+		expect(app.vault.process).not.toHaveBeenCalled();
+		expect(nodes.has(output.id)).toBe(false);
+		cards.dispose();
+	});
+
+	it("persists a response atomically into the canvas file when every view has closed", async () => {
+		const { app, canvas, nodes } = fixture();
+		const file = { path: "requests.canvas" };
+		canvas.view = { file };
+		let contents = "";
+		app.vault = {
+			getAbstractFileByPath: (path: string) => path === file.path ? file : null,
+			process: vi.fn(async (_file: any, update: (value: string) => string) => { contents = update(contents); }),
+		};
+		let finish!: (value: typeof response) => void;
+		const cards = new HttpRequestCards(app, () => new Promise<typeof response>(resolve => { finish = resolve; }));
+		const node = cards.save(canvas, request);
+		const pending = cards.send(node);
+		contents = JSON.stringify({ ...canvas.getData(), custom: "preserved" });
+		nodes.clear();
+		app.workspace.getLeavesOfType = () => [];
+		file.path = "renamed.canvas";
+		finish(response);
+		await pending;
+		const data = JSON.parse(contents);
+		expect(data.custom).toBe("preserved");
+		expect(data.nodes.find((n: any) => n.http_response)).toMatchObject({ http_response: { state: "complete", status: 200 } });
+		expect(app.vault.process).toHaveBeenCalledOnce();
 		cards.dispose();
 	});
 

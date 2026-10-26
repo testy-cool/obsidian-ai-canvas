@@ -55837,6 +55837,7 @@ var HttpRequestCards = class {
     return node;
   }
   async send(node) {
+    var _a20;
     const key = this.requestKey(node.canvas, node.id);
     if (this.disposed || this.active.has(key) || !contains(node))
       return;
@@ -55859,6 +55860,7 @@ var HttpRequestCards = class {
       return;
     }
     const canvas = node.canvas;
+    const file2 = (_a20 = canvas.view) == null ? void 0 : _a20.file;
     const siblings = canvas.getEdgesForNode(node).filter((edge) => edge.from.node.id === node.id).map((edge) => edge.to.node).filter(Boolean);
     const top = Math.max(node.y, ...siblings.map((sibling) => sibling.y + sibling.height + 30));
     const output = canvas.createTextNode({
@@ -55877,20 +55879,23 @@ var HttpRequestCards = class {
     void canvas.requestSave();
     try {
       const response = await this.execute(config2);
-      if (this.disposed || !contains(output))
+      if (this.disposed)
         return;
-      await output.setText(formatHttpResponse(response));
-      output.setData({ ...output.getData(), http_response: { requestNodeId: node.id, state: "complete", status: response.status, elapsedMs: response.elapsedMs } });
+      await this.writeResponse(output, file2, formatHttpResponse(response), {
+        requestNodeId: node.id,
+        state: "complete",
+        status: response.status,
+        elapsedMs: response.elapsedMs
+      });
     } catch (error40) {
-      if (this.disposed || !contains(output))
+      if (this.disposed)
         return;
       const message = error40 instanceof Error ? error40.message : String(error40);
-      await output.setText(`## HTTP request failed
+      await this.writeResponse(output, file2, `## HTTP request failed
 
 ${Date.now() - state.started} ms
 
-${httpCodeBlock(message)}`);
-      output.setData({ ...output.getData(), http_response: { requestNodeId: node.id, state: "failed" } });
+${httpCodeBlock(message)}`, { requestNodeId: node.id, state: "failed" });
     } finally {
       clearInterval(state.timer);
       this.active.delete(key);
@@ -55899,6 +55904,51 @@ ${httpCodeBlock(message)}`);
         if (contains(output))
           void canvas.requestSave();
       }
+    }
+  }
+  async writeResponse(output, file2, text2, metadata) {
+    var _a20, _b19, _c, _d;
+    const targets = /* @__PURE__ */ new Set();
+    let hasLoadedView = false;
+    for (const leaf of this.app.workspace.getLeavesOfType("canvas")) {
+      const canvas = (_a20 = leaf.view) == null ? void 0 : _a20.canvas;
+      if (!canvas || (file2 ? ((_b19 = canvas.view) == null ? void 0 : _b19.file) !== file2 : canvas !== output.canvas))
+        continue;
+      hasLoadedView = true;
+      const node = nodesIn(canvas).find((node2) => node2.id === output.id);
+      if (node && ((_c = node.getData().http_response) == null ? void 0 : _c.requestNodeId) === metadata.requestNodeId)
+        targets.add(node);
+    }
+    if (targets.size) {
+      for (const node of targets) {
+        void node.setText(text2);
+        node.setData({ ...node.getData(), text: text2, http_response: metadata });
+        void node.canvas.requestSave();
+      }
+      return;
+    }
+    if (hasLoadedView)
+      return;
+    if (!file2 || ((_d = this.app.vault) == null ? void 0 : _d.getAbstractFileByPath(file2.path)) !== file2)
+      return;
+    try {
+      await this.app.vault.process(file2, (contents) => {
+        var _a21;
+        if (this.disposed)
+          return contents;
+        const data = JSON.parse(contents);
+        const node = (_a21 = data.nodes) == null ? void 0 : _a21.find((node2) => {
+          var _a26, _b20, _c2;
+          return node2.id === output.id && ((_a26 = node2.http_response) == null ? void 0 : _a26.requestNodeId) === metadata.requestNodeId && ((_b20 = node2.http_response) == null ? void 0 : _b20.sessionId) === this.sessionId && ((_c2 = node2.http_response) == null ? void 0 : _c2.state) === "pending";
+        });
+        if (!node)
+          return contents;
+        node.text = text2;
+        node.http_response = metadata;
+        return JSON.stringify(data, null, "	");
+      });
+    } catch (error40) {
+      new import_obsidian29.Notice(`HTTP request finished, but its response could not be saved: ${error40 instanceof Error ? error40.message : String(error40)}`);
     }
   }
   updateRequestToolbars(key) {

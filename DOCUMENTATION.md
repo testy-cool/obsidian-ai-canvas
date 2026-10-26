@@ -31,6 +31,9 @@ store `http_request`; output nodes store `http_response` with their source node 
 and run state. Edges have `isGenerated: false`, so AI regeneration never resends
 an HTTP request. Pending runs share a key across panes of the same canvas file;
 session metadata distinguishes current runs from requests interrupted by reload.
+Completion resolves the output against current views by file identity and node ID.
+If no view remains, `Vault.process` updates just that pending output in the canvas
+file; deleted outputs and unrelated edits are preserved.
 Edit, save and send respect the Canvas read-only lock. HTTP cards are excluded from HTML previews because payloads are
 raw data. No AI provider, naming call or generation pipeline participates.
 

@@ -38,6 +38,8 @@ Right-click an empty area of a canvas and choose **Add HTTP request**. A request
 
 Each send creates a separate connected response card showing the HTTP status, elapsed time, response headers and formatted JSON or plain text. HTTP errors such as 404 and 422 remain readable responses; network failures appear on the output card. Requests run only when sent explicitly and are never automatically retried.
 
+You can switch notes or close the canvas tab while a request runs. Its response is saved back into the same canvas.
+
 These cards work independently of AI providers. Their readable text can be used through the normal canvas context controls if you choose. Request settings, including tokens, are saved in the canvas file; common authentication headers are masked in card text. A bearer token overrides any Authorization header. GET and HEAD hide and omit the body; other methods send it verbatim, so set `Content-Type` in Headers when needed. Drag the card by its heading or labels; controls keep normal text selection and editing.
 
 ![HTTP request card with inline controls in Obsidian](assets/http-request-card.png)
