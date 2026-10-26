@@ -55907,16 +55907,18 @@ ${httpCodeBlock(message)}`, { requestNodeId: node.id, state: "failed" });
     }
   }
   async writeResponse(output, file2, text2, metadata) {
-    var _a20, _b19, _c, _d;
+    var _a20, _b19, _c, _d, _e;
     const targets = /* @__PURE__ */ new Set();
     let hasLoadedView = false;
     for (const leaf of this.app.workspace.getLeavesOfType("canvas")) {
-      const canvas = (_a20 = leaf.view) == null ? void 0 : _a20.canvas;
-      if (!canvas || (file2 ? ((_b19 = canvas.view) == null ? void 0 : _b19.file) !== file2 : canvas !== output.canvas))
+      if (((_a20 = leaf.view) == null ? void 0 : _a20._loaded) === false)
+        continue;
+      const canvas = (_b19 = leaf.view) == null ? void 0 : _b19.canvas;
+      if (!canvas || (file2 ? ((_c = canvas.view) == null ? void 0 : _c.file) !== file2 : canvas !== output.canvas))
         continue;
       hasLoadedView = true;
       const node = nodesIn(canvas).find((node2) => node2.id === output.id);
-      if (node && ((_c = node.getData().http_response) == null ? void 0 : _c.requestNodeId) === metadata.requestNodeId)
+      if (node && ((_d = node.getData().http_response) == null ? void 0 : _d.requestNodeId) === metadata.requestNodeId)
         targets.add(node);
     }
     if (targets.size) {
@@ -55929,7 +55931,7 @@ ${httpCodeBlock(message)}`, { requestNodeId: node.id, state: "failed" });
     }
     if (hasLoadedView)
       return;
-    if (!file2 || ((_d = this.app.vault) == null ? void 0 : _d.getAbstractFileByPath(file2.path)) !== file2)
+    if (!file2 || ((_e = this.app.vault) == null ? void 0 : _e.getAbstractFileByPath(file2.path)) !== file2)
       return;
     try {
       await this.app.vault.process(file2, (contents) => {

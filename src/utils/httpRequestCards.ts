@@ -117,6 +117,8 @@ export class HttpRequestCards {
 		const targets = new Set<CanvasNode>();
 		let hasLoadedView = false;
 		for (const leaf of this.app.workspace.getLeavesOfType("canvas")) {
+			// A closing leaf can remain indexed after its Canvas has been cleared.
+			if ((leaf.view as any)?._loaded === false) continue;
 			const canvas = (leaf.view as any)?.canvas as Canvas | undefined;
 			if (!canvas || (file ? canvas.view?.file !== file : canvas !== output.canvas)) continue;
 			hasLoadedView = true;

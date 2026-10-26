@@ -178,7 +178,8 @@ describe("standalone canvas HTTP interactions", () => {
 		const pending = cards.send(node);
 		contents = JSON.stringify({ ...canvas.getData(), custom: "preserved" });
 		nodes.clear();
-		app.workspace.getLeavesOfType = () => [];
+		// Obsidian briefly keeps an unloaded view in getLeavesOfType while closing.
+		app.workspace.getLeavesOfType = () => [{ view: { canvas, _loaded: false } }];
 		file.path = "renamed.canvas";
 		finish(response);
 		await pending;
