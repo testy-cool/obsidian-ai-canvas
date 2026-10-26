@@ -41,6 +41,8 @@ export class HttpRequestEditor {
 			onSend();
 		}).buttonEl;
 		this.send.type = "button";
+		this.error = form.createEl("p", { cls: "http-request-error" });
+		this.error.setAttribute("role", "alert");
 		const area = (name: "query" | "headers" | "body", label: string, description: string, placeholder: string) => {
 			new Setting(form).setName(label).setDesc(description).addTextArea(input => {
 				input.setValue(initial[name]).setPlaceholder(placeholder).onChange(value => this.change(name, value));
@@ -60,8 +62,6 @@ export class HttpRequestEditor {
 		});
 		area("body", "Body", "Sent verbatim. GET and HEAD have no body.", '{"name": "example"}');
 		form.createEl("p", { cls: "http-request-storage-note", text: "Changes save automatically in this canvas, including headers and tokens. Common authentication headers are hidden from card text." });
-		this.error = form.createEl("p", { cls: "http-request-error" });
-		this.error.setAttribute("role", "alert");
 		this.update(initial, false, "");
 	}
 
@@ -90,6 +90,9 @@ export class HttpRequestEditor {
 	}
 
 	focus() { this.fields.get("url")?.focus(); }
-	setError(message: string) { this.error.setText(message); }
+	setError(message: string) {
+		this.error.setText(message);
+		if (message) this.root.scrollTop = 0;
+	}
 	destroy() { this.root.remove(); }
 }

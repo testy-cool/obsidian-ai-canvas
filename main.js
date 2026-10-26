@@ -55702,6 +55702,8 @@ var HttpRequestEditor = class {
       onSend();
     }).buttonEl;
     this.send.type = "button";
+    this.error = form.createEl("p", { cls: "http-request-error" });
+    this.error.setAttribute("role", "alert");
     const area = (name20, label, description, placeholder) => {
       new import_obsidian28.Setting(form).setName(label).setDesc(description).addTextArea((input) => {
         input.setValue(initial[name20]).setPlaceholder(placeholder).onChange((value) => this.change(name20, value));
@@ -55721,8 +55723,6 @@ var HttpRequestEditor = class {
     });
     area("body", "Body", "Sent verbatim. GET and HEAD have no body.", '{"name": "example"}');
     form.createEl("p", { cls: "http-request-storage-note", text: "Changes save automatically in this canvas, including headers and tokens. Common authentication headers are hidden from card text." });
-    this.error = form.createEl("p", { cls: "http-request-error" });
-    this.error.setAttribute("role", "alert");
     this.update(initial, false, "");
   }
   change(name20, value) {
@@ -55756,6 +55756,8 @@ var HttpRequestEditor = class {
   }
   setError(message) {
     this.error.setText(message);
+    if (message)
+      this.root.scrollTop = 0;
   }
   destroy() {
     this.root.remove();
