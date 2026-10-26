@@ -165,6 +165,22 @@ describe("standalone canvas HTTP interactions", () => {
 		vi.unstubAllGlobals();
 	});
 
+	it("keeps duplicate suppression when the canvas file is renamed during a request", async () => {
+		const { app, canvas } = fixture();
+		canvas.view = { file: { path: "requests.canvas" } };
+		const completions: Array<(value: typeof response) => void> = [];
+		const send = vi.fn(() => new Promise<typeof response>(resolve => { completions.push(resolve); }));
+		const cards = new HttpRequestCards(app, send);
+		const node = cards.save(canvas, { ...request, method: "POST", body: '{"amount":100}' });
+		const first = cards.send(node);
+		canvas.view.file.path = "renamed.canvas";
+		const duplicate = cards.send(node);
+		completions.forEach(finish => finish(response));
+		await Promise.all([first, duplicate]);
+		expect(send).toHaveBeenCalledOnce();
+		cards.dispose();
+	});
+
 	it("does not render HTML previews for raw HTTP inputs or outputs containing HTML fences", () => {
 		const node: any = { contentEl: { removeClass: vi.fn(), addClass: vi.fn(), querySelector: () => null, querySelectorAll: () => [], createEl: () => { throw new Error("HTTP content must not mount an HTML preview"); } }, id: "output", text: '````text\n```html\n<script>bad()</script>\n```\n````', getData: () => ({ type: "text", http_response: { requestNodeId: "request" } }) };
 		restoreHtmlPreviews({ nodes: new Map([[node.id, node]]) }, true);

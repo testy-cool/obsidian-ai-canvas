@@ -13,7 +13,7 @@ const contains = (node: CanvasNode) => nodesIn(node.canvas).includes(node);
 export class HttpRequestCards {
 	private disposed = false;
 	private active = new Map<string, { output: CanvasNode; started: number; timer: ReturnType<typeof setInterval> }>();
-	private canvasKeys = new WeakMap<Canvas, string>();
+	private fileKeys = new WeakMap<object, string>();
 	private sessionId = randomHexString(16);
 	private toolbars = new Map<CanvasNode, HTMLElement>();
 	private editPatches = new Map<CanvasNode, () => void>();
@@ -22,12 +22,11 @@ export class HttpRequestCards {
 	constructor(private app: App, private execute = executeHttpRequest) {}
 
 	private requestKey(canvas: Canvas, nodeId: string): string {
-		let file = canvas.view?.file?.path;
-		if (!file) {
-			file = this.canvasKeys.get(canvas) ?? randomHexString(16);
-			this.canvasKeys.set(canvas, file);
-		}
-		return JSON.stringify([file, nodeId]);
+		// Panes share their TFile object, which survives renames; paths do not.
+		const file = canvas.view?.file ?? canvas;
+		const key = this.fileKeys.get(file) ?? randomHexString(16);
+		this.fileKeys.set(file, key);
+		return JSON.stringify([key, nodeId]);
 	}
 
 	edit(canvas: Canvas, node?: CanvasNode) {

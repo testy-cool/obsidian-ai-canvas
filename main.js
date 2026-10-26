@@ -55726,7 +55726,7 @@ var HttpRequestCards = class {
     this.execute = execute;
     this.disposed = false;
     this.active = /* @__PURE__ */ new Map();
-    this.canvasKeys = /* @__PURE__ */ new WeakMap();
+    this.fileKeys = /* @__PURE__ */ new WeakMap();
     this.sessionId = randomHexString(16);
     this.toolbars = /* @__PURE__ */ new Map();
     this.editPatches = /* @__PURE__ */ new Map();
@@ -55734,12 +55734,10 @@ var HttpRequestCards = class {
   }
   requestKey(canvas, nodeId) {
     var _a20, _b19, _c;
-    let file2 = (_b19 = (_a20 = canvas.view) == null ? void 0 : _a20.file) == null ? void 0 : _b19.path;
-    if (!file2) {
-      file2 = (_c = this.canvasKeys.get(canvas)) != null ? _c : randomHexString(16);
-      this.canvasKeys.set(canvas, file2);
-    }
-    return JSON.stringify([file2, nodeId]);
+    const file2 = (_b19 = (_a20 = canvas.view) == null ? void 0 : _a20.file) != null ? _b19 : canvas;
+    const key = (_c = this.fileKeys.get(file2)) != null ? _c : randomHexString(16);
+    this.fileKeys.set(file2, key);
+    return JSON.stringify([key, nodeId]);
   }
   edit(canvas, node) {
     if (this.disposed || node && this.active.has(this.requestKey(canvas, node.id)))
