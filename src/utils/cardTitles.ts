@@ -23,7 +23,10 @@ function restoreNativeLabel(node: CanvasNode) {
 
 function hideNativeLabel(node: CanvasNode) {
 	if (!node.labelEl) return;
-	if (!hiddenLabels.has(node)) hiddenLabels.set(node, { element: node.labelEl, display: node.labelEl.style.display });
+	if (hiddenLabels.get(node)?.element !== node.labelEl) {
+		restoreNativeLabel(node);
+		hiddenLabels.set(node, { element: node.labelEl, display: node.labelEl.style.display });
+	}
 	node.labelEl.style.display = "none";
 }
 

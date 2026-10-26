@@ -43,6 +43,24 @@ describe("manual canvas card titles", () => {
 		expect(getCanvasCardTitle(node)).toBe("Existing title");
 	});
 
+	it("restores the current filename label after Obsidian replaces its element", () => {
+		const node = fixture({ type: "file", file: "image.png" });
+		const custom: any = { textContent: "", addEventListener() {}, setAttribute() {}, remove() {}, setText(value: string) { this.textContent = value; } };
+		node.nodeEl = { querySelector: () => null, createDiv: () => custom };
+		custom.parentElement = node.nodeEl;
+		const first = { style: { display: "" } };
+		node.labelEl = first;
+		setCanvasCardTitle(node, "Image title");
+		expect(first.style.display).toBe("none");
+		const replacement = { style: { display: "" } };
+		node.labelEl = replacement;
+		renderCanvasCardTitle(node);
+		expect(replacement.style.display).toBe("none");
+		setCanvasCardTitle(node, "");
+		expect(replacement.style.display).toBe("");
+		expect(first.style.display).toBe("");
+	});
+
 	it("leaves native group label typing alone until the edit finishes", () => {
 		const node = fixture({ type: "group", label: "Saved label" });
 		node.nodeEl = { querySelector: vi.fn() };

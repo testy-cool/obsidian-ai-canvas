@@ -49778,10 +49778,13 @@ function restoreNativeLabel(node) {
   hiddenLabels.delete(node);
 }
 function hideNativeLabel(node) {
+  var _a20;
   if (!node.labelEl)
     return;
-  if (!hiddenLabels.has(node))
+  if (((_a20 = hiddenLabels.get(node)) == null ? void 0 : _a20.element) !== node.labelEl) {
+    restoreNativeLabel(node);
     hiddenLabels.set(node, { element: node.labelEl, display: node.labelEl.style.display });
+  }
   node.labelEl.style.display = "none";
 }
 function titleLabel(node) {
