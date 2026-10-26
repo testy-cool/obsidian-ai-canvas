@@ -53,6 +53,8 @@ These cards work independently of AI providers. Their readable text can be used 
 
 ![HTTP request card with inline controls in Obsidian](assets/http-request-card.png)
 
+![Long HTTP response embedded as a Markdown note](assets/http-response-note.png)
+
 ### 🎨 Generate Images on Canvas
 Turn prompts and ideas into striking illustrations and diagrams directly on your canvas.
 * Right-click any note or prompt card → **Generate image**.
