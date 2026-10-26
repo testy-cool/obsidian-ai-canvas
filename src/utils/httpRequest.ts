@@ -81,7 +81,8 @@ function formatHeaders(headers: Record<string, string>): string {
 
 /** Keep remote HTML and embedded fences inert, even when HTML previews are on. */
 export function httpCodeBlock(text: string, language = "text"): string {
-	const longest = Math.max(2, ...(text.match(/`+/g) ?? []).map(match => match.length));
+	const runs: string[] = text.match(/`+/g) ?? [];
+	const longest = runs.reduce((max, match) => Math.max(max, match.length), 2);
 	const fence = "`".repeat(longest + 1);
 	return `${fence}${language}\n${text}\n${fence}`;
 }
@@ -98,7 +99,26 @@ export function formatHttpResponse(response: HttpResponse): string {
 	let body = response.text;
 	let language = "text";
 	try {
-		body = JSON.stringify(JSON.parse(body), null, 2);
+		// Validate JSON, then indent its original tokens. Parsing and reserializing
+		// would round 64-bit IDs and turn valid large exponents into null.
+		JSON.parse(body);
+		const tokens = body.match(/"(?:\\.|[^"\\])*"|[{}[\],:]|[^\s{}[\],:]+/g) ?? [];
+		let depth = 0;
+		body = "";
+		for (let i = 0; i < tokens.length; i++) {
+			const token = tokens[i];
+			if (token === "{" || token === "[") {
+				body += token;
+				depth++;
+				if (tokens[i + 1] !== (token === "{" ? "}" : "]")) body += `\n${"  ".repeat(depth)}`;
+			} else if (token === "}" || token === "]") {
+				depth--;
+				if (tokens[i - 1] !== (token === "}" ? "{" : "[")) body += `\n${"  ".repeat(depth)}`;
+				body += token;
+			} else if (token === ",") body += `,\n${"  ".repeat(depth)}`;
+			else if (token === ":") body += ": ";
+			else body += token;
+		}
 		language = "json";
 	} catch { /* Non-JSON payloads remain plain text. */ }
 	return [

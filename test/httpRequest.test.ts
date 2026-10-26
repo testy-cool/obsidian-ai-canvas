@@ -80,4 +80,19 @@ describe("HTTP request cards", () => {
 		await expect(executeHttpRequest(config({ method: "POST" }), send)).rejects.toThrow("Connection refused");
 		expect(send).toHaveBeenCalledOnce();
 	});
+
+	it("preserves large numeric IDs, exponents and original string escapes when formatting JSON", () => {
+		const text = formatHttpResponse({ status: 200, headers: {}, elapsedMs: 1,
+			text: '{"id":9007199254740993,"value":1e400,"label":"a\\u0020b","items":[]}',
+		});
+		expect(text).toContain('"id": 9007199254740993');
+		expect(text).toContain('"value": 1e400');
+		expect(text).toContain('"label": "a\\u0020b"');
+		expect(text).toContain('"items": []');
+	});
+
+	it("formats large text payloads containing many backticks without exhausting the call stack", () => {
+		const body = "`x ".repeat(150000);
+		expect(formatHttpResponse({ status: 200, headers: {}, elapsedMs: 1, text: body })).toContain(body);
+	});
 });

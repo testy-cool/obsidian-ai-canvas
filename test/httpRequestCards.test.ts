@@ -30,7 +30,7 @@ function fixture() {
 }
 const request = { ...DEFAULT_HTTP_REQUEST, url: "https://example.com/items" };
 const response = { status: 200, headers: { "content-type": "application/json" }, text: '{"ok":true}', elapsedMs: 5 };
-afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("standalone canvas HTTP interactions", () => {
 	it("saving a card does not send it; send creates an ordinary response edge and readable output", async () => {
@@ -110,6 +110,59 @@ describe("standalone canvas HTTP interactions", () => {
 		cards.dispose();
 		node.startEditing();
 		expect(edit).toHaveBeenCalledOnce();
+	});
+
+	it("does not send or change cards when a canvas is locked", async () => {
+		const { app, canvas } = fixture();
+		const send = vi.fn(async () => response);
+		const cards = new HttpRequestCards(app, send);
+		const node = cards.save(canvas, request);
+		canvas.readonly = true;
+		await cards.send(node);
+		expect(send).not.toHaveBeenCalled();
+		expect(canvas.nodes.size).toBe(1);
+		expect(() => cards.save(canvas, { ...request, url: "https://example.com/changed" }, node)).toThrow(/read.only/i);
+		expect(node.getData().http_request.url).toBe(request.url);
+		cards.dispose();
+	});
+
+	it("rejects saves from an editor left open across plugin unload", () => {
+		const { app, canvas } = fixture();
+		const cards = new HttpRequestCards(app);
+		const node = cards.save(canvas, request);
+		cards.dispose();
+		const saves = canvas.requestSave.mock.calls.length;
+		expect(() => cards.save(canvas, { ...request, url: "https://example.com/stale" }, node)).toThrow(/unloaded/i);
+		expect(canvas.requestSave).toHaveBeenCalledTimes(saves);
+		expect(node.getData().http_request.url).toBe(request.url);
+	});
+
+	it("shares a running request across two panes of the same canvas file", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal("MutationObserver", class { observe() {} disconnect() {} });
+		const first = fixture();
+		const second = fixture();
+		first.canvas.view = second.canvas.view = { file: { path: "requests.canvas" } };
+		let finish!: (value: typeof response) => void;
+		const send = vi.fn(() => new Promise<typeof response>(resolve => { finish = resolve; }));
+		const cards = new HttpRequestCards(first.app, send);
+		const node = cards.save(first.canvas, request);
+		const otherNode = cards.save(second.canvas, request);
+		const pending = cards.send(node);
+		const originalOutput = [...first.nodes.values()].at(-1);
+		const copiedOutput = second.canvas.createTextNode({ text: originalOutput.text, pos: { x: 0, y: 0 }, size: { width: 560, height: 480 } });
+		copiedOutput.setData(originalOutput.getData());
+		first.app.workspace.activeLeaf.view.canvas = second.canvas;
+		first.app.workspace.getLeavesOfType = () => [{ view: { canvas: first.canvas } }, { view: { canvas: second.canvas } }];
+		cards.start();
+		await vi.advanceTimersByTimeAsync(100);
+		expect(copiedOutput.getData().http_response.state).toBe("pending");
+		await cards.send(otherNode);
+		expect(send).toHaveBeenCalledOnce();
+		finish(response);
+		await pending;
+		cards.dispose();
+		vi.unstubAllGlobals();
 	});
 
 	it("does not render HTML previews for raw HTTP inputs or outputs containing HTML fences", () => {

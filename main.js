@@ -55583,7 +55583,8 @@ function formatHeaders(headers) {
 }
 function httpCodeBlock(text2, language = "text") {
   var _a20;
-  const longest = Math.max(2, ...((_a20 = text2.match(/`+/g)) != null ? _a20 : []).map((match) => match.length));
+  const runs = (_a20 = text2.match(/`+/g)) != null ? _a20 : [];
+  const longest = runs.reduce((max, match) => Math.max(max, match.length), 2);
   const fence = "`".repeat(longest + 1);
   return `${fence}${language}
 ${text2}
@@ -55600,10 +55601,36 @@ function formatHttpRequest(config2) {
   return lines.join("\n\n");
 }
 function formatHttpResponse(response) {
+  var _a20;
   let body = response.text;
   let language = "text";
   try {
-    body = JSON.stringify(JSON.parse(body), null, 2);
+    JSON.parse(body);
+    const tokens = (_a20 = body.match(/"(?:\\.|[^"\\])*"|[{}[\],:]|[^\s{}[\],:]+/g)) != null ? _a20 : [];
+    let depth = 0;
+    body = "";
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i];
+      if (token === "{" || token === "[") {
+        body += token;
+        depth++;
+        if (tokens[i + 1] !== (token === "{" ? "}" : "]"))
+          body += `
+${"  ".repeat(depth)}`;
+      } else if (token === "}" || token === "]") {
+        depth--;
+        if (tokens[i - 1] !== (token === "}" ? "{" : "["))
+          body += `
+${"  ".repeat(depth)}`;
+        body += token;
+      } else if (token === ",")
+        body += `,
+${"  ".repeat(depth)}`;
+      else if (token === ":")
+        body += ": ";
+      else
+        body += token;
+    }
     language = "json";
   } catch (e) {
   }
@@ -55699,17 +55726,36 @@ var HttpRequestCards = class {
     this.execute = execute;
     this.disposed = false;
     this.active = /* @__PURE__ */ new Map();
+    this.canvasKeys = /* @__PURE__ */ new WeakMap();
+    this.sessionId = randomHexString(16);
     this.toolbars = /* @__PURE__ */ new Map();
     this.editPatches = /* @__PURE__ */ new Map();
     this.cleanups = [];
   }
+  requestKey(canvas, nodeId) {
+    var _a20, _b19, _c;
+    let file2 = (_b19 = (_a20 = canvas.view) == null ? void 0 : _a20.file) == null ? void 0 : _b19.path;
+    if (!file2) {
+      file2 = (_c = this.canvasKeys.get(canvas)) != null ? _c : randomHexString(16);
+      this.canvasKeys.set(canvas, file2);
+    }
+    return JSON.stringify([file2, nodeId]);
+  }
   edit(canvas, node) {
-    if (this.disposed || node && this.active.has(node))
+    if (this.disposed || node && this.active.has(this.requestKey(canvas, node.id)))
       return;
+    if (canvas.readonly) {
+      new import_obsidian29.Notice("This canvas is read-only.");
+      return;
+    }
     const initial = node ? getHttpRequest(node.getData()) : void 0;
     new HttpRequestModal(this.app, initial != null ? initial : void 0, (config2) => this.save(canvas, config2, node)).open();
   }
   save(canvas, config2, existing) {
+    if (this.disposed)
+      throw new Error("The HTTP request editor was unloaded. Open it again.");
+    if (canvas.readonly)
+      throw new Error("This canvas is read-only.");
     const text2 = formatHttpRequest(config2);
     if (existing && !contains(existing))
       throw new Error("The request card was removed.");
@@ -55727,8 +55773,13 @@ var HttpRequestCards = class {
     return node;
   }
   async send(node) {
-    if (this.disposed || this.active.has(node) || !contains(node))
+    const key = this.requestKey(node.canvas, node.id);
+    if (this.disposed || this.active.has(key) || !contains(node))
       return;
+    if (node.canvas.readonly) {
+      new import_obsidian29.Notice("This canvas is read-only.");
+      return;
+    }
     const config2 = getHttpRequest(node.getData());
     if (!config2)
       return;
@@ -55749,11 +55800,11 @@ var HttpRequestCards = class {
       focus: false
     });
     canvas.addNode(output);
-    output.setData({ ...output.getData(), http_response: { requestNodeId: node.id, state: "pending" } });
+    output.setData({ ...output.getData(), http_response: { requestNodeId: node.id, state: "pending", sessionId: this.sessionId } });
     addEdge(canvas, randomHexString(16), { fromOrTo: "from", side: "right", node }, { fromOrTo: "to", side: "left", node: output }, "Response", { isGenerated: false });
-    const state = { output, started: Date.now(), timer: setInterval(() => this.updateToolbar(node), 1e3) };
-    this.active.set(node, state);
-    this.updateToolbar(node);
+    const state = { output, started: Date.now(), timer: setInterval(() => this.updateRequestToolbars(key), 1e3) };
+    this.active.set(key, state);
+    this.updateRequestToolbars(key);
     void canvas.requestSave();
     try {
       const response = await this.execute(config2);
@@ -55773,21 +55824,26 @@ ${httpCodeBlock(message)}`);
       output.setData({ ...output.getData(), http_response: { requestNodeId: node.id, state: "failed" } });
     } finally {
       clearInterval(state.timer);
-      this.active.delete(node);
+      this.active.delete(key);
       if (!this.disposed) {
-        this.updateToolbar(node);
+        this.updateRequestToolbars(key);
         if (contains(output))
           void canvas.requestSave();
       }
     }
   }
+  updateRequestToolbars(key) {
+    for (const node of this.toolbars.keys())
+      if (this.requestKey(node.canvas, node.id) === key)
+        this.updateToolbar(node);
+  }
   updateToolbar(node) {
     const toolbar = this.toolbars.get(node);
     if (!toolbar)
       return;
-    const state = this.active.get(node);
+    const state = this.active.get(this.requestKey(node.canvas, node.id));
     toolbar.querySelectorAll("button").forEach((button) => {
-      button.disabled = !!state;
+      button.disabled = !!state || !!node.canvas.readonly;
     });
     const status = toolbar.querySelector("[role=status]");
     if (status)
@@ -55804,8 +55860,10 @@ ${httpCodeBlock(message)}`);
     if (!node.contentEl)
       return;
     const existing = this.toolbars.get(node);
-    if ((existing == null ? void 0 : existing.parentElement) === node.contentEl)
+    if ((existing == null ? void 0 : existing.parentElement) === node.contentEl) {
+      this.updateToolbar(node);
       return;
+    }
     existing == null ? void 0 : existing.remove();
     node.nodeEl.addClass("http-request-card");
     const toolbar = node.contentEl.createDiv({ cls: "http-request-toolbar" });
@@ -55822,10 +55880,12 @@ ${httpCodeBlock(message)}`);
   }
   start() {
     let observer;
+    let lockObserver;
     let timer;
     const refresh = () => {
       var _a20, _b19, _c;
       observer == null ? void 0 : observer.disconnect();
+      lockObserver == null ? void 0 : lockObserver.disconnect();
       const view = (_a20 = this.app.workspace.activeLeaf) == null ? void 0 : _a20.view;
       const canvas = ((_b19 = view == null ? void 0 : view.getViewType) == null ? void 0 : _b19.call(view)) === "canvas" ? view.canvas : void 0;
       const openCanvases = this.app.workspace.getLeavesOfType("canvas").map((leaf) => leaf.view.canvas);
@@ -55847,7 +55907,7 @@ ${httpCodeBlock(message)}`);
       nodesIn(canvas).forEach((node) => {
         this.mount(node);
         const metadata = node.getData().http_response;
-        if ((metadata == null ? void 0 : metadata.state) === "pending" && !Array.from(this.active.values()).some((state) => state.output === node))
+        if ((metadata == null ? void 0 : metadata.state) === "pending" && metadata.sessionId !== this.sessionId)
           this.markInterrupted(node);
       });
       if (!canvas.wrapperEl)
@@ -55858,6 +55918,8 @@ ${httpCodeBlock(message)}`);
           schedule();
       });
       observer.observe(canvas.wrapperEl, { childList: true, subtree: true });
+      lockObserver = new MutationObserver(schedule);
+      lockObserver.observe(canvas.wrapperEl, { attributes: true, attributeFilter: ["class"] });
     };
     const schedule = () => {
       clearTimeout(timer);
@@ -55870,6 +55932,7 @@ ${httpCodeBlock(message)}`);
     this.cleanups.push(() => {
       clearTimeout(timer);
       observer == null ? void 0 : observer.disconnect();
+      lockObserver == null ? void 0 : lockObserver.disconnect();
     });
     schedule();
   }

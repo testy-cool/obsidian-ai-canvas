@@ -12,20 +12,34 @@ const contains = (node: CanvasNode) => nodesIn(node.canvas).includes(node);
 /** HTTP cards have no dependency on providers or generation settings. */
 export class HttpRequestCards {
 	private disposed = false;
-	private active = new Map<CanvasNode, { output: CanvasNode; started: number; timer: ReturnType<typeof setInterval> }>();
+	private active = new Map<string, { output: CanvasNode; started: number; timer: ReturnType<typeof setInterval> }>();
+	private canvasKeys = new WeakMap<Canvas, string>();
+	private sessionId = randomHexString(16);
 	private toolbars = new Map<CanvasNode, HTMLElement>();
 	private editPatches = new Map<CanvasNode, () => void>();
 	private cleanups: Array<() => void> = [];
 
 	constructor(private app: App, private execute = executeHttpRequest) {}
 
+	private requestKey(canvas: Canvas, nodeId: string): string {
+		let file = canvas.view?.file?.path;
+		if (!file) {
+			file = this.canvasKeys.get(canvas) ?? randomHexString(16);
+			this.canvasKeys.set(canvas, file);
+		}
+		return JSON.stringify([file, nodeId]);
+	}
+
 	edit(canvas: Canvas, node?: CanvasNode) {
-		if (this.disposed || (node && this.active.has(node))) return;
+		if (this.disposed || (node && this.active.has(this.requestKey(canvas, node.id)))) return;
+		if (canvas.readonly) { new Notice("This canvas is read-only."); return; }
 		const initial = node ? getHttpRequest(node.getData() as unknown as Record<string, unknown>) : undefined;
 		new HttpRequestModal(this.app, initial ?? undefined, config => this.save(canvas, config, node)).open();
 	}
 
 	save(canvas: Canvas, config: HttpRequestConfig, existing?: CanvasNode): CanvasNode {
+		if (this.disposed) throw new Error("The HTTP request editor was unloaded. Open it again.");
+		if (canvas.readonly) throw new Error("This canvas is read-only.");
 		const text = formatHttpRequest(config);
 		if (existing && !contains(existing)) throw new Error("The request card was removed.");
 		const node = existing ?? canvas.createTextNode({
@@ -40,7 +54,9 @@ export class HttpRequestCards {
 	}
 
 	async send(node: CanvasNode): Promise<void> {
-		if (this.disposed || this.active.has(node) || !contains(node)) return;
+		const key = this.requestKey(node.canvas, node.id);
+		if (this.disposed || this.active.has(key) || !contains(node)) return;
+		if (node.canvas.readonly) { new Notice("This canvas is read-only."); return; }
 		const config = getHttpRequest(node.getData() as unknown as Record<string, unknown>);
 		if (!config) return;
 		try { buildHttpRequest(config); }
@@ -53,11 +69,11 @@ export class HttpRequestCards {
 			size: { width: 560, height: 480 }, text: "## HTTP response\n\nSending request…", focus: false,
 		});
 		canvas.addNode(output);
-		output.setData({ ...output.getData(), http_response: { requestNodeId: node.id, state: "pending" } } as any);
+		output.setData({ ...output.getData(), http_response: { requestNodeId: node.id, state: "pending", sessionId: this.sessionId } } as any);
 		addEdge(canvas, randomHexString(16), { fromOrTo: "from", side: "right", node }, { fromOrTo: "to", side: "left", node: output }, "Response", { isGenerated: false });
-		const state = { output, started: Date.now(), timer: setInterval(() => this.updateToolbar(node), 1000) };
-		this.active.set(node, state);
-		this.updateToolbar(node);
+		const state = { output, started: Date.now(), timer: setInterval(() => this.updateRequestToolbars(key), 1000) };
+		this.active.set(key, state);
+		this.updateRequestToolbars(key);
 		void canvas.requestSave();
 		try {
 			const response = await this.execute(config);
@@ -71,19 +87,23 @@ export class HttpRequestCards {
 			output.setData({ ...output.getData(), http_response: { requestNodeId: node.id, state: "failed" } } as any);
 		} finally {
 			clearInterval(state.timer);
-			this.active.delete(node);
+			this.active.delete(key);
 			if (!this.disposed) {
-				this.updateToolbar(node);
+				this.updateRequestToolbars(key);
 				if (contains(output)) void canvas.requestSave();
 			}
 		}
 	}
 
+	private updateRequestToolbars(key: string) {
+		for (const node of this.toolbars.keys()) if (this.requestKey(node.canvas, node.id) === key) this.updateToolbar(node);
+	}
+
 	private updateToolbar(node: CanvasNode) {
 		const toolbar = this.toolbars.get(node);
 		if (!toolbar) return;
-		const state = this.active.get(node);
-		toolbar.querySelectorAll("button").forEach(button => { button.disabled = !!state; });
+		const state = this.active.get(this.requestKey(node.canvas, node.id));
+		toolbar.querySelectorAll("button").forEach(button => { button.disabled = !!state || !!node.canvas.readonly; });
 		const status = toolbar.querySelector<HTMLElement>("[role=status]");
 		if (status) status.setText(state ? `Sending… ${Math.floor((Date.now() - state.started) / 1000)}s` : "");
 	}
@@ -97,7 +117,7 @@ export class HttpRequestCards {
 		}
 		if (!node.contentEl) return;
 		const existing = this.toolbars.get(node);
-		if (existing?.parentElement === node.contentEl) return;
+		if (existing?.parentElement === node.contentEl) { this.updateToolbar(node); return; }
 		existing?.remove();
 		node.nodeEl.addClass("http-request-card");
 		const toolbar = node.contentEl.createDiv({ cls: "http-request-toolbar" });
@@ -112,9 +132,11 @@ export class HttpRequestCards {
 
 	start() {
 		let observer: MutationObserver | undefined;
+		let lockObserver: MutationObserver | undefined;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const refresh = () => {
 			observer?.disconnect();
+			lockObserver?.disconnect();
 			const view = this.app.workspace.activeLeaf?.view as any;
 			const canvas: Canvas | undefined = view?.getViewType?.() === "canvas" ? view.canvas : undefined;
 			const openCanvases = this.app.workspace.getLeavesOfType("canvas").map(leaf => (leaf.view as any).canvas);
@@ -135,7 +157,7 @@ export class HttpRequestCards {
 			nodesIn(canvas).forEach(node => {
 				this.mount(node);
 				const metadata = (node.getData() as any).http_response;
-				if (metadata?.state === "pending" && !Array.from(this.active.values()).some(state => state.output === node)) this.markInterrupted(node);
+				if (metadata?.state === "pending" && metadata.sessionId !== this.sessionId) this.markInterrupted(node);
 			});
 			if (!canvas.wrapperEl) return;
 			observer = new MutationObserver(records => {
@@ -146,6 +168,8 @@ export class HttpRequestCards {
 				if (relevant) schedule();
 			});
 			observer.observe(canvas.wrapperEl, { childList: true, subtree: true });
+			lockObserver = new MutationObserver(schedule);
+			lockObserver.observe(canvas.wrapperEl, { attributes: true, attributeFilter: ["class"] });
 		};
 		const schedule = () => {
 			clearTimeout(timer);
@@ -155,7 +179,7 @@ export class HttpRequestCards {
 			const ref = this.app.workspace.on(event as any, schedule);
 			this.cleanups.push(() => this.app.workspace.offref(ref));
 		}
-		this.cleanups.push(() => { clearTimeout(timer); observer?.disconnect(); });
+		this.cleanups.push(() => { clearTimeout(timer); observer?.disconnect(); lockObserver?.disconnect(); });
 		schedule();
 	}
 
