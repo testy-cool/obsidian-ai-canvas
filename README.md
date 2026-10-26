@@ -41,6 +41,8 @@ Each send creates a separate connected response card showing the HTTP status, el
 
 These cards work independently of AI providers. Their readable text can be used through the normal canvas context controls if you choose. Request settings, including tokens, are saved in the canvas file; common authentication headers are masked in card text. GET and HEAD omit the body; other methods send it verbatim, so set `Content-Type` in Headers when needed.
 
+![HTTP request editor in Obsidian](assets/http-request-modal.png)
+
 ### 🎨 Generate Images on Canvas
 Turn prompts and ideas into striking illustrations and diagrams directly on your canvas.
 * Right-click any note or prompt card → **Generate image**.
